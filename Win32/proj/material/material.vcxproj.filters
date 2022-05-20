@@ -367,6 +367,9 @@
     <ClCompile Include="..\..\..\SRC\material\uniaxial\WrapperUniaxialMaterial.cpp">
       <Filter>uniaxial</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\material\uniaxial\PluginUniaxialMaterial.cpp">
+      <Filter>uniaxial</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\material\uniaxial\pyUCLA.cpp">
       <Filter>uniaxial</Filter>
     </ClCompile>
@@ -578,6 +581,9 @@
       <Filter>nD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\material\nD\WrapperNDMaterial.cpp">
+      <Filter>nD</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\material\nD\PluginNDMaterial.cpp">
       <Filter>nD</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\material\nD\ElasticIsotropicAxiSymm.cpp">
@@ -1612,6 +1618,9 @@
     <ClInclude Include="..\..\..\SRC\material\uniaxial\WrapperUniaxialMaterial.h">
       <Filter>uniaxial</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\SRC\material\uniaxial\PluginUniaxialMaterial.h">
+      <Filter>uniaxial</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\SRC\material\uniaxial\pyUCLA.h">
       <Filter>uniaxial</Filter>
     </ClInclude>
@@ -1802,6 +1811,9 @@
       <Filter>nD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\material\nD\WrapperNDMaterial.h">
+      <Filter>nD</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\material\nD\PluginNDMaterial.h">
       <Filter>nD</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\material\nD\ElasticIsotropicAxiSymm.h">

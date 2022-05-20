@@ -172,6 +172,7 @@ target_sources(OPS_Material
       WrapperUniaxialMaterial.cpp
       pyUCLA.cpp
       SMAMaterial.cpp
+      PluginUniaxialMaterial.cpp
       
       TriMatrix.cpp
       DuctileFracture.cpp
@@ -278,6 +279,7 @@ target_sources(OPS_Material
       ViscousMaterial.h
       WrapperUniaxialMaterial.h
       pyUCLA.h
+      PluginUniaxialMaterial.h
 
       TriMatrix.h  # move to SRC/matrix ?
       DuctileFracture.h

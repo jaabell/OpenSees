@@ -105,6 +105,7 @@ OBJS       = UniaxialMaterial.o \
 	SelfCenteringMaterial.o \
 	BackboneMaterial.o \
 	WrapperUniaxialMaterial.o \
+	PluginUniaxialMaterial.o \
 	SAWSMaterial.o \
 	ConfinedConcrete01.o \
 	ConfinedConcrete02.o \
