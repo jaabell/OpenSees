@@ -18,8 +18,24 @@
 **                                                                    **
 ** ****************************************************************** */
 
-#ifndef PetscSOEMP_h
-#define PetscSOEMP_h
+// $Revision: 1.3 $
+// $Date: 2005/05/18 19:24:49 $
+// $Source: /usr/local/cvs/OpenSees/SRC/system_of_eqn/linearSOE/petsc/PetscSOE.h,v $
+
+
+// Written: fmk & om
+// Created: 7/98
+// Revision: A
+//
+// Description: This file contains the class definition for PetscSOE
+// PetscSOE is a subclass of LinearSOE. It uses the LAPACK storage
+// scheme to store the components of the A matrix, which is a full matrix.
+
+
+// What: "@(#) PetscSOE.h, revA"
+
+#ifndef PetscSOE_h
+#define PetscSOE_h
 
 #include <LinearSOE.h>
 #include <Vector.h>
@@ -27,27 +43,27 @@
 
 #include <petscksp.h>
 
-// Uncomment or define -D_DEBUG_PetscSOEMP to enable debugging
-// #define _DEBUG_PetscSOEMP
+// Uncomment or define -D_DEBUG_PETSCSOE to enable debugging
+// #define _DEBUG_PETSCSOE
 
-#ifdef _DEBUG_PetscSOEMP
-#define PetscSOEMP_DEBUGOUT cout // or any other ostream
+#ifdef _DEBUG_PETSCSOE
+#define PETSCSOE_DEBUGOUT cout // or any other ostream
 #else
-#define PetscSOEMP_DEBUGOUT 0 && cout
+#define PETSCSOE_DEBUGOUT 0 && cout
 #endif
 
-#define PetscSOEMP_MIN_DNNZ 10
-#define PetscSOEMP_MIN_ONNZ 30
-#define PetscSOEMP_PETSCOPTIONS_FILENAME "petsc_options.txt"
+#define PETSCSOE_MIN_DNNZ 10
+#define PETSCSOE_MIN_ONNZ 30
+#define PETSCSOE_PETSCOPTIONS_FILENAME "petsc_options.txt"
 
-class PetscSolver;
+class PetscSolverMP;
 
-class PetscSOEMP : public LinearSOE
+class PetscSOE : public LinearSOE
 {
 public:
-    PetscSOEMP(PetscSolver &theSolver, MatType matType = MATMPIAIJ, int blockSize = 1);
+    PetscSOE(PetscSolverMP &theSolver, MatType matType = MATMPIAIJ, int blockSize = 1);
 
-    ~PetscSOEMP();
+    ~PetscSOE();
 
     int getNumEqn(void) const;
     int setSize(Graph &theGraph);
@@ -74,16 +90,16 @@ public:
     void setX(int loc, double value);
     void setX(const Vector &x);
 
-    int setSolver(PetscSolver &newSolver);
+    int setSolver(PetscSolverMP &newSolver);
 
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel,
                     FEM_ObjectBroker &theBroker);
 
 
-    friend class PetscSolver;
-    friend class ActorPetscSOEMP;
-    friend class ShadowPetscSOEMP;
+    friend class PetscSolverMP;
+    friend class ActorPetscSOE;
+    friend class ShadowPetscSOE;
 
 protected:
     int setChannels(int nChannels, Channel **theChannels);

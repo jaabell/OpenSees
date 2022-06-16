@@ -7,7 +7,12 @@ PROGRAM       = test
 OBJS       = 
 
 ifeq ($(HAVEPETSC), YES)
-OBJS       = PetscSOE.o PetscSolver.o PetscSparseSeqSolver.o 
+	ifeq ($(PROGRAMMING_MODE), PARALLEL_INTERPRETERS)
+		OBJS       = PetscSOEMP.o PetscSolverMP.o 
+	endif	
+	ifeq ($(PROGRAMMING_MODE), PARALLEL)
+		OBJS       = PetscSOE.o PetscSolver.o PetscSparseSeqSolver.o 
+	endif	
 endif
 
 all:    $(OBJS)
