@@ -220,6 +220,13 @@ class SAniSandMS : public NDMaterial
 			mI1(0) = 1.0;
 			mI1(1) = 1.0;
 			mI1(2) = 1.0;
+
+	// To SAniSandMS2 --> dont use zero for shear components...
+	// StatedepSub.f90 line 889 -- might not be necesay...
+			//			mI1(3) = 0 + epsilon;
+			//mI1(4) = 0 + epsilon;
+			//mI1(5) = 0 + epsilon;
+
 			// 4th order mixed variant identity tensor
 			mIImix.Zero();
 			for (int i = 0; i<6; i++) {

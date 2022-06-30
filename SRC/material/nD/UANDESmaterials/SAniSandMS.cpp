@@ -1311,6 +1311,9 @@ void SAniSandMS::RungeKutta4(const Vector& CurStress, const Vector& CurStrain, c
 		thisMM_plus = NextMM_plus + 0.5 * dMM1_plus;
 		thisMM_minus = NextMM_minus + 0.5 * dMM1_minus;
 
+		// To SAniSandMS2 - restore deviatoric property to alpha
+		// StatedepSub.f90 1927...
+
 		thisVoidRatio = m_e_init - (1 + m_e_init) * GetTrace(NextStrain + 0.5 * dPStrain1);
 
 		p = one3 * GetTrace(thisSigma);
@@ -1571,6 +1574,8 @@ void SAniSandMS::RungeKutta4(const Vector& CurStress, const Vector& CurStrain, c
 			continue;
 		}
 
+		// To SAniSandMS2 - ensure RK convergence.... 
+		// StatedepSub.f90 2159... dirty conmvergence trick
 		double stressNorm = GetNorm_Contr(NextStress);
 		double alphaNorm = GetNorm_Contr(NextAlpha);
 
@@ -1582,6 +1587,14 @@ void SAniSandMS::RungeKutta4(const Vector& CurStress, const Vector& CurStrain, c
 
 		double curStepError = fmax(curStepError1, curStepError2);
 
+		// To SAniSandMS2 - do the drift correction before checking the tensile stresess... 
+		// StatedepSub.f90 2194... stress should be on YS. 
+
+
+	//To SAniSandMS2 -> see where drift correction occurs...
+	// StatedepSub.f90   around line 2200 (line 1824 PSmall, 2224... drift correction 2378)
+    // iNotension ln 1893... indicates tensile stresses
+	// iNotension  line 2200 check tension... reduce integration step
 		if (curStepError > TolE)
 		{
 
@@ -1617,6 +1630,10 @@ void SAniSandMS::RungeKutta4(const Vector& CurStress, const Vector& CurStrain, c
 			if (debugFlag)
 				// if (true) 
 				opserr << "+++ Successful increment: T = " << T << ", dT = " << dT << "  Error =  " << curStepError << endln;
+
+			//To SAniSandMS2 -> Add drift correction 
+			// StatedepSub.f90   StressCorrection300
+
 
 			NextElasticStrain -= dPStrain;
 			NextStress = nStress;
@@ -1677,6 +1694,8 @@ SAniSandMS::IntersectionFactor(const Vector& CurStress, const Vector& CurStrain,
 	dSigma1 = a1 * DoubleDot4_2(GetStiffness(K, G), strainInc);
 	f1 = GetF(CurStress + dSigma1, CurAlpha);
 
+	// To SAniSandMS2 --> increase to 30 iterations
+	// StatedepSub.f90 line 683
 	for (int i = 1; i <= 10; i++)
 	{
 		a = a1 - f1 * (a1 - a0) / (f1 - f0);
@@ -1726,6 +1745,8 @@ SAniSandMS::IntersectionFactor_Unloading(const Vector& CurStress, const Vector& 
 	GetElasticModuli(CurStress, vR, K, G);
 	dSigma = DoubleDot4_2(GetStiffness(K, G), strainInc);
 
+	// To SAniSandMS2 --> increase to nSub = 30 iterations
+	// StatedepSub.f90 line 748
 	for (int i = 1; i < nSub; i++)
 	{
 		da = (a1 - a0) / 2.0;
@@ -1751,6 +1772,11 @@ SAniSandMS::IntersectionFactor_Unloading(const Vector& CurStress, const Vector& 
 			return 0.0;
 		}
 	}
+
+	// To SAniSandMS2 --> return a = 0 if a0 and a1 are small < 1e-08
+	// StatedepSub.f90 line 780  probably a stabilization trick
+
+
 	if (debugFlag)
 		opserr << "Found alpha - Unloading" << ", a0 = " << a0 << ", a1 = " << a1 << endln;
 	return IntersectionFactor(CurStress, CurStrain, NextStrain, CurAlpha, a0, a1);
@@ -1957,6 +1983,8 @@ double SAniSandMS::MacauleyIndex(double x)
 double
 SAniSandMS::g(const double cos3theta, const double c)
 {
+	//To SAniSandMS2 -> Change to Van Eekelon function... 
+	// StatedepSub.f90   called g. 
 	return 2 * c / ((1 + c) - (1 - c) * cos3theta);
 }
 
@@ -1975,6 +2003,10 @@ SAniSandMS::GetF(const Vector& nStress, const Vector& nAlpha)
 double
 SAniSandMS::GetPSI(const double& e, const double& p)
 {
+	//To SAniSandMS2 ->
+	//StatedepSup.f90 - 185 --- limit the opening of the bounding surf
+
+
 	return e - (m_e0 - m_lambda_c * pow((p / m_P_atm), m_ksi));
 }
 
@@ -1983,6 +2015,8 @@ double
 SAniSandMS::GetLodeAngle(const Vector& n)
 // Returns cos(3*theta)
 {
+	//To SAniSandMS2 ->  give tolerance when checking for Cos3Theta... try it... 
+	////StatedepSup.f90 - 222
 	double Cos3Theta = sqrt(6.0) * GetTrace(SingleDot(n, SingleDot(n, n)));
 	Cos3Theta = Cos3Theta > 1 ? 1 : Cos3Theta;
 	Cos3Theta = Cos3Theta < -1 ? -1 : Cos3Theta;
@@ -1995,6 +2029,8 @@ SAniSandMS::GetElasticModuli(const Vector& sigma, const double& en, const double
 	const Vector& cEStrain, double &K, double &G)
 	// Calculates G, K
 {
+	//To SAniSandMS2 ->  compare pmin with 0.. give real pmin 
+	////StatedepSup.f90 - 275 --- maybe not needed now..
 	double pn = one3 * GetTrace(sigma);
 	pn = (pn <= m_Pmin) ? m_Pmin : pn;
 
@@ -2148,10 +2184,16 @@ SAniSandMS::GetNormalToYield(const Vector &stress, const Vector &alpha)
 
 	double p = one3 * GetTrace(stress);
 
+	//To SAniSandMS2 -> use real value of n
+	////StatedepSup.f90 - 512
+
+	//remove from here...
 	if (fabs(p) < m_Pmin)
 	{
 		n.Zero();
 	}
+	// to here.... 
+	// use real value of n
 	else {
 		n = devStress - p * alpha;
 		double normN = GetNorm_Contr(n);
@@ -2204,11 +2246,16 @@ SAniSandMS::GetStateDependent(const Vector &stress, const Vector &alpha,
 	double D_factor = 1.0;
 	double p = one3 * GetTrace(stress);
 	Vector stress_use = stress;
+
+
+	// To SAniSandMS2 --> use real p...
+	// StatedepSub.f90 line 880 -- remove this
 	if (p < m_Pmin)
 	{
 		stress_use = GetDevPart(stress) + m_Pmin * mI1;
 		p = one3 * GetTrace(stress_use);
 	}
+	// to here
 
 	Vector r = GetDevPart(stress_use) / p;
 
@@ -2216,6 +2263,10 @@ SAniSandMS::GetStateDependent(const Vector &stress, const Vector &alpha,
 
 	double AlphaAlphaInDotN;
 	AlphaAlphaInDotN = DoubleDot2_2_Contr(alpha - alpha_in, n);
+	// To SAniSandMS2 --> use abs() + 0.001
+	// StatedepSub.f90 line 1175 -- might not be necesay...
+
+
 
 	psi = GetPSI(e, p);
 
@@ -2279,6 +2330,9 @@ SAniSandMS::GetStateDependent(const Vector &stress, const Vector &alpha,
 		
 	}
 
+	
+	// To SAniSandMS2 --> follow the definition in paper... 1st paper... sanisand ms in geotechnique
+	// StatedepSub.f90 line 1035 -- 
 	x3 = DoubleDot2_2_Contr(n, rM - rM_tilde);
 
 	x2 = DoubleDot2_2_Contr(n, r_tilde - rM_tilde);
@@ -2317,6 +2371,10 @@ SAniSandMS::GetStateDependent(const Vector &stress, const Vector &alpha,
 	Vector alphad_tilde = root23 * (gthetaPlusPi * m_Mc * exp(m_nd * psi) - m_m) * ((-1) * n);
 
 	double b_dM_tilde = DoubleDot2_2_Contr(alphad_tilde - alpha_in, n);
+
+
+	// To SAniSandMS2 --> check definition of bref in line 1076
+	// StatedepSub.f90 line 1076 -- 
 	double bref = fmax(2 * root23 * m_m, DoubleDot2_2_Contr(alphaBtheta - alphaBthetaPLUSpi, n));
 	double bref_D = fmax(2 * root23 * m_m, GetNorm_Contr(alpha_in));
 
@@ -2371,7 +2429,13 @@ SAniSandMS::GetStateDependent(const Vector &stress, const Vector &alpha,
 		AlphaAlphaInDotN = small;
 	}
 	
-	h = fmin(1.0e7, b0 / AlphaAlphaInDotN * exp(m_mu0 * pow(p / m_P_atm, 0.5) * pow(bM_distance / bref, 2)));
+	// To SAniSandMS2 --> set limit to the h
+	// StatedepSub.f90 line 1226 -- 
+
+	h = fmin(1.0e7, 
+		// the limit goes here.. n the pow of the exponential.... 
+		b0 / AlphaAlphaInDotN * exp(m_mu0 * pow(p / m_P_atm, 0.5) * pow(bM_distance / bref, 2))
+		);
 
 	//if (hM > h) hM = h;
 	
