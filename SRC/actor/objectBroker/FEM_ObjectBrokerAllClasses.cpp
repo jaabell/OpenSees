@@ -101,7 +101,7 @@
 #include "FRCC.h"
 #include "SimpleFractureMaterial.h"
 #include "ConfinedConcrete01.h"
-
+#include "PluginUniaxialMaterial.h"
 #include <HystereticPoly.h>					// Salvatore Sessa 14-Jan-2021
 #include <HystereticSmooth.h>					// Salvatore Sessa Apr-19-2022
 #include <HystereticAsym.h>					// Salvatore Sessa Apr-21-2022
@@ -216,6 +216,7 @@
 #include "UWmaterials/InitialStateAnalysisWrapper.h"
 #include "stressDensityModel/stressDensity.h"
 #include "InitStressNDMaterial.h"
+#include "PluginNDMaterial.h"
 
 // Fibers
 #include "fiber/UniaxialFiber2d.h"
@@ -1477,6 +1478,9 @@ FEM_ObjectBrokerAllClasses::getNewUniaxialMaterial(int classTag)
 
 	case MAT_TAG_DowelType:
 		return new DowelType();
+	
+	case MAT_TAG_PluginUniaxialMaterial:
+		return new PluginUniaxialMaterial();
 
 	case MAT_TAG_DuctileFracture:
 		return new DuctileFracture();
@@ -1727,6 +1731,9 @@ FEM_ObjectBrokerAllClasses::getNewNDMaterial(int classTag)
 
   case ND_TAG_InitStressNDMaterial:
       return new InitStressNDMaterial();
+
+  case ND_TAG_PluginNDMaterial:
+	  return new PluginNDMaterial();
     
   default:
     opserr << "FEM_ObjectBrokerAllClasses::getNewNDMaterial - ";

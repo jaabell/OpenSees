@@ -124,6 +124,8 @@ extern  void *OPS_ElasticIsotropicMaterialThermal(void);  //L.Jiang [SIF]
 extern  void *OPS_DruckerPragerMaterialThermal(void);//L.Jiang [SIF]
 //extern  void *OPS_PlasticDamageConcretePlaneStressThermal(void);//L.Jiang [SIF]
 
+extern void* OPS_PluginNDMaterial(void); // PluginFramework - Massimo Petracca 03/2020
+
 #ifdef _HAVE_Faria1998
 extern void *OPS_NewFaria1998Material(void);
 extern void *OPS_NewConcreteMaterial(void);
@@ -316,6 +318,17 @@ TclModelBuilderNDMaterialCommand (ClientData clientData, Tcl_Interp *interp, int
       return TCL_ERROR;
     }
 #endif
+
+    // plugin nd material
+    else if (strcmp(argv[1], "plugin") == 0) {
+        void *theMat = OPS_PluginNDMaterial();
+        if (theMat != 0) {
+            theMaterial = (NDMaterial*)(theMat);
+        }
+        else {
+            return TCL_ERROR;
+        }
+    }
 
     else if ((strcmp(argv[1],"PrestressedConcretePlaneStress") == 0)){
 

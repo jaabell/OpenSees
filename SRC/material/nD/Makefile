@@ -89,6 +89,7 @@ OBJS       = NDMaterial.o \
 	J2ThreeDimensionalThermal.o \
 	PlateFiberMaterialThermal.o \
 	PlateFromPlaneStressMaterialThermal.o \
+	PluginNDMaterial.o \
 	UVCmultiaxial.o	\
 	UVCplanestress.o \
 	PlateRebarMaterialThermal.o \
