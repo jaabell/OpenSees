@@ -16,9 +16,24 @@ target_sources(OPS_Api
     PUBLIC
         #elementAPI_Dummy.cpp
         #win32Functions.cpp
+        PluginFramework.cpp
     PUBLIC
         elementAPI.h
+        PluginFramework.h
+        PluginFrameworkAPI.h
 	#packages.h
+)
+
+target_sources(OPS_INTERPRETER
+    PUBLIC
+        #elementAPI_Dummy.cpp
+        #win32Functions.cpp
+        PluginFramework.cpp
+    PUBLIC
+        elementAPI.h
+        PluginFramework.h
+        PluginFrameworkAPI.h
+    #packages.h
 )
 
 
