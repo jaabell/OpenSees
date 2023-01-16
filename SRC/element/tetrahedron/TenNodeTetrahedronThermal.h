@@ -49,7 +49,7 @@
 //Number of Gauss-points
 #define NumGaussPoints 4
 #define NumNodes 10
-#define NumDOFsPerNode 3
+#define NumDOFsPerNode 1
 #define NumStressComponents 6
 #define NumDOFsTotal NumNodes*NumDOFsPerNode
 
@@ -72,7 +72,9 @@ public :
                        int node8,
                        int node9,
                        int node10,
-                       NDMaterial &theMaterial,
+                       // NDMater-ial &theMaterial,
+                       double kxx, double kyy, double kzz,
+                       double rho, double cp, // JL: agregar a variables internas 
                        double b1 = 0.0, double b2 = 0.0, double b3 = 0.0);
 
     //destructor
@@ -162,11 +164,13 @@ private :
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
     //material information
-    NDMaterial *materialPointers[NumGaussPoints]; //pointers to eight materials
+    // NDMaterial *materialPointers[NumGaussPoints]; //pointers to eight materials
+    // JL: agregar a variables internas 
+    double kxx.... 
 
-    double b[3];        // Body forces
-    double appliedB[3];     // Body forces applied with load
-    int applyLoad;
+    // double b[3];        // Body forces
+    // double appliedB[3];     // Body forces applied with load
+    // int applyLoad;
 
     Vector *load;
     Matrix *Ki;
@@ -177,7 +181,7 @@ private :
 
     static Matrix stiff ;
     static Vector resid ;
-    static Matrix mass ;
+    static Matrix mass ;   // JL: tiralra a cero... 
     static Matrix damping ;
 
     //quadrature data
@@ -209,9 +213,8 @@ private :
 
     //Matrix transpose
     Matrix transpose( int dim1, int dim2, const Matrix &M ) ;
-    Vector initDisp[NumNodes];
-
-    int do_update;
+    // Vector initDisp[NumNodes];
+    // int do_update;
 
 } ;
 

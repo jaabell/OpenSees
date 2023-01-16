@@ -610,7 +610,7 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 			}
 		} // end for p
 
-
+		// JL ya no es asi... hay qye armar la matriz de los dd = [ kxx, 0, 0; 0, kyy, 0; ...]
 		dd = materialPointers[i]->getInitialTangent( ) ;
 		dd *= dvol[i] ;
 
@@ -683,12 +683,6 @@ void  TenNodeTetrahedronThermal::zeroLoad( )
 	if (load != 0)
 		load->Zero();
 
-	applyLoad = 0;
-
-	appliedB[0] = 0.0;
-	appliedB[1] = 0.0;
-	appliedB[2] = 0.0;
-
 
 	return ;
 }
@@ -697,33 +691,33 @@ void  TenNodeTetrahedronThermal::zeroLoad( )
 int
 TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
 {
-	int type;
-	const Vector &data = theLoad->getData(type, loadFactor);
+	// int type;
+	// const Vector &data = theLoad->getData(type, loadFactor);
 
-	if (type == LOAD_TAG_BrickSelfWeight) {
-		applyLoad = 1;
-		appliedB[0] += loadFactor * b[0];
-		appliedB[1] += loadFactor * b[1];
-		appliedB[2] += loadFactor * b[2];
-		return 0;
-	} else if (type == LOAD_TAG_SelfWeight) {
-		// added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
-		applyLoad = 1;
-		appliedB[0] += loadFactor * data(0) * b[0];
-		appliedB[1] += loadFactor * data(1) * b[1];
-		appliedB[2] += loadFactor * data(2) * b[2];
-		// if( loadFactor > 0)
-		// {
-		//     opserr << "loadfactor = " << loadFactor << endln;
-		//       opserr << "      data = " << data;
-		//       opserr << "      b    = " << b[0] << " " << b[1] << " " << b[2] << "\n"   ;
-		//       opserr << "      appliedB    = " << appliedB[0] << " " << appliedB[1] << " " << appliedB[2] << "\n"   ;
-		//     }
-		return 0;
-	} else {
-		opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
-		return -1;
-	}
+	// if (type == LOAD_TAG_BrickSelfWeight) {
+	// 	applyLoad = 1;
+	// 	appliedB[0] += loadFactor * b[0];
+	// 	appliedB[1] += loadFactor * b[1];
+	// 	appliedB[2] += loadFactor * b[2];
+	// 	return 0;
+	// } else if (type == LOAD_TAG_SelfWeight) {
+	// 	// added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
+	// 	applyLoad = 1;
+	// 	appliedB[0] += loadFactor * data(0) * b[0];
+	// 	appliedB[1] += loadFactor * data(1) * b[1];
+	// 	appliedB[2] += loadFactor * data(2) * b[2];
+	// 	// if( loadFactor > 0)
+	// 	// {
+	// 	//     opserr << "loadfactor = " << loadFactor << endln;
+	// 	//       opserr << "      data = " << data;
+	// 	//       opserr << "      b    = " << b[0] << " " << b[1] << " " << b[2] << "\n"   ;
+	// 	//       opserr << "      appliedB    = " << appliedB[0] << " " << appliedB[1] << " " << appliedB[2] << "\n"   ;
+	// 	//     }
+	// 	return 0;
+	// } else {
+	// 	opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
+	// 	return -1;
+	// }
 
 	return -1;
 }
@@ -731,42 +725,7 @@ TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
 int
 TenNodeTetrahedronThermal::addInertiaLoadToUnbalance(const Vector &accel)
 {
-	static const int numberNodes = 4 ;
-	static const int numberGauss = 1 ;
-	static const int ndf = 3 ;
-
-	int i;
-
-	// check to see if have mass
-	int haveRho = 0;
-	for (i = 0; i < numberGauss; i++) {
-		if (materialPointers[i]->getRho() != 0.0)
-			haveRho = 1;
-	}
-
-	if (haveRho == 0)
-		return 0;
-
-	// Compute mass matrix
-	int tangFlag = 1 ;
-	formInertiaTerms( tangFlag ) ;
-
-	// store computed RV for nodes in resid vector
-	int count = 0;
-	for (i = 0; i < numberNodes; i++)
-	{
-		const Vector &Raccel = nodePointers[i]->getRV(accel);
-		for (int j = 0; j < ndf; j++)
-			resid(count++) = Raccel(j);
-	}
-
-	// create the load vector if one does not exist
-	if (load == 0)
-		load = new Vector(numberNodes * ndf);
-
-	// add -M * RV(accel) to the load vector
-	load->addMatrixVector(1.0, mass, resid, -1.0);
-
+	
 	return 0;
 }
 
@@ -848,6 +807,10 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 	//zero mass
 	mass.Zero( ) ;
+
+	return ;
+
+	// JL... lo de abajo no es necesario..
 
 	if (do_update == 0)
 	{
@@ -1145,7 +1108,7 @@ TenNodeTetrahedronThermal::update(void)
 		// opserr << "TenNodeTetrahedronThermal::update -- 4.3 i = " << i << endln;
 
 		//send the strain to the material
-		success = materialPointers[i]->setTrialStrain( strain ) ;
+		// success = materialPointers[i]->setTrialStrain( strain ) ;
 
 		// opserr << "TenNodeTetrahedronThermal::update -- 4.4 i = " << i << "strain = " << strain << endln;
 
