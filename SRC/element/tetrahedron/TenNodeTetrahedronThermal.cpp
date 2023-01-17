@@ -250,8 +250,8 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
                                        double kyy,
                                        double kzz,
                                        double rho,
-                                       double cp,
-                                       double b1, double b2, double b3)
+                                       double cp)
+                                       // double b1, double b2, double b3)
 	: Element(tag, ELE_TAG_TenNodeTetrahedronThermal),
 	  connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
 {
@@ -282,18 +282,18 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
 		nodePointers[i] = 0;
 	} //end for i
 
-	// Body forces
-	b[0] = b1;
-	b[1] = b2;
-	b[2] = b3;
+	// // Body forces
+	// b[0] = b1;
+	// b[1] = b2;
+	// b[2] = b3;
 
 	// opserr << "TenNodeTetrahedronThermal::constructor - init disp\n";
 
-	for (int i = 0; i < NumNodes; ++i)
-	{
-		initDisp[i] = Vector(3);
-		initDisp[i].Zero();
-	}
+	// for (int i = 0; i < NumNodes; ++i)
+	// {
+	// 	initDisp[i] = Vector(3);
+	// 	initDisp[i].Zero();
+	// }
 	// opserr << "TenNodeTetrahedronThermal::constructor - END\n";
 }
 //******************************************************************
@@ -304,9 +304,9 @@ TenNodeTetrahedronThermal::~TenNodeTetrahedronThermal( )
 {
 
 	// opserr << "TenNodeTetrahedronThermal::~TenNodeTetrahedronThermal - START\n";
-	for (int i = 0 ; i < NumGaussPoints; i++ ) {
-		delete materialPointers[i] ;
-	} //end for i
+	// for (int i = 0 ; i < NumGaussPoints; i++ ) {
+	// 	delete materialPointers[i] ;
+	// } //end for i
 
 	if (load != 0)
 		delete load;
@@ -328,7 +328,7 @@ void  TenNodeTetrahedronThermal::setDomain( Domain *theDomain )
 	for ( i = 0; i < NumNodes; i++ )
 	{
 		nodePointers[i] = theDomain->getNode( connectedExternalNodes(i) ) ;
-		initDisp[i] = nodePointers[i]->getDisp();
+		// initDisp[i] = nodePointers[i]->getDisp();
 	}
 
 	this->DomainComponent::setDomain(theDomain);
@@ -374,8 +374,8 @@ int  TenNodeTetrahedronThermal::commitState( )
 	}
 
 
-	for (int i = 0; i < NumGaussPoints; i++ )
-		success += materialPointers[i]->commitState( ) ;
+	// for (int i = 0; i < NumGaussPoints; i++ )
+	// 	success += materialPointers[i]->commitState( ) ;
 
 	return success ;
 }
@@ -387,8 +387,8 @@ int  TenNodeTetrahedronThermal::revertToLastCommit( )
 	int i ;
 	int success = 0 ;
 
-	for ( i = 0; i < NumGaussPoints; i++ )
-		success += materialPointers[i]->revertToLastCommit( ) ;
+	// for ( i = 0; i < NumGaussPoints; i++ )
+	// 	success += materialPointers[i]->revertToLastCommit( ) ;
 
 	return success ;
 }
@@ -400,8 +400,8 @@ int  TenNodeTetrahedronThermal::revertToStart( )
 	int i ;
 	int success = 0 ;
 
-	for ( i = 0; i < NumGaussPoints; i++ )
-		success += materialPointers[i]->revertToStart( ) ;
+	// for ( i = 0; i < NumGaussPoints; i++ )
+	// 	success += materialPointers[i]->revertToStart( ) ;
 
 	return success ;
 }
@@ -424,37 +424,37 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
 			  << " " << nodeDisp(0) << " " << nodeDisp(1) << " " << nodeDisp(2) << endln;
 		}
 
-		// spit out the section location & invoke print on the scetion
-		const int numMaterials = 1;
+		// // spit out the section location & invoke print on the scetion
+		// const int numMaterials = 1;
 
-		static Vector avgStress(nstress);
-		static Vector avgStrain(nstress);
-		avgStress.Zero();
-		avgStrain.Zero();
-		for (i = 0; i < numMaterials; i++) {
-			avgStress += materialPointers[i]->getStress();
-			avgStrain += materialPointers[i]->getStrain();
-		}
-		avgStress /= numMaterials;
-		avgStrain /= numMaterials;
+		// static Vector avgStress(nstress);
+		// static Vector avgStrain(nstress);
+		// avgStress.Zero();
+		// avgStrain.Zero();
+		// for (i = 0; i < numMaterials; i++) {
+		// 	avgStress += materialPointers[i]->getStress();
+		// 	avgStrain += materialPointers[i]->getStrain();
+		// }
+		// avgStress /= numMaterials;
+		// avgStrain /= numMaterials;
 
-		s << "#AVERAGE_STRESS ";
-		for (i = 0; i < nstress; i++)
-			s << avgStress(i) << " ";
-		s << endln;
+		// s << "#AVERAGE_STRESS ";
+		// for (i = 0; i < nstress; i++)
+		// 	s << avgStress(i) << " ";
+		// s << endln;
 
-		s << "#AVERAGE_STRAIN ";
-		for (i = 0; i < nstress; i++)
-			s << avgStrain(i) << " ";
-		s << endln;
+		// s << "#AVERAGE_STRAIN ";
+		// for (i = 0; i < nstress; i++)
+		// 	s << avgStrain(i) << " ";
+		// s << endln;
 
-		/*
-		for (i=0; i<numMaterials; i++) {
-		  s << "#MATERIAL\n";
-		  //      materialPointers[i]->Print(s, flag);
-		  s << materialPointers[i]->getStress();
-		}
-		*/
+		// /*
+		// for (i=0; i<numMaterials; i++) {
+		//   s << "#MATERIAL\n";
+		//   //      materialPointers[i]->Print(s, flag);
+		//   s << materialPointers[i]->getStress();
+		// }
+		// */
 	}
 
 	if (flag == OPS_PRINT_CURRENTSTATE) {
@@ -463,8 +463,8 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
 		s << "Element Number: " << this->getTag() << endln;
 		s << "Nodes: " << connectedExternalNodes;
 
-		s << "Material Information : \n ";
-		materialPointers[0]->Print(s, flag);
+		// s << "Material Information : \n ";
+		// materialPointers[0]->Print(s, flag);
 
 		s << endln;
 
@@ -485,8 +485,8 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
 		for (int i = 1; i < 2; i++)
 			s << connectedExternalNodes(i) << ", ";
 		s << connectedExternalNodes(3) << "], ";
-		s << "\"bodyForces\": [" << b[0] << ", " << b[1] << ", " << b[2] << "], ";
-		s << "\"material\": \"" << materialPointers[0]->getTag() << "\"}";
+		// s << "\"bodyForces\": [" << b[0] << ", " << b[1] << ", " << b[2] << "], ";
+		// s << "\"material\": \"" << materialPointers[0]->getTag() << "\"}";
 	}
 }
 
@@ -522,7 +522,6 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 	int i, j, k, p, q ;
 	int jj, kk ;
 
-
 	static double volume ;
 	static double xsj ;  // determinant jacaobian matrix
 	static double dvol[numberGauss] ; //volume element
@@ -533,6 +532,10 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 	static Matrix stiffJK(ndf, ndf) ; //nodeJK stiffness
 	// static Matrix dd(nstress, nstress) ; //material tangent
 	static Matrix dd(3, 3) ; //material tangent
+
+	dd(0, 0) = kxx ;
+	dd(1, 1) = kyy ;
+	dd(2, 2) = kzz ;
 
 
 	//---------B-matrices------------------------------------
@@ -618,10 +621,6 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 		// JL ya no es asi... hay qye armar la matriz de los dd = [ kxx, 0, 0; 0, kyy, 0; ...]
 		// dd = materialPointers[i]->getInitialTangent( ) ;
 		// dd *= dvol[i] ;
-
-		dd[0][0] = kxx ;
-		dd[1][1] = kyy ;
-		dd[2][2] = kzz ;
 
 		jj = 0;
 		for ( j = 0; j < numberNodes; j++ )
@@ -816,122 +815,124 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 	//zero mass
 	mass.Zero( ) ;
+	damping.Zero( ) ;
+	resid.Zero() ;
 
-	return ;
+	// return ;
 
 	// JL... lo de abajo no es necesario..
 
-	// if (do_update == 0)
+	if (do_update == 0)
+	{
+		return ;
+	}
+
+
+	//compute basis vectors and local nodal coordinates
+	computeBasis( ) ;
+
+	//gauss loop to compute and save shape functions
+
+	int count = 0 ;
+
+	// for ( i = 0; i < 2; i++ )
 	// {
-	// 	return ;
-	// }
-
-
-	// //compute basis vectors and local nodal coordinates
-	// computeBasis( ) ;
-
-	// //gauss loop to compute and save shape functions
-
-	// int count = 0 ;
-
-	// // for ( i = 0; i < 2; i++ )
-	// {
-	// 	// for ( j = 0; j < 2; j++ )
-	// 	{
-	// 		for ( k = 0; k < numberGauss; k++ )
-	// 		{
+		// for ( j = 0; j < 2; j++ )
+		// {
+			for ( k = 0; k < numberGauss; k++ )
+			{
 				
-	// 			gaussPoint[0] = sg[k] ;
-	// 			gaussPoint[1] = sg[abs(1-k)] ;
-	// 			gaussPoint[2] = sg[abs(2-k)] ;
+				gaussPoint[0] = sg[k] ;
+				gaussPoint[1] = sg[abs(1-k)] ;
+				gaussPoint[2] = sg[abs(2-k)] ;
 
-	// 			//get shape functions
-	// 			shp3d( gaussPoint, xsj, shp, xl ) ;
+				//get shape functions
+				shp3d( gaussPoint, xsj, shp, xl ) ;
 
-	// 			//save shape functions
-	// 			for ( p = 0; p < nShape; p++ )
-	// 			{
-	// 				for ( q = 0; q < numberNodes; q++ )
-	// 				{
-	// 					Shape[p][q][count] = shp[p][q] ;
-	// 				}
-	// 			} // end for p
+				//save shape functions
+				for ( p = 0; p < nShape; p++ )
+				{
+					for ( q = 0; q < numberNodes; q++ )
+					{
+						Shape[p][q][count] = shp[p][q] ;
+					}
+				} // end for p
 
-	// 			//volume element to also be saved
-	// 			dvol[count] = wg[0] * xsj ;
+				//volume element to also be saved
+				dvol[count] = wg[0] * xsj ;
 
-	// 			count++ ;
+				count++ ;
 
-	// 		} //end for k
-	// 	} //end for j
+			} //end for k
+		// } //end for j
 	// } // end for i
 
 
 
-	// //gauss loop
-	// for ( i = 0; i < numberGauss; i++ )
-	// {
+	//gauss loop
+	for ( i = 0; i < numberGauss; i++ )
+	{
 
-	// 	//extract shape functions from saved array
-	// 	for ( p = 0; p < nShape; p++ )
-	// 	{
-	// 		for ( q = 0; q < numberNodes; q++ )
-	// 		{
-	// 			shp[p][q]  = Shape[p][q][i] ;
-	// 		}
-	// 	} // end for p
-
-
-	// 	//node loop to compute acceleration
-	// 	momentum.Zero( ) ;
-	// 	for ( j = 0; j < numberNodes; j++ )
-	// 	{
-	// 		momentum.addVector( 1.0, nodePointers[j]->getTrialAccel(), shp[massIndex][j] ) ;
-	// 	}
+		//extract shape functions from saved array
+		for ( p = 0; p < nShape; p++ )
+		{
+			for ( q = 0; q < numberNodes; q++ )
+			{
+				shp[p][q]  = Shape[p][q][i] ;
+			}
+		} // end for p
 
 
-	// 	//density
-	// 	rho = materialPointers[i]->getRho() ;
+		// //node loop to compute acceleration
+		// momentum.Zero( ) ;
+		// for ( j = 0; j < numberNodes; j++ )
+		// {
+		// 	momentum.addVector( 1.0, nodePointers[j]->getTrialAccel(), shp[massIndex][j] ) ;
+		// }
+
+
+		// //density
+		// rho = materialPointers[i]->getRho() ;
 
 
 	// 	//multiply acceleration by density to form momentum
 	// 	momentum *= rho ;
 
 
-	// 	//residual and tangent calculations node loops
-	// 	jj = 0 ;
-	// 	for ( j = 0; j < numberNodes; j++ )
-	// 	{
+		//residual and tangent calculations node loops
+		jj = 0 ;
+		for ( j = 0; j < numberNodes; j++ )
+		{
 
-	// 		temp = shp[massIndex][j] * dvol[i] ;
+			temp = shp[massIndex][j] * dvol[i] ;
 
-	// 		for ( p = 0; p < ndf; p++ )
-	// 		{
-	// 			resid( jj + p ) += ( temp * momentum(p) )  ;
-	// 		}
+			// for ( p = 0; p < ndf; p++ )
+			// {
+			// 	resid( jj + p ) += ( temp * momentum(p) )  ;
+			// }
 
-	// 		if ( tangFlag == 1 )
-	// 		{
+			if ( tangFlag == 1 )
+			{
 
-	// 			//multiply by density
-	// 			temp *= rho ;
+				//multiply by density
+				temp *= cp * rho ;
 
-	// 			//node-node mass
-	// 			kk = 0 ;
-	// 			for ( k = 0; k < numberNodes; k++ )
-	// 			{
-	// 				massJK = temp * shp[massIndex][k] ;
-	// 				for ( p = 0; p < ndf; p++ )
-	// 				{
-	// 					mass( jj + p, kk + p ) += massJK ;
-	// 				}
-	// 				kk += ndf ;
-	// 			} // end for k loop
-	// 		} // end if tang_flag
+				//node-node mass
+				kk = 0 ;
+				for ( k = 0; k < numberNodes; k++ )
+				{
+					massJK = temp * shp[massIndex][k] ;
+					for ( p = 0; p < ndf; p++ )
+					{
+						mass( jj + p, kk + p ) += massJK ;
+					}
+					kk += ndf ;
+				} // end for k loop
+			} // end if tang_flag
 
-	// 		jj += ndf ;
-	// 	} // end for j loop
-	// } //end for i gauss loop
+			jj += ndf ;
+		} // end for j loop
+	} //end for i gauss loop
 }
 
 //*********************************************************************
@@ -946,7 +947,7 @@ TenNodeTetrahedronThermal::update(void)
 		stiff.Zero();
 		resid.Zero();
 		mass.Zero();
-		// damping.Zero();
+		damping.Zero();
 		return 0;
 	}
 
@@ -1168,8 +1169,9 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 
 	static Vector stress(nstress) ;  //stress
 
-	static Matrix dd(nstress, nstress) ; //material tangent
+	// static Matrix dd(nstress, nstress) ; //material tangent
 
+	static Matrix dd(3, 3) ; //material tangent
 
 	//---------B-matrices------------------------------------
 
@@ -1252,18 +1254,18 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 
 
 		//compute the stress
-		stress = materialPointers[i]->getStress( ) ;
+		// stress = materialPointers[i]->getStress( ) ;
 
 
-		//multiply by volume element
-		stress  *= dvol[i] ;
+		// //multiply by volume element
+		// stress  *= dvol[i] ;
 
 		if ( tang_flag == 1 ) {
 			// dd = materialPointers[i]->getTangent( ) ;
 			// dd *= dvol[i] ;
-			dd[0][0] = kxx;
-			dd[1][1] = kyy;
-			dd[2][2] = kzz;
+			dd(0,0) = kxx;
+			dd(1,1) = kyy;
+			dd(2,2) = kzz;
 		} //end if tang_flag
 
 		double stress0 = stress(0);

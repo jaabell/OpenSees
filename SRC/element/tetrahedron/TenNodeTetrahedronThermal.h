@@ -74,8 +74,8 @@ public :
                        int node10,
                        // NDMater-ial &theMaterial,
                        double kxx, double kyy, double kzz,
-                       double rho, double cp, // JL: agregar a variables internas ✓
-                       double b1 = 0.0, double b2 = 0.0, double b3 = 0.0);
+                       double rho, double cp) // JL: agregar a variables internas ✓
+                       // double b1 = 0.0, double b2 = 0.0, double b3 = 0.0);
 
     //destructor
     virtual ~TenNodeTetrahedronThermal( ) ;
