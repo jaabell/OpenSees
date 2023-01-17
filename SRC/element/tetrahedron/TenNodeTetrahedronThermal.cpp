@@ -192,7 +192,6 @@ Vector  TenNodeTetrahedronThermal::resid(NumDOFsTotal) ;
 Matrix  TenNodeTetrahedronThermal::mass(NumDOFsTotal, NumDOFsTotal) ;
 Matrix  TenNodeTetrahedronThermal::damping(NumDOFsTotal, NumDOFsTotal) ;
 
-
 //quadrature data
 const double  TenNodeTetrahedronThermal::root3 = sqrt(3.0) ;
 const double  TenNodeTetrahedronThermal::one_over_root3 = 1.0 / root3 ;
@@ -246,7 +245,12 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
                                        int node8,
                                        int node9,
                                        int node10,
-                                       NDMaterial &theMaterial,
+                                       // NDMaterial &theMaterial,
+                                       double kxx,
+                                       double kyy,
+                                       double kzz,
+                                       double rho,
+                                       double cp,
                                        double b1, double b2, double b3)
 	: Element(tag, ELE_TAG_TenNodeTetrahedronThermal),
 	  connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
@@ -527,7 +531,8 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 	static double shp[nShape][numberNodes] ;  //shape functions at a gauss point
 	static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
 	static Matrix stiffJK(ndf, ndf) ; //nodeJK stiffness
-	static Matrix dd(nstress, nstress) ; //material tangent
+	// static Matrix dd(nstress, nstress) ; //material tangent
+	static Matrix dd(3, 3) ; //material tangent
 
 
 	//---------B-matrices------------------------------------
@@ -611,8 +616,12 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 		} // end for p
 
 		// JL ya no es asi... hay qye armar la matriz de los dd = [ kxx, 0, 0; 0, kyy, 0; ...]
-		dd = materialPointers[i]->getInitialTangent( ) ;
-		dd *= dvol[i] ;
+		// dd = materialPointers[i]->getInitialTangent( ) ;
+		// dd *= dvol[i] ;
+
+		dd[0][0] = kxx ;
+		dd[1][1] = kyy ;
+		dd[2][2] = kzz ;
 
 		jj = 0;
 		for ( j = 0; j < numberNodes; j++ )
@@ -812,117 +821,117 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 	// JL... lo de abajo no es necesario..
 
-	if (do_update == 0)
-	{
-		return ;
-	}
+	// if (do_update == 0)
+	// {
+	// 	return ;
+	// }
 
 
-	//compute basis vectors and local nodal coordinates
-	computeBasis( ) ;
+	// //compute basis vectors and local nodal coordinates
+	// computeBasis( ) ;
 
-	//gauss loop to compute and save shape functions
+	// //gauss loop to compute and save shape functions
 
-	int count = 0 ;
+	// int count = 0 ;
 
-	// for ( i = 0; i < 2; i++ )
-	{
-		// for ( j = 0; j < 2; j++ )
-		{
-			for ( k = 0; k < numberGauss; k++ )
-			{
+	// // for ( i = 0; i < 2; i++ )
+	// {
+	// 	// for ( j = 0; j < 2; j++ )
+	// 	{
+	// 		for ( k = 0; k < numberGauss; k++ )
+	// 		{
 				
-				gaussPoint[0] = sg[k] ;
-				gaussPoint[1] = sg[abs(1-k)] ;
-				gaussPoint[2] = sg[abs(2-k)] ;
+	// 			gaussPoint[0] = sg[k] ;
+	// 			gaussPoint[1] = sg[abs(1-k)] ;
+	// 			gaussPoint[2] = sg[abs(2-k)] ;
 
-				//get shape functions
-				shp3d( gaussPoint, xsj, shp, xl ) ;
+	// 			//get shape functions
+	// 			shp3d( gaussPoint, xsj, shp, xl ) ;
 
-				//save shape functions
-				for ( p = 0; p < nShape; p++ )
-				{
-					for ( q = 0; q < numberNodes; q++ )
-					{
-						Shape[p][q][count] = shp[p][q] ;
-					}
-				} // end for p
+	// 			//save shape functions
+	// 			for ( p = 0; p < nShape; p++ )
+	// 			{
+	// 				for ( q = 0; q < numberNodes; q++ )
+	// 				{
+	// 					Shape[p][q][count] = shp[p][q] ;
+	// 				}
+	// 			} // end for p
 
-				//volume element to also be saved
-				dvol[count] = wg[0] * xsj ;
+	// 			//volume element to also be saved
+	// 			dvol[count] = wg[0] * xsj ;
 
-				count++ ;
+	// 			count++ ;
 
-			} //end for k
-		} //end for j
-	} // end for i
-
-
-
-	//gauss loop
-	for ( i = 0; i < numberGauss; i++ )
-	{
-
-		//extract shape functions from saved array
-		for ( p = 0; p < nShape; p++ )
-		{
-			for ( q = 0; q < numberNodes; q++ )
-			{
-				shp[p][q]  = Shape[p][q][i] ;
-			}
-		} // end for p
+	// 		} //end for k
+	// 	} //end for j
+	// } // end for i
 
 
-		//node loop to compute acceleration
-		momentum.Zero( ) ;
-		for ( j = 0; j < numberNodes; j++ )
-		{
-			momentum.addVector( 1.0, nodePointers[j]->getTrialAccel(), shp[massIndex][j] ) ;
-		}
+
+	// //gauss loop
+	// for ( i = 0; i < numberGauss; i++ )
+	// {
+
+	// 	//extract shape functions from saved array
+	// 	for ( p = 0; p < nShape; p++ )
+	// 	{
+	// 		for ( q = 0; q < numberNodes; q++ )
+	// 		{
+	// 			shp[p][q]  = Shape[p][q][i] ;
+	// 		}
+	// 	} // end for p
 
 
-		//density
-		rho = materialPointers[i]->getRho() ;
+	// 	//node loop to compute acceleration
+	// 	momentum.Zero( ) ;
+	// 	for ( j = 0; j < numberNodes; j++ )
+	// 	{
+	// 		momentum.addVector( 1.0, nodePointers[j]->getTrialAccel(), shp[massIndex][j] ) ;
+	// 	}
 
 
-		//multiply acceleration by density to form momentum
-		momentum *= rho ;
+	// 	//density
+	// 	rho = materialPointers[i]->getRho() ;
 
 
-		//residual and tangent calculations node loops
-		jj = 0 ;
-		for ( j = 0; j < numberNodes; j++ )
-		{
+	// 	//multiply acceleration by density to form momentum
+	// 	momentum *= rho ;
 
-			temp = shp[massIndex][j] * dvol[i] ;
 
-			for ( p = 0; p < ndf; p++ )
-			{
-				resid( jj + p ) += ( temp * momentum(p) )  ;
-			}
+	// 	//residual and tangent calculations node loops
+	// 	jj = 0 ;
+	// 	for ( j = 0; j < numberNodes; j++ )
+	// 	{
 
-			if ( tangFlag == 1 )
-			{
+	// 		temp = shp[massIndex][j] * dvol[i] ;
 
-				//multiply by density
-				temp *= rho ;
+	// 		for ( p = 0; p < ndf; p++ )
+	// 		{
+	// 			resid( jj + p ) += ( temp * momentum(p) )  ;
+	// 		}
 
-				//node-node mass
-				kk = 0 ;
-				for ( k = 0; k < numberNodes; k++ )
-				{
-					massJK = temp * shp[massIndex][k] ;
-					for ( p = 0; p < ndf; p++ )
-					{
-						mass( jj + p, kk + p ) += massJK ;
-					}
-					kk += ndf ;
-				} // end for k loop
-			} // end if tang_flag
+	// 		if ( tangFlag == 1 )
+	// 		{
 
-			jj += ndf ;
-		} // end for j loop
-	} //end for i gauss loop
+	// 			//multiply by density
+	// 			temp *= rho ;
+
+	// 			//node-node mass
+	// 			kk = 0 ;
+	// 			for ( k = 0; k < numberNodes; k++ )
+	// 			{
+	// 				massJK = temp * shp[massIndex][k] ;
+	// 				for ( p = 0; p < ndf; p++ )
+	// 				{
+	// 					mass( jj + p, kk + p ) += massJK ;
+	// 				}
+	// 				kk += ndf ;
+	// 			} // end for k loop
+	// 		} // end if tang_flag
+
+	// 		jj += ndf ;
+	// 	} // end for j loop
+	// } //end for i gauss loop
 }
 
 //*********************************************************************
@@ -1250,8 +1259,11 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 		stress  *= dvol[i] ;
 
 		if ( tang_flag == 1 ) {
-			dd = materialPointers[i]->getTangent( ) ;
-			dd *= dvol[i] ;
+			// dd = materialPointers[i]->getTangent( ) ;
+			// dd *= dvol[i] ;
+			dd[0][0] = kxx;
+			dd[1][1] = kyy;
+			dd[2][2] = kzz;
 		} //end if tang_flag
 
 		double stress0 = stress(0);
