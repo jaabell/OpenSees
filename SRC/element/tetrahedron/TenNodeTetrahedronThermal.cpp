@@ -50,35 +50,58 @@
 
 void* OPS_TenNodeTetrahedronThermal()
 {
-	if (OPS_GetNumRemainingInputArgs() < 12)
+	// if (OPS_GetNumRemainingInputArgs() < 12)
+	if (OPS_GetNumRemainingInputArgs() < 11)
 	{
 		opserr << "WARNING insufficient arguments\n";
-		opserr << "Want: element TenNodeTetrahedronThermal eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? matTag? \n";
+		// opserr << "Want: element TenNodeTetrahedronThermal eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? matTag? \n";
+		opserr << "Want: element TenNodeTetrahedronThermal eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? \n";
 		return 0;
 	}
 
-	int idata[12];
-	int num = 12;
+	// int idata[12];
+	// int num = 12;
+	int idata[11];
+	int num = 11;
 	if (OPS_GetIntInput(&num, idata) < 0)
 	{
 		opserr << "WARNING: invalid integer data\n";
 		return 0;
 	}
 
-	NDMaterial* mat = OPS_getNDMaterial(idata[11]);
-	if (mat == 0)
-	{
-		opserr << "WARNING material not found\n";
-		opserr << "material tag: " << idata[11];
-		opserr << "\nTenNodeTetrahedronThermal element: " << idata[0] << endln;
-	}
+	// NDMaterial* mat = OPS_getNDMaterial(idata[11]);
+	// if (mat == 0)
+	// {
+	// 	opserr << "WARNING material not found\n";
+	// 	opserr << "material tag: " << idata[11];
+	// 	opserr << "\nTenNodeTetrahedronThermal element: " << idata[0] << endln;
+	// }
 
-	double data[3] = {0, 0, 0};
+	// double data[3] = {0, 0, 0};
+	// num = OPS_GetNumRemainingInputArgs();
+
+	// if (num > 3)
+	// {
+	// 	num = 3;
+	// }
+	// if (num > 0)
+	// {
+	// 	if (OPS_GetDoubleInput(&num, data) < 0)
+	// 	{
+	// 		opserr << "WARNING: invalid double data\n";
+	// 		return 0;
+	// 	}
+	// }
+
+	// // opserr << "OPS_TenNodeTetrahedronThermal END" << endln;
+	// return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
+
+	double data[5] = {0, 0, 0, 0, 0};
 	num = OPS_GetNumRemainingInputArgs();
 
-	if (num > 3)
+	if (num > 5)
 	{
-		num = 3;
+		num = 5;
 	}
 	if (num > 0)
 	{
@@ -89,10 +112,8 @@ void* OPS_TenNodeTetrahedronThermal()
 		}
 	}
 
-
-
 	// opserr << "OPS_TenNodeTetrahedronThermal END" << endln;
-	return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
+	return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], data[0], data[1], data[2], data[3], data[4]);
 }
 
 void* OPS_TenNodeTetrahedronThermal(const ID& info)
@@ -105,7 +126,8 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 	// save data
 	static std::map<int, Vector> meshdata;
 	int idata[6];
-	double data[3] = {0, 0, 0};
+	// double data[3] = {0, 0, 0};
+	double data[5] = {0, 0, 0, 0, 0};
 	if (info(0) == 1) {
 
 		// check input
@@ -115,7 +137,8 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 		}
 		if (OPS_GetNumRemainingInputArgs() < 1) {
 			opserr << "WARNING insufficient arguments:\n";
-			opserr << "matTag <b1, b2, b3>\n";
+			// opserr << "matTag <b1, b2, b3>\n";
+			opserr << "matTag <kxx, kyy, kzz, rho, cp>\n";
 			return 0;
 		}
 
@@ -128,8 +151,11 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 
 		// get body forces
 		numdata = OPS_GetNumRemainingInputArgs();
-		if (numdata > 3) {
-			numdata = 3;
+		// if (numdata > 3) {
+		// 	numdata = 3;
+		// }
+		if (numdata > 5) {
+			numdata = 5;
 		}
 		if (numdata > 0) {
 			if (OPS_GetDoubleInput(&numdata, data) < 0) {
@@ -142,7 +168,10 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 		Vector& mdata = meshdata[info(1)];
 		mdata.resize(4);
 		mdata(0) = (double)idata[5];
-		for (int i = 0; i < 3; ++i) {
+		// for (int i = 0; i < 3; ++i) {
+		// 	mdata(i + 1) = data[i];
+		// }
+		for (int i = 0; i < 5; ++i) {
 			mdata(i + 1) = data[i];
 		}
 		return &meshdata;
@@ -162,7 +191,10 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 		}
 
 		idata[5] = (int)mdata(0);
-		for (int i = 0; i < 3; ++i) {
+		// for (int i = 0; i < 3; ++i) {
+		// 	data[i] = mdata(i + 1);
+		// }
+		for (int i = 0; i < 5; ++i) {
 			data[i] = mdata(i + 1);
 		}
 
@@ -170,15 +202,16 @@ void* OPS_TenNodeTetrahedronThermal(const ID& info)
 			idata[i - 2] = info(i);
 		}
 
-		// check material
-		NDMaterial* mat = OPS_getNDMaterial(idata[5]);
-		if (mat == 0) {
-			opserr << "WARNING material not found\n";
-			opserr << "material tag: " << idata[5];
-			opserr << "\nTenNodeTetrahedronThermal element: " << idata[0] << endln;
-		}
+		// // check material
+		// NDMaterial* mat = OPS_getNDMaterial(idata[5]);
+		// if (mat == 0) {
+		// 	opserr << "WARNING material not found\n";
+		// 	opserr << "material tag: " << idata[5];
+		// 	opserr << "\nTenNodeTetrahedronThermal element: " << idata[0] << endln;
+		// }
 
-		return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
+		// return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
+		return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], data[0], data[1], data[2], data[3], data[4]);
 	}
 
 	return 0;
@@ -200,9 +233,7 @@ const double  TenNodeTetrahedronThermal::alpha = (5.0 + 3.0*sqrt(5.0))/20. ;
 const double  TenNodeTetrahedronThermal::beta = (5.0 - sqrt(5.0))/20. ;
 
 const double  TenNodeTetrahedronThermal::sg[] = { alpha, beta, beta, beta} ;
-
 const double  TenNodeTetrahedronThermal::wg[] = { 1.0 / 24.0 } ;
-
 
 static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 
@@ -217,11 +248,11 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
 		nodePointers[i] = 0;
 	}
 
-	b[0] = 0.0;
-	b[1] = 0.0;
-	b[2] = 0.0;
+	// b[0] = 0.0;
+	// b[1] = 0.0;
+	// b[2] = 0.0;
 
-	materialPointers[0] = 0;
+	// materialPointers[0] = 0;
 
 	for (int i = 0; i < NumNodes; ++i)
 	{
@@ -271,16 +302,16 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
 
 
 	// opserr << "TenNodeTetrahedronThermal::constructor - material copy\n";
-	for (int i = 0; i < NumGaussPoints; i++ )
-	{
-		materialPointers[i] = theMaterial.getCopy("ThreeDimensional") ;
-		if (materialPointers[i] == 0)
-		{
-			opserr << "TenNodeTetrahedronThermal::constructor - failed to get a material of type: ThreeDimensional\n";
-			exit(-1);
-		} //end if
-		nodePointers[i] = 0;
-	} //end for i
+	// for (int i = 0; i < NumGaussPoints; i++ )
+	// {
+	// 	materialPointers[i] = theMaterial.getCopy("ThreeDimensional") ;
+	// 	if (materialPointers[i] == 0)
+	// 	{
+	// 		opserr << "TenNodeTetrahedronThermal::constructor - failed to get a material of type: ThreeDimensional\n";
+	// 		exit(-1);
+	// 	} //end if
+	// 	nodePointers[i] = 0;
+	// } //end for i
 
 	// // Body forces
 	// b[0] = b1;
@@ -470,7 +501,7 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
 
 		// s << "DEBUGME!" << endln;
 
-		s << "Body Forces: " << b[0] << " " << b[1] << " " << b[2] << endln;
+		// s << "Body Forces: " << b[0] << " " << b[1] << " " << b[2] << endln;
 
 		// s << "DEBUGME!" << endln;
 
@@ -795,6 +826,8 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 	static const int massIndex = nShape - 1 ;
 
+	static const int dampingIndex = nShape - 1 ;
+
 	double xsj ;  // determinant jacaobian matrix
 
 	double dvol[numberGauss] ; //volume element
@@ -810,7 +843,7 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 	int i, j, k, p, q ;
 	int jj, kk ;
 
-	double temp, rho, massJK ;
+	double temp, rho, dampingJK, massJK ;
 
 
 	//zero mass
@@ -904,7 +937,8 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 		for ( j = 0; j < numberNodes; j++ )
 		{
 
-			temp = shp[massIndex][j] * dvol[i] ;
+			// temp = shp[massIndex][j] * dvol[i] ;
+			temp = shp[dampingIndex][j] * dvol[i] ;
 
 			// for ( p = 0; p < ndf; p++ )
 			// {
@@ -921,10 +955,12 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 				kk = 0 ;
 				for ( k = 0; k < numberNodes; k++ )
 				{
-					massJK = temp * shp[massIndex][k] ;
+					// massJK = temp * shp[massIndex][k] ;
+					dampingJK = temp * shp[dampingIndex][k] ;
 					for ( p = 0; p < ndf; p++ )
 					{
-						mass( jj + p, kk + p ) += massJK ;
+						// mass( jj + p, kk + p ) += massJK ;
+						damping( jj + p, kk + p ) += dampingJK ;
 					}
 					kk += ndf ;
 				} // end for k loop
@@ -1328,19 +1364,19 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 			}//end for p
 
 
-			//residual
-			for ( p = 0; p < ndf; p++ )
-			{
-				resid( jj + p ) += residJ(p)  ;
-				if (applyLoad == 0)
-				{
-					resid( jj + p ) -= dvol[i]*b[p]*shp[3][j];
-				}
-				else
-				{
-					resid( jj + p ) -= dvol[i] * appliedB[p] * shp[3][j];
-				}
-			}
+			// //residual
+			// for ( p = 0; p < ndf; p++ )
+			// {
+			// 	resid( jj + p ) += residJ(p)  ;
+			// 	if (applyLoad == 0)
+			// 	{
+			// 		resid( jj + p ) -= dvol[i]*b[p]*shp[3][j];
+			// 	}
+			// 	else
+			// 	{
+			// 		resid( jj + p ) -= dvol[i] * appliedB[p] * shp[3][j];
+			// 	}
+			// }
 
 			if ( tang_flag == 1 )
 			{
@@ -1474,23 +1510,23 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
 	else
 		idData(25) = 0;
 
-	int i;
-	for (i = 0; i < NumGaussPoints; i++)
-	{
-		idData(i) = materialPointers[i]->getClassTag();
-		matDbTag = materialPointers[i]->getDbTag();
-		// NOTE: we do have to ensure that the material has a database
-		// tag if we are sending to a database channel.
-		if (matDbTag == 0)
-		{
-			matDbTag = theChannel.getDbTag();
-			if (matDbTag != 0)
-			{
-				materialPointers[i]->setDbTag(matDbTag);
-			}
-		}
-		idData(i + 8) = matDbTag;
-	}
+	// int i;
+	// for (i = 0; i < NumGaussPoints; i++)
+	// {
+	// 	idData(i) = materialPointers[i]->getClassTag();
+	// 	matDbTag = materialPointers[i]->getDbTag();
+	// 	// NOTE: we do have to ensure that the material has a database
+	// 	// tag if we are sending to a database channel.
+	// 	if (matDbTag == 0)
+	// 	{
+	// 		matDbTag = theChannel.getDbTag();
+	// 		if (matDbTag != 0)
+	// 		{
+	// 			materialPointers[i]->setDbTag(matDbTag);
+	// 		}
+	// 	}
+	// 	idData(i + 8) = matDbTag;
+	// }
 
 	idData(16) = connectedExternalNodes(0);
 	idData(17) = connectedExternalNodes(1);
@@ -1508,14 +1544,15 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
 		return res;
 	}
 
-	static Vector dData(7);
+	// static Vector dData(7);
+	static Vector dData(4);
 	dData(0) = alphaM;
 	dData(1) = betaK;
 	dData(2) = betaK0;
 	dData(3) = betaKc;
-	dData(4) = b[0];
-	dData(5) = b[1];
-	dData(6) = b[2];
+	// dData(4) = b[0];
+	// dData(5) = b[1];
+	// dData(6) = b[2];
 
 	if (theChannel.sendVector(dataTag, commitTag, dData) < 0) {
 		opserr << "TenNodeTetrahedronThermal::sendSelf() - failed to send double data\n";
@@ -1523,14 +1560,14 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
 	}
 
 	// Finally, quad asks its material objects to send themselves
-	for (i = 0; i < NumGaussPoints; i++) {
-		res += materialPointers[i]->sendSelf(commitTag, theChannel);
-		if (res < 0)
-		{
-			opserr << "WARNING TenNodeTetrahedronThermal::sendSelf() - " << this->getTag() << " failed to send its Material\n";
-			return res;
-		}
-	}
+	// for (i = 0; i < NumGaussPoints; i++) {
+	// 	res += materialPointers[i]->sendSelf(commitTag, theChannel);
+	// 	if (res < 0)
+	// 	{
+	// 		opserr << "WARNING TenNodeTetrahedronThermal::sendSelf() - " << this->getTag() << " failed to send its Material\n";
+	// 		return res;
+	// 	}
+	// }
 
 	return res;
 
@@ -1553,7 +1590,8 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 
 	this->setTag(idData(24));
 
-	static Vector dData(7);
+	// static Vector dData(7);
+	static Vector dData(4);
 	if (theChannel.recvVector(dataTag, commitTag, dData) < 0) {
 		opserr << "DispBeamColumn2d::sendSelf() - failed to recv double data\n";
 		return -1;
@@ -1562,9 +1600,9 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 	betaK = dData(1);
 	betaK0 = dData(2);
 	betaKc = dData(3);
-	b[0] = dData(4);
-	b[1] = dData(5);
-	b[2] = dData(6);
+	// b[0] = dData(4);
+	// b[1] = dData(5);
+	// b[2] = dData(6);
 
 
 	connectedExternalNodes(0) = idData(16);
@@ -1578,61 +1616,61 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 	// connectedExternalNodes(7) = idData(23);
 
 
-	if (materialPointers[0] == 0)
-	{
-		for (int i = 0; i < NumGaussPoints; i++)
-		{
-			int matClassTag = idData(i);
-			int matDbTag = idData(i + 8);
+	// if (materialPointers[0] == 0)
+	// {
+	// 	for (int i = 0; i < NumGaussPoints; i++)
+	// 	{
+	// 		int matClassTag = idData(i);
+	// 		int matDbTag = idData(i + 8);
 
-			// Allocate new material with the sent class tag
-			materialPointers[i] = theBroker.getNewNDMaterial(matClassTag);
+	// 		// Allocate new material with the sent class tag
+	// 		materialPointers[i] = theBroker.getNewNDMaterial(matClassTag);
 
-			if (materialPointers[i] == 0)
-			{
-				opserr << "TenNodeTetrahedronThermal::recvSelf() - Broker could not create NDMaterial of class type " << matClassTag << endln;
-				return -1;
-			}
+	// 		if (materialPointers[i] == 0)
+	// 		{
+	// 			opserr << "TenNodeTetrahedronThermal::recvSelf() - Broker could not create NDMaterial of class type " << matClassTag << endln;
+	// 			return -1;
+	// 		}
 
-			// Now receive materials into the newly allocated space
-			materialPointers[i]->setDbTag(matDbTag);
-			res += materialPointers[i]->recvSelf(commitTag, theChannel, theBroker);
-			if (res < 0) {
-				opserr << "NLBeamColumn3d::recvSelf() - material " << i << "failed to recv itself\n";
-				return res;
-			}
-		}
-	}
-	// materials exist , ensure materials of correct type and recvSelf on them
-	else
-	{
-		for (int i = 0; i < NumGaussPoints; i++) {
-			int matClassTag = idData(i);
-			int matDbTag = idData(i + 8);
-			// Check that material is of the right type; if not,
-			// delete it and create a new one of the right type
-			if (materialPointers[i]->getClassTag() != matClassTag)
-			{
-				delete materialPointers[i];
-				materialPointers[i] = theBroker.getNewNDMaterial(matClassTag);
-				if (materialPointers[i] == 0)
-				{
-					opserr << "TenNodeTetrahedronThermal::recvSelf() - Broker could not create NDMaterial of class type " <<
-					       matClassTag << endln;
-					exit(-1);
-				}
-				materialPointers[i]->setDbTag(matDbTag);
-			}
-			// Receive the material
+	// 		// Now receive materials into the newly allocated space
+	// 		materialPointers[i]->setDbTag(matDbTag);
+	// 		res += materialPointers[i]->recvSelf(commitTag, theChannel, theBroker);
+	// 		if (res < 0) {
+	// 			opserr << "NLBeamColumn3d::recvSelf() - material " << i << "failed to recv itself\n";
+	// 			return res;
+	// 		}
+	// 	}
+	// }
+	// // materials exist , ensure materials of correct type and recvSelf on them
+	// else
+	// {
+	// 	for (int i = 0; i < NumGaussPoints; i++) {
+	// 		int matClassTag = idData(i);
+	// 		int matDbTag = idData(i + 8);
+	// 		// Check that material is of the right type; if not,
+	// 		// delete it and create a new one of the right type
+	// 		if (materialPointers[i]->getClassTag() != matClassTag)
+	// 		{
+	// 			delete materialPointers[i];
+	// 			materialPointers[i] = theBroker.getNewNDMaterial(matClassTag);
+	// 			if (materialPointers[i] == 0)
+	// 			{
+	// 				opserr << "TenNodeTetrahedronThermal::recvSelf() - Broker could not create NDMaterial of class type " <<
+	// 				       matClassTag << endln;
+	// 				exit(-1);
+	// 			}
+	// 			materialPointers[i]->setDbTag(matDbTag);
+	// 		}
+	// 		// Receive the material
 
-			res += materialPointers[i]->recvSelf(commitTag, theChannel, theBroker);
-			if (res < 0)
-			{
-				opserr << "TenNodeTetrahedronThermal::recvSelf() - material " << i << "failed to recv itself\n";
-				return res;
-			}
-		}
-	}
+	// 		res += materialPointers[i]->recvSelf(commitTag, theChannel, theBroker);
+	// 		if (res < 0)
+	// 		{
+	// 			opserr << "TenNodeTetrahedronThermal::recvSelf() - material " << i << "failed to recv itself\n";
+	// 			return res;
+	// 		}
+	// 	}
+	// }
 
 	return res;
 }
@@ -1734,7 +1772,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 		{
 			output.tag("GaussPoint");
 			output.attr("number", pointNum);
-			theResponse =  materialPointers[pointNum - 1]->setResponse(&argv[2], argc - 2, output);
+			// theResponse =  materialPointers[pointNum - 1]->setResponse(&argv[2], argc - 2, output);
 			output.endTag(); // GaussPoint
 		}
 
@@ -1746,9 +1784,9 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 		{
 			output.tag("GaussPoint");
 			output.attr("number", i + 1);
-			output.tag("NdMaterialOutput");
-			output.attr("classType", materialPointers[i]->getClassTag());
-			output.attr("tag", materialPointers[i]->getTag());
+			// output.tag("NdMaterialOutput");
+			// output.attr("classType", materialPointers[i]->getClassTag());
+			// output.attr("tag", materialPointers[i]->getTag());
 
 			output.tag("ResponseType", "sigma11");
 			output.tag("ResponseType", "sigma22");
@@ -1757,7 +1795,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 			output.tag("ResponseType", "sigma23");
 			output.tag("ResponseType", "sigma13");
 
-			output.endTag(); // NdMaterialOutput
+			// output.endTag(); // NdMaterialOutput
 			output.endTag(); // GaussPoint
 		}
 		theResponse =  new ElementResponse(this, 3, Vector(6*4));
@@ -1769,9 +1807,9 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 		{
 			output.tag("GaussPoint");
 			output.attr("number", i + 1);
-			output.tag("NdMaterialOutput");
-			output.attr("classType", materialPointers[i]->getClassTag());
-			output.attr("tag", materialPointers[i]->getTag());
+			// output.tag("NdMaterialOutput");
+			// output.attr("classType", materialPointers[i]->getClassTag());
+			// output.attr("tag", materialPointers[i]->getTag());
 
 			output.tag("ResponseType", "eps11");
 			output.tag("ResponseType", "eps22");
@@ -1780,7 +1818,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 			output.tag("ResponseType", "eps23");
 			output.tag("ResponseType", "eps13");
 
-			output.endTag(); // NdMaterialOutput
+			// output.endTag(); // NdMaterialOutput
 			output.endTag(); // GaussPoint
 		}
 		theResponse =  new ElementResponse(this, 4, Vector(6*4));
@@ -1847,43 +1885,43 @@ TenNodeTetrahedronThermal::setParameter(const char **argv, int argc, Parameter &
 
 	int res = -1;
 
-	if ((strstr(argv[0], "material") != 0) && (strcmp(argv[0], "materialState") != 0))
-	{
-		if (argc < 3)
-		{
-			return -1;
-		}
+	// if ((strstr(argv[0], "material") != 0) && (strcmp(argv[0], "materialState") != 0))
+	// {
+	// 	if (argc < 3)
+	// 	{
+	// 		return -1;
+	// 	}
 
-		int pointNum = atoi(argv[1]);
-		if (pointNum > 0 && pointNum <= 1)
-		{
-			return materialPointers[pointNum - 1]->setParameter(&argv[2], argc - 2, param);
-		}
-		else
-		{
-			return -1;
-		}
-	}
-	else if ((strstr(argv[0], "setDispInit") != 0) && (strcmp(argv[0], "setdispinit") == 0))
-	{
-		return param.addObject(1313, this);
-	}
-	else if ( strcmp(argv[0], "update") == 0 )
-	{
-		return param.addObject(1414, this);
-	}
-	else // otherwise it could be just a forall material parameter
-	{
-		int matRes = res;
-		for (int i = 0; i < 1; i++)
-		{
-			matRes =  materialPointers[i]->setParameter(argv, argc, param);
-			if (matRes != -1)
-			{
-				res = matRes;
-			}
-		}
-	}
+	// 	int pointNum = atoi(argv[1]);
+	// 	if (pointNum > 0 && pointNum <= 1)
+	// 	{
+	// 		return materialPointers[pointNum - 1]->setParameter(&argv[2], argc - 2, param);
+	// 	}
+	// 	else
+	// 	{
+	// 		return -1;
+	// 	}
+	// }
+	// else if ((strstr(argv[0], "setDispInit") != 0) && (strcmp(argv[0], "setdispinit") == 0))
+	// {
+	// 	return param.addObject(1313, this);
+	// }
+	// else if ( strcmp(argv[0], "update") == 0 )
+	// {
+	// 	return param.addObject(1414, this);
+	// }
+	// else // otherwise it could be just a forall material parameter
+	// {
+	// 	int matRes = res;
+	// 	for (int i = 0; i < 1; i++)
+	// 	{
+	// 		matRes =  materialPointers[i]->setParameter(argv, argc, param);
+	// 		if (matRes != -1)
+	// 		{
+	// 			res = matRes;
+	// 		}
+	// 	}
+	// }
 	return res;
 }
 
@@ -1939,13 +1977,13 @@ TenNodeTetrahedronThermal::updateParameter(int parameterID, Information &info)
 	}
 	else
 	{
-		for (int i = 0; i < 1; i++)
-		{
-			matRes = materialPointers[i]->updateParameter(parameterID, info);
-		}
-		if (matRes != -1) {
-			res = matRes;
-		}
+		// for (int i = 0; i < 1; i++)
+		// {
+		// 	matRes = materialPointers[i]->updateParameter(parameterID, info);
+		// }
+		// if (matRes != -1) {
+		// 	res = matRes;
+		// }
 		return res;
 	}
 }
