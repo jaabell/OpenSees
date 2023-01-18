@@ -240,7 +240,8 @@ static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 //null constructor
 TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
 	: Element( 0, ELE_TAG_TenNodeTetrahedronThermal ),
-	  connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
+	  // connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
+	  connectedExternalNodes(NumNodes), load(0), Ki(0)
 {
 	B.Zero();
 
@@ -254,12 +255,12 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
 
 	// materialPointers[0] = 0;
 
-	for (int i = 0; i < NumNodes; ++i)
-	{
-		initDisp[i] = Vector(3);
-		initDisp[i].Zero();
-	}
-	do_update = 1;
+	// for (int i = 0; i < NumNodes; ++i)
+	// {
+	// 	initDisp[i] = Vector(3);
+	// 	initDisp[i].Zero();
+	// }
+	// do_update = 1;
 }
 
 
@@ -284,11 +285,12 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
                                        double cp)
                                        // double b1, double b2, double b3)
 	: Element(tag, ELE_TAG_TenNodeTetrahedronThermal),
-	  connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
+	  // connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
+	  connectedExternalNodes(NumNodes), load(0), Ki(0)
 {
 	// opserr << "TenNodeTetrahedronThermal::constructor - START\n";
 	B.Zero();
-	do_update = 1;
+	// do_update = 1;
 	connectedExternalNodes(0) = node1 ;
 	connectedExternalNodes(1) = node2 ;
 	connectedExternalNodes(2) = node3 ;
@@ -855,10 +857,10 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 	// JL... lo de abajo no es necesario..
 
-	if (do_update == 0)
-	{
-		return ;
-	}
+	// if (do_update == 0)
+	// {
+	// 	return ;
+	// }
 
 
 	//compute basis vectors and local nodal coordinates
@@ -978,14 +980,14 @@ TenNodeTetrahedronThermal::update(void)
 {
 
 	// opserr << "TenNodeTetrahedronThermal::update -- START" << endln;
-	if (do_update == 0)
-	{
-		stiff.Zero();
-		resid.Zero();
-		mass.Zero();
-		damping.Zero();
-		return 0;
-	}
+	// if (do_update == 0)
+	// {
+	// 	stiff.Zero();
+	// 	resid.Zero();
+	// 	mass.Zero();
+	// 	damping.Zero();
+	// 	return 0;
+	// }
 
 	// opserr << "TenNodeTetrahedronThermal::update -- 1" << endln;
 
@@ -1137,18 +1139,18 @@ TenNodeTetrahedronThermal::update(void)
 			double b50 = shp[2][j];
 			double b52 = shp[0][j];
 
-			const Vector &ul = nodePointers[j]->getTrialDisp() - initDisp[j];
+			// const Vector &ul = nodePointers[j]->getTrialDisp() - initDisp[j];
 
-			double ul0 = ul(0);
-			double ul1 = ul(1);
-			double ul2 = ul(2);
+			// double ul0 = ul(0);
+			// double ul1 = ul(1);
+			// double ul2 = ul(2);
 
-			strain(0) += b00 * ul0;
-			strain(1) += b11 * ul1;
-			strain(2) += b22 * ul2;
-			strain(3) += b30 * ul0 + b31 * ul1;
-			strain(4) += b41 * ul1 + b42 * ul2;
-			strain(5) += b50 * ul0 + b52 * ul2;
+			// strain(0) += b00 * ul0;
+			// strain(1) += b11 * ul1;
+			// strain(2) += b22 * ul2;
+			// strain(3) += b30 * ul0 + b31 * ul1;
+			// strain(4) += b41 * ul1 + b42 * ul2;
+			// strain(5) += b50 * ul0 + b52 * ul2;
 
 		} // end for j
 		// opserr << "TenNodeTetrahedronThermal::update -- 4.3 i = " << i << endln;
@@ -1227,10 +1229,10 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 	stiff.Zero( ) ;
 	resid.Zero( ) ;
 
-	if (do_update == 0)
-	{
-		return ;
-	}
+	// if (do_update == 0)
+	// {
+	// 	return ;
+	// }
 
 	//compute basis vectors and local nodal coordinates
 	computeBasis( ) ;
@@ -1532,7 +1534,7 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
 	idData(17) = connectedExternalNodes(1);
 	idData(18) = connectedExternalNodes(2);
 	idData(19) = connectedExternalNodes(3);
-	idData(26) = do_update;
+	// idData(26) = do_update;
 	// idData(20) = connectedExternalNodes(4);
 	// idData(21) = connectedExternalNodes(5);
 	// idData(22) = connectedExternalNodes(6);
@@ -1609,7 +1611,7 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 	connectedExternalNodes(1) = idData(17);
 	connectedExternalNodes(2) = idData(18);
 	connectedExternalNodes(3) = idData(19);
-	do_update = idData(26);
+	// do_update = idData(26);
 	// connectedExternalNodes(4) = idData(20);
 	// connectedExternalNodes(5) = idData(21);
 	// connectedExternalNodes(6) = idData(22);
@@ -1838,40 +1840,40 @@ TenNodeTetrahedronThermal::getResponse(int responseID, Information &eleInfo)
 	else if (responseID == 2)
 		return eleInfo.setMatrix(this->getTangentStiff());
 
-	else if (responseID == 3) {
+	// else if (responseID == 3) {
 
-		// Loop over the integration points
-		int cnt = 0;
-		for (int i = 0; i < 4; i++) {
+	// 	// Loop over the integration points
+	// 	int cnt = 0;
+	// 	for (int i = 0; i < 4; i++) {
 
-			// Get material stress response
-			const Vector &sigma = materialPointers[i]->getStress();
-			stresses(cnt++) = sigma(0);
-			stresses(cnt++) = sigma(1);
-			stresses(cnt++) = sigma(2);
-			stresses(cnt++) = sigma(3);
-			stresses(cnt++) = sigma(4);
-			stresses(cnt++) = sigma(5);
-		}
-		return eleInfo.setVector(stresses);
+	// 		// Get material stress response
+	// 		const Vector &sigma = materialPointers[i]->getStress();
+	// 		stresses(cnt++) = sigma(0);
+	// 		stresses(cnt++) = sigma(1);
+	// 		stresses(cnt++) = sigma(2);
+	// 		stresses(cnt++) = sigma(3);
+	// 		stresses(cnt++) = sigma(4);
+	// 		stresses(cnt++) = sigma(5);
+	// 	}
+	// 	return eleInfo.setVector(stresses);
 
-	} else if (responseID == 4) {
+	// } else if (responseID == 4) {
 
-		// Loop over the integration points
-		int cnt = 0;
-		for (int i = 0; i < 4; i++) {
+	// 	// Loop over the integration points
+	// 	int cnt = 0;
+	// 	for (int i = 0; i < 4; i++) {
 
-			// Get material stress response
-			const Vector &sigma = materialPointers[i]->getStrain();
-			stresses(cnt++) = sigma(0);
-			stresses(cnt++) = sigma(1);
-			stresses(cnt++) = sigma(2);
-			stresses(cnt++) = sigma(3);
-			stresses(cnt++) = sigma(4);
-			stresses(cnt++) = sigma(5);
-		}
-		return eleInfo.setVector(stresses);
-	}
+	// 		// Get material stress response
+	// 		const Vector &sigma = materialPointers[i]->getStrain();
+	// 		stresses(cnt++) = sigma(0);
+	// 		stresses(cnt++) = sigma(1);
+	// 		stresses(cnt++) = sigma(2);
+	// 		stresses(cnt++) = sigma(3);
+	// 		stresses(cnt++) = sigma(4);
+	// 		stresses(cnt++) = sigma(5);
+	// 	}
+	// 	return eleInfo.setVector(stresses);
+	// }
 
 	else
 		return -1;
@@ -1945,7 +1947,7 @@ TenNodeTetrahedronThermal::updateParameter(int parameterID, Information &info)
 			for ( int i = 0; i < NumNodes; i++ )
 			{
 				nodePointers[i] = mydomain->getNode( connectedExternalNodes(i) ) ;
-				initDisp[i] = nodePointers[i]->getDisp();
+				// initDisp[i] = nodePointers[i]->getDisp();
 				// opserr << " (" << initDisp[i](0) << " " << initDisp[i](1) << " " << initDisp[i](1) << ") ";
 			}
 			// opserr << endln;
@@ -1955,24 +1957,24 @@ TenNodeTetrahedronThermal::updateParameter(int parameterID, Information &info)
 	else if (parameterID == 1414)
 	{
 		int new_do_update = info.theDouble;
-		if (do_update == 0 && new_do_update == 1)
-		{
-			do_update = 1;
-			Domain * mydomain = this->getDomain();
-			// opserr << "4Ntet::updateParameter - ele tag = " << this->getTag()  << " - sets to update and init disp ";
-			for ( int i = 0; i < NumNodes; i++ )
-			{
-				nodePointers[i] = mydomain->getNode( connectedExternalNodes(i) ) ;
-				initDisp[i] = nodePointers[i]->getDisp();
-				// opserr << " (" << initDisp[i](0) << " " << initDisp[i](1) << " " << initDisp[i](1) << ") ";
-			}
-			// opserr << endln;
-		}
+		// if (do_update == 0 && new_do_update == 1)
+		// {
+		// 	do_update = 1;
+		// 	Domain * mydomain = this->getDomain();
+		// 	// opserr << "4Ntet::updateParameter - ele tag = " << this->getTag()  << " - sets to update and init disp ";
+		// 	for ( int i = 0; i < NumNodes; i++ )
+		// 	{
+		// 		nodePointers[i] = mydomain->getNode( connectedExternalNodes(i) ) ;
+		// 		initDisp[i] = nodePointers[i]->getDisp();
+		// 		// opserr << " (" << initDisp[i](0) << " " << initDisp[i](1) << " " << initDisp[i](1) << ") ";
+		// 	}
+		// 	// opserr << endln;
+		// }
 		if (new_do_update == 0)
 		{
 			opserr << "4Ntet::updateParameter - ele tag = " << this->getTag()  << " - will not update\n";
 		}
-		do_update = new_do_update;
+		// do_update = new_do_update;
 		return 0;
 	}
 	else
