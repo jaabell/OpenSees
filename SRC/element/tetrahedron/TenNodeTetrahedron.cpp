@@ -1922,7 +1922,7 @@ TenNodeTetrahedron::updateParameter(int parameterID, Information &info)
 	}
 	else if (parameterID == 1313)
 	{
-		int doit = info.theDouble;
+		int doit = int(info.theDouble);
 		if (doit == 1)
 		{
 			Domain * mydomain = this->getDomain();
@@ -1939,7 +1939,7 @@ TenNodeTetrahedron::updateParameter(int parameterID, Information &info)
 	}
 	else if (parameterID == 1414)
 	{
-		int new_do_update = info.theDouble;
+		int new_do_update = int(info.theDouble);
 		if (do_update == 0 && new_do_update == 1)
 		{
 			do_update = 1;
