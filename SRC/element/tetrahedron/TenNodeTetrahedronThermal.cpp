@@ -542,6 +542,9 @@ const Matrix&  TenNodeTetrahedronThermal::getTangentStiff( )
 	return stiff ;
 }
 
+
+
+
 //return secant matrix
 //const Matrix&  TenNodeTetrahedronThermal::getSecantStiff( )
 
@@ -726,6 +729,18 @@ const Matrix&  TenNodeTetrahedronThermal::getMass( )
 
 
 
+//return mass matrix
+const Matrix&  TenNodeTetrahedronThermal::getDamp( )
+{
+  int tangFlag = 1 ;
+
+  formDampingTerms( tangFlag ) ;
+
+  return damping ;
+}
+
+
+
 void  TenNodeTetrahedronThermal::zeroLoad( )
 {
 	if (load != 0)
@@ -820,7 +835,14 @@ const Vector&  TenNodeTetrahedronThermal::getResistingForceIncInertia( )
 //*********************************************************************
 //form inertia terms
 
+
 void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
+{
+		mass.Zero( ) ;
+}
+
+
+void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
 {
 
 	static const int ndm = 3 ;
@@ -857,7 +879,6 @@ void   TenNodeTetrahedronThermal::formInertiaTerms( int tangFlag )
 
 
 	//zero mass
-	mass.Zero( ) ;
 	damping.Zero( ) ;
 	resid.Zero() ;
 

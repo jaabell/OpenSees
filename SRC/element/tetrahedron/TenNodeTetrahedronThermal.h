@@ -114,6 +114,7 @@ public :
     const Matrix &getTangentStiff();
     const Matrix &getInitialStiff();
     const Matrix &getMass();
+    const Matrix &getDamp(void);
 
     void zeroLoad( ) ;
     int addLoad(ElementalLoad *theLoad, double loadFactor);
@@ -205,6 +206,7 @@ private :
 
     //inertia terms
     void formInertiaTerms( int tangFlag ) ;
+    void formDampingTerms( int tangFlag ) ;
 
     //form residual and tangent
     void formResidAndTangent( int tang_flag ) ;
