@@ -73,8 +73,10 @@ public :
                        int node9,
                        int node10,
                        // NDMater-ial &theMaterial,
-                       double kxx, double kyy, double kzz,
-                       double rho, double cp); // JL: agregar a variables internas ✓
+                       // double kxx, double kyy, double kzz,
+                       double kxx = 0.0, double kyy = 0.0, double kzz = 0.0,
+                       // double rho, double cp); // JL: agregar a variables internas ✓
+                       double rho = 0.0, double cp = 0.0); // JL: agregar a variables internas ✓
                        // double b1 = 0.0, double b2 = 0.0, double b3 = 0.0);
 
     //destructor
@@ -167,15 +169,17 @@ private :
     //material information
     // NDMaterial *materialPointers[NumGaussPoints]; //pointers to eight materials
     // JL: agregar a variables internas ✓
-    double kxx;
-    double kyy;
-    double kzz;
-    double rho;
-    double cp;
+    // double kxx;
+    // double kyy;
+    // double kzz;
+    // double rho;
+    // double cp;
 
     // double b[3];        // Body forces
     // double appliedB[3];     // Body forces applied with load
     // int applyLoad;
+
+    double kcr[5];
 
     Vector *load;
     Matrix *Ki;
@@ -218,7 +222,7 @@ private :
     const Matrix& computeB( int node, const double shp[4][NumNodes] ) ;
 
     //Matrix transpose
-    Matrix transpose( int dim1, int dim2, const Matrix &M ) ;
+    // Matrix transpose( int dim1, int dim2, const Matrix &M ) ;
     // Vector initDisp[NumNodes];
     // int do_update;
 

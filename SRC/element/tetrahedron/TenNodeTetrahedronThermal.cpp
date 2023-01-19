@@ -245,9 +245,16 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
 	: Element( 0, ELE_TAG_TenNodeTetrahedronThermal ),
 	  // connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
 	  connectedExternalNodes(NumNodes), 
-	  kxx(0), kyy(0), kzz(0), rho(0), cp(0), load(0), Ki(0)
+	  // kxx(0), kyy(0), kzz(0), rho(0), cp(0), load(0), Ki(0)
+	  load(0), Ki(0)
 {
 	B.Zero();
+
+	kcr[0] = 0.0;
+	kcr[1] = 0.0;
+	kcr[2] = 0.0;
+	kcr[3] = 0.0;
+	kcr[4] = 0.0;
 
 	for (int i = 0; i < NumNodes; i++ ) {
 		nodePointers[i] = 0;
@@ -290,7 +297,8 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
                                        // double b1, double b2, double b3)
 	: Element(tag, ELE_TAG_TenNodeTetrahedronThermal),
 	  // connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
-	  connectedExternalNodes(NumNodes), kxx(0), kyy(0), kzz(0), rho(0), cp(0), load(0), Ki(0)
+	  // connectedExternalNodes(NumNodes), kxx(0), kyy(0), kzz(0), rho(0), cp(0), load(0), Ki(0)
+	  connectedExternalNodes(NumNodes), load(0), Ki(0)
 {
 	// opserr << "TenNodeTetrahedronThermal::constructor - START\n";
 	B.Zero();
@@ -309,6 +317,12 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
 	for (int i = 0; i < NumNodes; i++ ) {
 		nodePointers[i] = 0;
 	}
+
+	kcr[0] = kxx;
+	kcr[1] = kyy;
+	kcr[2] = kzz;
+	kcr[3] = rho;
+	kcr[4] = cp;
 
 	// opserr << "TenNodeTetrahedronThermal::constructor - material copy\n";
 	// for (int i = 0; i < NumGaussPoints; i++ )
@@ -576,9 +590,12 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 	// static Matrix dd(nstress, nstress) ; //material tangent
 	static Matrix dd(3, 3) ; //material tangent
 
-	dd(0, 0) = kxx ;
-	dd(1, 1) = kyy ;
-	dd(2, 2) = kzz ;
+	// dd(0, 0) = kxx ;
+	// dd(1, 1) = kyy ;
+	// dd(2, 2) = kzz ;
+	dd(0, 0) = kcr[0] ;
+	dd(1, 1) = kcr[1] ;
+	dd(2, 2) = kcr[2] ;
 
 
 	//---------B-matrices------------------------------------
@@ -633,7 +650,7 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 					for ( q = 0; q < numberNodes; q++ )
 					{
 						Shape[p][q][count] = shp[p][q] ;
-						std::cout << shp[p][q] << std::endl;
+						// std::cout << shp[p][q] << std::endl;
 					}
 				} // end for p
 
@@ -699,6 +716,7 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 					for ( q = 0; q < ndf; q++ )
 					{
 						stiff( jj + p, kk + q ) += stiffJK( p, q ) ;
+						// std::cout << "stiff:" << stiff( jj + p, kk + q ) << " ";
 					}
 				} //end for p
 				kk += ndf ;
@@ -729,7 +747,7 @@ const Matrix&  TenNodeTetrahedronThermal::getMass( )
 
 
 
-//return mass matrix
+//return damping matrix
 const Matrix&  TenNodeTetrahedronThermal::getDamp( )
 {
   int tangFlag = 1 ;
@@ -980,7 +998,8 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
 			{
 
 				//multiply by density
-				temp *= cp * rho ;
+				// temp *= cp * rho ;
+				temp *= kcr[4] * kcr[3] ;
 
 				//node-node mass
 				kk = 0 ;
@@ -992,6 +1011,7 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
 					{
 						// mass( jj + p, kk + p ) += massJK ;
 						damping( jj + p, kk + p ) += dampingJK ;
+						// std::cout << damping( jj + p, kk + p ) << std::endl;
 					}
 					kk += ndf ;
 				} // end for k loop
@@ -1330,9 +1350,12 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 		if ( tang_flag == 1 ) {
 			// dd = materialPointers[i]->getTangent( ) ;
 			// dd *= dvol[i] ;
-			dd(0,0) = kxx;
-			dd(1,1) = kyy;
-			dd(2,2) = kzz;
+			// dd(0,0) = kxx;
+			// dd(1,1) = kyy;
+			// dd(2,2) = kzz;
+			dd(0,0) = kcr[0];
+			dd(1,1) = kcr[1];
+			dd(2,2) = kcr[2];
 		} //end if tang_flag
 
 		double stress0 = stress(0);
@@ -1433,6 +1456,8 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 						for ( q = 0; q < ndf; q++ )
 						{
 							stiff( jj + p, kk + q ) += stiffJK( p, q ) ;
+
+							// std::cout << "stiff2:" << stiff( jj + p, kk + q ) << " ";
 						}
 					} //end for p
 					kk += ndf ;
@@ -1502,19 +1527,19 @@ TenNodeTetrahedronThermal::computeB( int node, const double shp[4][NumNodes] )
 
 //***********************************************************************
 
-Matrix  TenNodeTetrahedronThermal::transpose( int dim1, int dim2,  const Matrix &M )
-{
-	int i, j ;
+// Matrix  TenNodeTetrahedronThermal::transpose( int dim1, int dim2,  const Matrix &M )
+// {
+// 	int i, j ;
 
-	Matrix Mtran( dim2, dim1 ) ;
+// 	Matrix Mtran( dim2, dim1 ) ;
 
-	for ( i = 0; i < dim1; i++ ) {
-		for ( j = 0; j < dim2; j++ )
-			Mtran(j, i) = M(i, j) ;
-	} // end for i
+// 	for ( i = 0; i < dim1; i++ ) {
+// 		for ( j = 0; j < dim2; j++ )
+// 			Mtran(j, i) = M(i, j) ;
+// 	} // end for i
 
-	return Mtran ;
-}
+// 	return Mtran ;
+// }
 
 //**********************************************************************
 
