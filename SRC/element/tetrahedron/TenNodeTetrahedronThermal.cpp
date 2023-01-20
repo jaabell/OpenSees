@@ -478,7 +478,7 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
 			  << " " << nodeDisp(0) << " " << nodeDisp(1) << " " << nodeDisp(2) << endln;
 		}
 
-		// // spit out the section location & invoke print on the scetion
+		// // spit out the section location & invoke print on the section
 		// const int numMaterials = 1;
 
 		// static Vector avgStress(nstress);
@@ -613,6 +613,7 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
 
 	//zero stiffness and residual
 	stiff.Zero( ) ;
+	resid.Zero( ) ;
 
 	//compute basis vectors and local nodal coordinates
 	computeBasis( ) ;
@@ -814,7 +815,8 @@ TenNodeTetrahedronThermal::addInertiaLoadToUnbalance(const Vector &accel)
 //get residual
 const Vector&  TenNodeTetrahedronThermal::getResistingForce( )
 {
-	int tang_flag = 0 ; //don't get the tangent
+	// int tang_flag = 0 ; //don't get the tangent
+	int tang_flag = 1 ; // get the tangent
 
 	formResidAndTangent( tang_flag ) ;
 
@@ -830,21 +832,24 @@ const Vector&  TenNodeTetrahedronThermal::getResistingForceIncInertia( )
 {
 	static Vector res(12); res.Zero();
 
-	int tang_flag = 0 ; //don't get the tangent
+	// int tang_flag = 0 ; //don't get the tangent
+	int tang_flag = 1 ; // get the tangent
 
 	//do tangent and residual here
 	formResidAndTangent( tang_flag ) ;
 
 	formInertiaTerms( tang_flag ) ;
 
+	formDampingTerms( tang_flag ) ;
+
 	res = resid;
 
 	// add the damping forces if rayleigh damping
-	if (alphaM != 0.0 || betaK != 0.0 || betaK0 != 0.0 || betaKc != 0.0)
-		res += this->getRayleighDampingForces();
+	// if (alphaM != 0.0 || betaK != 0.0 || betaK0 != 0.0 || betaKc != 0.0)
+		// res += this->getRayleighDampingForces();
 
-	if (load != 0)
-		res -= *load;
+	// if (load != 0)
+	// 	res -= *load;
 
 	return res;
 }
@@ -1020,6 +1025,20 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
 			jj += ndf ;
 		} // end for j loop
 	} //end for i gauss loop
+
+
+	// Vector nodeTemp(NumNodes);
+
+	// for (int i = 0; i < NumNodes; ++i)
+	// {
+	// 	const Vector &temperature_node_i = nodePointers[i]->getTrialVel( ) ;
+	// 	nodeTemp(i) = temperature_node_i(0);
+	// }
+
+	// resid.addMatrixVector(0., damping, nodeTemp, -1.0);
+
+
+
 }
 
 //*********************************************************************
@@ -1479,8 +1498,22 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 		nodeTemp(i) = temperature_node_i(0);
 	}
 
-	resid.addMatrixVector(0., stiff, nodeTemp, -1.0);
+	resid.addMatrixVector(0., stiff, nodeTemp, +1.0);
 
+	// Vector nodeTemp_(NumNodes);
+
+	// for (int i = 0; i < NumNodes; ++i)
+	// {
+	// 	const Vector &temperature_node_i = nodePointers[i]->getTrialVel( ) ;
+	// 	nodeTemp_(i) = temperature_node_i(0);
+	// }
+
+	// resid.addMatrixVector(0., damping, nodeTemp_, -1.0);
+
+	// for (int i = 0; i < NumDOFsTotal; ++i)
+	// {
+	// 	std::cout << resid(i) << "  ";
+	// }
 
 	return ;
 }
