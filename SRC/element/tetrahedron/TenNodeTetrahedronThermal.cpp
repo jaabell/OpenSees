@@ -1358,12 +1358,12 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 			dd(2,2) = kcr[2];
 		} //end if tang_flag
 
-		double stress0 = stress(0);
-		double stress1 = stress(1);
-		double stress2 = stress(2);
-		double stress3 = stress(3);
-		double stress4 = stress(4);
-		double stress5 = stress(5);
+		// double stress0 = stress(0);
+		// double stress1 = stress(1);
+		// double stress2 = stress(2);
+		// double stress3 = stress(3);
+		// double stress4 = stress(4);
+		// double stress5 = stress(5);
 
 		//residual and tangent calculations node loops
 
@@ -1401,9 +1401,9 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 			double b50 = shp[2][j];
 			double b52 = shp[0][j];
 
-			residJ(0) = b00 * stress0 + b30 * stress3 + b50 * stress5;
-			residJ(1) = b11 * stress1 + b31 * stress3 + b41 * stress4;
-			residJ(2) = b22 * stress2 + b42 * stress4 + b52 * stress5;
+			// residJ(0) = b00 * stress0 + b30 * stress3 + b50 * stress5;
+			// residJ(1) = b11 * stress1 + b31 * stress3 + b41 * stress4;
+			// residJ(2) = b22 * stress2 + b42 * stress4 + b52 * stress5;
 
 			BJ = computeB( j, shp ) ;
 
@@ -1467,6 +1467,20 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 			jj += ndf ;
 		} // end for j loop
 	} //end for i gauss loop
+
+	// resid.Zero();
+
+
+	Vector nodeTemp(NumNodes);
+
+	for (int i = 0; i < NumNodes; ++i)
+	{
+		const Vector &temperature_node_i = nodePointers[i]->getTrialDisp( ) ;
+		nodeTemp(i) = temperature_node_i(0);
+	}
+
+	resid.addMatrixVector(0., stiff, nodeTemp, -1.0);
+
 
 	return ;
 }
