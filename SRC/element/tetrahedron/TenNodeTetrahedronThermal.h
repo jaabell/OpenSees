@@ -50,7 +50,7 @@
 #define NumGaussPoints 4
 #define NumNodes 10
 #define NumDOFsPerNode 1
-#define NumStressComponents 6
+#define NumStressComponents 3
 #define NumDOFsTotal NumNodes*NumDOFsPerNode
 
 class TenNodeTetrahedronThermal : public Element {
