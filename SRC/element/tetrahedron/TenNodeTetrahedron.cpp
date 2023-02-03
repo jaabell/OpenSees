@@ -95,96 +95,6 @@ void* OPS_TenNodeTetrahedron()
 	return new TenNodeTetrahedron(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
 }
 
-void* OPS_TenNodeTetrahedron(const ID& info)
-{
-	if (info.Size() == 0) {
-		opserr << "WARNING: info is empty -- TenNodeTetrahedron\n";
-		return 0;
-	}
-
-	// save data
-	static std::map<int, Vector> meshdata;
-	int idata[6];
-	double data[3] = {0, 0, 0};
-	if (info(0) == 1) {
-
-		// check input
-		if (info.Size() < 2) {
-			opserr << "WARNING: need info -- inmesh, meshtag\n";
-			return 0;
-		}
-		if (OPS_GetNumRemainingInputArgs() < 1) {
-			opserr << "WARNING insufficient arguments:\n";
-			opserr << "matTag <b1, b2, b3>\n";
-			return 0;
-		}
-
-		// get tag
-		int numdata = 1;
-		if (OPS_GetIntInput(&numdata, &idata[5]) < 0) {
-			opserr << "WARNING: failed to get material tag -- TenNodeTetrahedron\n";
-			return 0;
-		}
-
-		// get body forces
-		numdata = OPS_GetNumRemainingInputArgs();
-		if (numdata > 3) {
-			numdata = 3;
-		}
-		if (numdata > 0) {
-			if (OPS_GetDoubleInput(&numdata, data) < 0) {
-				opserr << "WARNING: failed to get body force -- TenNodeTetrahedron\n";
-				return 0;
-			}
-		}
-
-		// save data for a mesh
-		Vector& mdata = meshdata[info(1)];
-		mdata.resize(4);
-		mdata(0) = (double)idata[5];
-		for (int i = 0; i < 3; ++i) {
-			mdata(i + 1) = data[i];
-		}
-		return &meshdata;
-	}
-
-	// load data
-	if (info(0) == 2) {
-		if (info.Size() < 7) {
-			opserr << "WARNING: need info -- inmesh, meshtag, eleTag, nd1, nd2, nd3, nd4\n";
-			return 0;
-		}
-
-		// get data for a mesh
-		Vector& mdata = meshdata[info(1)];
-		if (mdata.Size() < 4) {
-			return 0;
-		}
-
-		idata[5] = (int)mdata(0);
-		for (int i = 0; i < 3; ++i) {
-			data[i] = mdata(i + 1);
-		}
-
-		for (int i = 2; i < 7; ++i) {
-			idata[i - 2] = info(i);
-		}
-
-		// check material
-		NDMaterial* mat = OPS_getNDMaterial(idata[5]);
-		if (mat == 0) {
-			opserr << "WARNING material not found\n";
-			opserr << "material tag: " << idata[5];
-			opserr << "\nTenNodeTetrahedron element: " << idata[0] << endln;
-		}
-
-		return new TenNodeTetrahedron(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], *mat, data[0], data[1], data[2]);
-	}
-
-	return 0;
-
-}
-
 //static data
 double  TenNodeTetrahedron::xl[3][NumNodes] ;
 Matrix  TenNodeTetrahedron::stiff(NumDOFsTotal, NumDOFsTotal) ;
@@ -202,7 +112,7 @@ const double  TenNodeTetrahedron::beta = (5.0 - sqrt(5.0))/20. ;
 
 const double  TenNodeTetrahedron::sg[] = { alpha, beta, beta, beta} ;
 
-const double  TenNodeTetrahedron::wg[] = { 1.0 / 24.0 } ;
+const double  TenNodeTetrahedron::wg[] = { 1.0 / 4.0 } ;
 
 
 static Matrix B(NumStressComponents, NumDOFsPerNode) ;
@@ -282,6 +192,8 @@ TenNodeTetrahedron::TenNodeTetrahedron(int tag,
 	b[0] = b1;
 	b[1] = b2;
 	b[2] = b3;
+
+	// opserr << b[0] << " " << b[1] << " " << b[2] << endln ; 
 
 	// opserr << "TenNodeTetrahedron::constructor - init disp\n";
 
@@ -495,6 +407,8 @@ const Matrix&  TenNodeTetrahedron::getTangentStiff( )
 	//do tangent and residual here
 	formResidAndTangent( tang_flag ) ;
 
+	// opserr << "STIFF = " << stiff << endln ;
+
 	return stiff ;
 }
 
@@ -554,47 +468,37 @@ const Matrix&  TenNodeTetrahedron::getInitialStiff( )
 	int count = 0 ;
 	volume = 0.0 ;
 
-	// for ( i = 0; i < NumGaussPointsm; i++ )
+	for ( k = 0; k < numberGauss; k++ )
 	{
-		// for ( j = 0; j < NumGaussPointsm; j++ )
+		gaussPoint[0] = sg[k] ;
+		gaussPoint[1] = sg[abs(1-k)] ;
+		gaussPoint[2] = sg[abs(2-k)] ;
+
+		// sg = [alpha, beta, beta, beta]
+		// k = 0: alpha beta beta
+		// k = 1: beta alpha beta
+		// k = 2: beta beta alpha
+		// k = 3: beta beta beta
+
+		//get shape functions
+		shp3d( gaussPoint, xsj, shp, xl ) ;
+
+		//save shape functions
+		for ( p = 0; p < nShape; p++ )
 		{
-			for ( k = 0; k < numberGauss; k++ )
+			for ( q = 0; q < numberNodes; q++ )
 			{
+				Shape[p][q][count] = shp[p][q] ;
+			}
+		} // end for p
 
-				// i = j = k = 0; // Just one Gauss point in a tet
+		//volume element to also be saved
+		dvol[count] = wg[0] * xsj ;
 
-				gaussPoint[0] = sg[k] ;
-				gaussPoint[1] = sg[abs(1-k)] ;
-				gaussPoint[2] = sg[abs(2-k)] ;
+		volume += dvol[count] ;
 
-				// sg = [alpha, beta, beta, beta]
-				// k = 0: alpha beta beta
-				// k = 1: beta alpha beta
-				// k = 2: beta beta alpha
-				// k = 3: beta beta beta
-
-				//get shape functions
-				shp3d( gaussPoint, xsj, shp, xl ) ;
-
-				//save shape functions
-				for ( p = 0; p < nShape; p++ )
-				{
-					for ( q = 0; q < numberNodes; q++ )
-					{
-						Shape[p][q][count] = shp[p][q] ;
-						std::cout << shp[p][q] << std::endl;
-					}
-				} // end for p
-
-				//volume element to also be saved
-				dvol[count] = wg[0] * xsj ;
-
-				volume += dvol[count] ;
-
-				count++ ;
-			} //end for k
-		} //end for j
-	} // end for i
+		count++ ;
+	} //end for k
 
 
 	//gauss loop
@@ -672,6 +576,7 @@ const Matrix&  TenNodeTetrahedron::getMass( )
 	int tangFlag = 1 ;
 
 	formInertiaTerms( tangFlag ) ;
+	// opserr << "MASS = " << mass << endln ;
 
 	return mass ;
 }
@@ -732,7 +637,7 @@ int
 TenNodeTetrahedron::addInertiaLoadToUnbalance(const Vector &accel)
 {
 	static const int numberNodes = 4 ;
-	static const int numberGauss = 1 ;
+	static const int numberGauss = 4 ;
 	static const int ndf = 3 ;
 
 	int i;
@@ -788,7 +693,7 @@ const Vector&  TenNodeTetrahedron::getResistingForce( )
 //get residual with inertia terms
 const Vector&  TenNodeTetrahedron::getResistingForceIncInertia( )
 {
-	static Vector res(12); res.Zero();
+	static Vector res(NumDOFsTotal); res.Zero();
 
 	int tang_flag = 0 ; //don't get the tangent
 
@@ -815,7 +720,6 @@ const Vector&  TenNodeTetrahedron::getResistingForceIncInertia( )
 
 void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 {
-
 	static const int ndm = 3 ;
 
 	static const int ndf = NumDOFsPerNode ;
@@ -844,8 +748,7 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 	int jj, kk ;
 
 	double temp, rho, massJK ;
-
-
+	
 	//zero mass
 	mass.Zero( ) ;
 
@@ -854,7 +757,6 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 		return ;
 	}
 
-
 	//compute basis vectors and local nodal coordinates
 	computeBasis( ) ;
 
@@ -862,39 +764,30 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 
 	int count = 0 ;
 
-	// for ( i = 0; i < 2; i++ )
+	for ( k = 0; k < numberGauss; k++ )
 	{
-		// for ( j = 0; j < 2; j++ )
+		gaussPoint[0] = sg[k] ;
+		gaussPoint[1] = sg[abs(1-k)] ;
+		gaussPoint[2] = sg[abs(2-k)] ;
+
+		//get shape functions
+		shp3d( gaussPoint, xsj, shp, xl ) ;
+
+		//save shape functions
+		for ( p = 0; p < nShape; p++ )
 		{
-			for ( k = 0; k < numberGauss; k++ )
+			for ( q = 0; q < numberNodes; q++ )
 			{
-				
-				gaussPoint[0] = sg[k] ;
-				gaussPoint[1] = sg[abs(1-k)] ;
-				gaussPoint[2] = sg[abs(2-k)] ;
+				Shape[p][q][count] = shp[p][q] ;
+			}
+		} // end for p
 
-				//get shape functions
-				shp3d( gaussPoint, xsj, shp, xl ) ;
+		//volume element to also be saved
+		dvol[count] = wg[0] * xsj ;
 
-				//save shape functions
-				for ( p = 0; p < nShape; p++ )
-				{
-					for ( q = 0; q < numberNodes; q++ )
-					{
-						Shape[p][q][count] = shp[p][q] ;
-					}
-				} // end for p
+		count++ ;
 
-				//volume element to also be saved
-				dvol[count] = wg[0] * xsj ;
-
-				count++ ;
-
-			} //end for k
-		} //end for j
-	} // end for i
-
-
+	} //end for k
 
 	//gauss loop
 	for ( i = 0; i < numberGauss; i++ )
@@ -920,7 +813,6 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 
 		//density
 		rho = materialPointers[i]->getRho() ;
-
 
 		//multiply acceleration by density to form momentum
 		momentum *= rho ;
@@ -952,7 +844,9 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 					for ( p = 0; p < ndf; p++ )
 					{
 						mass( jj + p, kk + p ) += massJK ;
+						// opserr << massJK << " "; 
 					}
+					// opserr << endln ;
 					kk += ndf ;
 				} // end for k loop
 			} // end if tang_flag
@@ -960,6 +854,7 @@ void   TenNodeTetrahedron::formInertiaTerms( int tangFlag )
 			jj += ndf ;
 		} // end for j loop
 	} //end for i gauss loop
+	// opserr << "MASS = " << mass << endln ;
 }
 
 //*********************************************************************
@@ -1034,35 +929,28 @@ TenNodeTetrahedron::update(void)
 	int count = 0 ;
 	volume = 0.0 ;
 
-	// for ( i = 0; i < 2; i++ )
+	for ( k = 0; k < numberGauss; k++ )
 	{
-		// for ( j = 0; j < 2; j++ )
+		gaussPoint[0] = sg[k] ;
+		gaussPoint[1] = sg[abs(1-k)] ;
+		gaussPoint[2] = sg[abs(2-k)] ;
+
+		//get shape functions
+		shp3d( gaussPoint, xsj, shp, xl ) ;
+
+		//save shape functions
+		for ( p = 0; p < nShape; p++ )
 		{
-			for ( k = 0; k < numberGauss; k++ )
+			for ( q = 0; q < numberNodes; q++ )
 			{
-				
-				gaussPoint[0] = sg[k] ;
-				gaussPoint[1] = sg[abs(1-k)] ;
-				gaussPoint[2] = sg[abs(2-k)] ;
+				Shape[p][q][count] = shp[p][q] ;
+			}
+		} // end for p
 
-				//get shape functions
-				shp3d( gaussPoint, xsj, shp, xl ) ;
-
-				//save shape functions
-				for ( p = 0; p < nShape; p++ )
-				{
-					for ( q = 0; q < numberNodes; q++ )
-					{
-						Shape[p][q][count] = shp[p][q] ;
-					}
-				} // end for p
-
-				//volume element to also be saved
-				dvol[count] = wg[0] * xsj ;
-				count++ ;
-			} //end for k
-		} //end for j
-	} // end for i
+		//volume element to also be saved
+		dvol[count] = wg[0] * xsj ;
+		count++ ;
+	} //end for k
 
 	// opserr << "TenNodeTetrahedron::update -- 4" << endln;
 
@@ -1231,38 +1119,31 @@ void  TenNodeTetrahedron::formResidAndTangent( int tang_flag )
 
 	volume = 0.0 ;
 
-	// for ( i = 0; i < 2; i++ )
+	for ( k = 0; k < numberGauss; k++ )
 	{
-		// for ( j = 0; j < 2; j++ )
-		{
-			for ( k = 0; k < numberGauss; k++ )
-			{
-				
-				gaussPoint[0] = sg[k] ;
-				gaussPoint[1] = sg[abs(1-k)] ;
-				gaussPoint[2] = sg[abs(2-k)] ;
+		gaussPoint[0] = sg[k] ;
+		gaussPoint[1] = sg[abs(1-k)] ;
+		gaussPoint[2] = sg[abs(2-k)] ;
 
-				//get shape functions
-				shp3d( gaussPoint, xsj, shp, xl ) ;
+		//get shape functions
+		shp3d( gaussPoint, xsj, shp, xl ) ;
 
-				//save shape functions
-				for ( p = 0; p < nShape; p++ ) {
-					for ( q = 0; q < numberNodes; q++ ){
-						Shape[p][q][k] = shp[p][q] ;
-						// std::cout << shp[p][q] << " ";
-					}
-					// std::cout << std::endl;
-				} // end for p
+		//save shape functions
+		for ( p = 0; p < nShape; p++ ) {
+			for ( q = 0; q < numberNodes; q++ ){
+				Shape[p][q][k] = shp[p][q] ;
+				// std::cout << shp[p][q] << " ";
+			}
+			// std::cout << std::endl;
+		} // end for p
 
-				//volume element to also be saved
-				dvol[k] = wg[0] * xsj ;
-				// opserr << "k = " << k << " gp = (" 
-				// << gaussPoint[0] << " " 
-				// << gaussPoint[1] << " " 
-				// << gaussPoint[2] << ") dvol = " << dvol[k] << endln;
-			} //end for k
-		} //end for j
-	} // end for i
+		//volume element to also be saved
+		dvol[k] = wg[0] * xsj ;
+		// opserr << "k = " << k << " gp = (" 
+		// << gaussPoint[0] << " " 
+		// << gaussPoint[1] << " " 
+		// << gaussPoint[2] << ") dvol = " << dvol[k] << endln;
+	} //end for k
 
 
 	//gauss loop
@@ -1389,15 +1270,17 @@ void  TenNodeTetrahedron::formResidAndTangent( int tang_flag )
 						for ( q = 0; q < ndf; q++ )
 						{
 							stiff( jj + p, kk + q ) += stiffJK( p, q ) ;
+							// opserr << stiffJK( p, q ) << " " ;
 						}
+						// opserr << endln ;
 					} //end for p
 					kk += ndf ;
 				} // end for k loop
-				// opserr << "STIFF = " << stiff << endln;
 			} // end if tang_flag
 			jj += ndf ;
 		} // end for j loop
 	} //end for i gauss loop
+	// opserr << "STIFF = " << stiff << endln;
 
 	return ;
 }
@@ -1489,13 +1372,13 @@ int  TenNodeTetrahedron::sendSelf (int commitTag, Channel &theChannel)
 	// Now quad sends the ids of its materials
 	int matDbTag;
 
-	static ID idData(27);
+	static ID idData(29);
 
-	idData(24) = this->getTag();
+	idData(27) = this->getTag();
 	if (alphaM != 0 || betaK != 0 || betaK0 != 0 || betaKc != 0)
-		idData(25) = 1;
+		idData(28) = 1;
 	else
-		idData(25) = 0;
+		idData(28) = 0;
 
 	int i;
 	for (i = 0; i < NumGaussPoints; i++)
@@ -1519,11 +1402,13 @@ int  TenNodeTetrahedron::sendSelf (int commitTag, Channel &theChannel)
 	idData(17) = connectedExternalNodes(1);
 	idData(18) = connectedExternalNodes(2);
 	idData(19) = connectedExternalNodes(3);
+	idData(20) = connectedExternalNodes(4);
+	idData(21) = connectedExternalNodes(5);
+	idData(22) = connectedExternalNodes(6);
+	idData(23) = connectedExternalNodes(7);
+	idData(24) = connectedExternalNodes(8);
+	idData(25) = connectedExternalNodes(9);
 	idData(26) = do_update;
-	// idData(20) = connectedExternalNodes(4);
-	// idData(21) = connectedExternalNodes(5);
-	// idData(22) = connectedExternalNodes(6);
-	// idData(23) = connectedExternalNodes(7);
 
 	res += theChannel.sendID(dataTag, commitTag, idData);
 	if (res < 0) {
@@ -1567,14 +1452,14 @@ int  TenNodeTetrahedron::recvSelf (int commitTag,
 
 	int dataTag = this->getDbTag();
 
-	static ID idData(27);
+	static ID idData(29);
 	res += theChannel.recvID(dataTag, commitTag, idData);
 	if (res < 0) {
 		opserr << "WARNING TenNodeTetrahedron::recvSelf() - " << this->getTag() << " failed to receive ID\n";
 		return res;
 	}
 
-	this->setTag(idData(24));
+	this->setTag(idData(27));
 
 	static Vector dData(7);
 	if (theChannel.recvVector(dataTag, commitTag, dData) < 0) {
@@ -1594,11 +1479,13 @@ int  TenNodeTetrahedron::recvSelf (int commitTag,
 	connectedExternalNodes(1) = idData(17);
 	connectedExternalNodes(2) = idData(18);
 	connectedExternalNodes(3) = idData(19);
+	connectedExternalNodes(4) = idData(20);
+	connectedExternalNodes(5) = idData(21);
+	connectedExternalNodes(6) = idData(22);
+	connectedExternalNodes(7) = idData(23);
+	connectedExternalNodes(8) = idData(24);
+	connectedExternalNodes(9) = idData(25);
 	do_update = idData(26);
-	// connectedExternalNodes(4) = idData(20);
-	// connectedExternalNodes(5) = idData(21);
-	// connectedExternalNodes(6) = idData(22);
-	// connectedExternalNodes(7) = idData(23);
 
 
 	if (materialPointers[0] == 0)
@@ -1666,55 +1553,86 @@ TenNodeTetrahedron::displaySelf(Renderer &theViewer, int displayMode, float fact
 {
 	// get the end point display coords
 	static Vector v1(3);
-	static Vector v2(3);
-	static Vector v3(3);
-	static Vector v4(3);
+    static Vector v2(3);
+    static Vector v3(3);
+    static Vector v4(3);
+    static Vector v5(3);
+    static Vector v6(3);
+    static Vector v7(3);
+    static Vector v8(3);
+    static Vector v9(3);
+    static Vector v10(3);
 	nodePointers[0]->getDisplayCrds(v1, fact, displayMode);
-	nodePointers[1]->getDisplayCrds(v2, fact, displayMode);
-	nodePointers[2]->getDisplayCrds(v3, fact, displayMode);
-	nodePointers[3]->getDisplayCrds(v4, fact, displayMode);
+    nodePointers[1]->getDisplayCrds(v2, fact, displayMode);
+    nodePointers[2]->getDisplayCrds(v3, fact, displayMode);
+    nodePointers[3]->getDisplayCrds(v4, fact, displayMode);
+    nodePointers[4]->getDisplayCrds(v5, fact, displayMode);
+    nodePointers[5]->getDisplayCrds(v6, fact, displayMode);
+    nodePointers[6]->getDisplayCrds(v7, fact, displayMode);
+    nodePointers[7]->getDisplayCrds(v8, fact, displayMode);
+    nodePointers[8]->getDisplayCrds(v9, fact, displayMode);
+    nodePointers[9]->getDisplayCrds(v10, fact, displayMode);
 
 	// color vector
-	static Vector values(3);
-	values(0) = 0;
-	values(1) = 0;
-	values(2) = 0;
+	static Vector values(10);
+    values(0) = 0;
+    values(1) = 0;
+    values(2) = 0;
+    values(3) = 0;
+    values(4) = 0;
+    values(5) = 0;
+    values(6) = 0;
+    values(7) = 0;
+    values(8) = 0;
+    values(9) = 0;
 
 	// draw polygons for each tetrahedron face -ambaker1
 	int res = 0;
-	static Matrix coords(3, 3); // rows are face nodes
+	static Matrix coords(10, 3); // rows are face nodes
 
-	// face 1 (1 3 2)
-	for (int i = 0; i < 3; i++) {
-		coords(0, i) = v1(i);
-		coords(1, i) = v3(i);
-		coords(2, i) = v2(i);
-	}
-	res += theViewer.drawPolygon(coords, values, this->getTag());
+    // face 1 (1 3 2)
+    for (int i = 0; i < 3; i++) {
+        coords(0, i) = v1(i);
+        coords(1, i) = v5(i);
+        coords(2, i) = v2(i);
+        coords(3, i) = v6(i);
+        coords(4, i) = v3(i);
+        coords(5, i) = v7(i);
+    }
+    res += theViewer.drawPolygon(coords, values, this->getTag());
 
-	// face 2 (1 2 4)
-	for (int i = 0; i < 3; i++) {
-		coords(0, i) = v1(i);
-		coords(1, i) = v2(i);
-		coords(2, i) = v4(i);
-	}
-	res += theViewer.drawPolygon(coords, values, this->getTag());
+    // face 2 (1 2 4)
+    for (int i = 0; i < 3; i++) {
+        coords(0, i) = v1(i);
+        coords(1, i) = v5(i);
+        coords(2, i) = v2(i);
+        coords(3, i) = v10(i);
+        coords(4, i) = v4(i);
+        coords(5, i) = v8(i);
+    }
+    res += theViewer.drawPolygon(coords, values, this->getTag());
 
-	// face 3 (1 4 3)
-	for (int i = 0; i < 3; i++) {
-		coords(0, i) = v1(i);
-		coords(1, i) = v4(i);
-		coords(2, i) = v3(i);
-	}
-	res += theViewer.drawPolygon(coords, values, this->getTag());
+    // face 3 (1 4 3)
+    for (int i = 0; i < 3; i++) {
+        coords(0, i) = v1(i);
+        coords(1, i) = v7(i);
+        coords(2, i) = v3(i);
+        coords(3, i) = v9(i);
+        coords(4, i) = v4(i);
+        coords(5, i) = v8(i);
+    }
+    res += theViewer.drawPolygon(coords, values, this->getTag());
 
-	// face 4 (2 3 4)
-	for (int i = 0; i < 3; i++) {
-		coords(0, i) = v2(i);
-		coords(1, i) = v3(i);
-		coords(2, i) = v4(i);
-	}
-	res += theViewer.drawPolygon(coords, values, this->getTag());
+    // face 4 (2 3 4)
+    for (int i = 0; i < 3; i++) {
+        coords(0, i) = v2(i);
+        coords(1, i) = v6(i);
+        coords(2, i) = v3(i);
+        coords(3, i) = v9(i);
+        coords(4, i) = v4(i);
+        coords(5, i) = v10(i);
+    }
+    res += theViewer.drawPolygon(coords, values, this->getTag());
 
 	return res;
 }
@@ -1979,197 +1897,132 @@ TenNodeTetrahedron::shp3d( const double zeta[4], double &xsj, double shp[4][NumN
 {
 	// Mathematica formulation by Carlos Felippa.
 	// Modified by José Larenas so that it works when
-	// switching N9 with N10 (all modifications can be
-	// seen with a "*").
+	// switching N9 with N10
 
-	double zeta4 = 1 - zeta[0] - zeta[1] - zeta[2];
+	double zeta1 = zeta[0] ;
+	double zeta2 = zeta[1] ;
+	double zeta3 = zeta[2] ;
+	double zeta4 = 1 - zeta1 - zeta2 - zeta3;
 
-	// double x12 = xl[0][0] - xl[0][1];
-	// double x13 = xl[0][0] - xl[0][2];
-	// double x14 = xl[0][0] - xl[0][3];
-	// double x23 = xl[0][1] - xl[0][2];
-	// double x24 = xl[0][1] - xl[0][3];
-	// double x34 = xl[0][2] - xl[0][3];
+	double x1  = xl[0][0] ; double y1  = xl[1][0] ; double z1  = xl[2][0] ;
+	double x2  = xl[0][1] ; double y2  = xl[1][1] ; double z2  = xl[2][1] ;
+	double x3  = xl[0][2] ; double y3  = xl[1][2] ; double z3  = xl[2][2] ;
+	double x4  = xl[0][3] ; double y4  = xl[1][3] ; double z4  = xl[2][3] ;
+	double x5  = xl[0][4] ; double y5  = xl[1][4] ; double z5  = xl[2][4] ;
+	double x6  = xl[0][5] ; double y6  = xl[1][5] ; double z6  = xl[2][5] ;
+	double x7  = xl[0][6] ; double y7  = xl[1][6] ; double z7  = xl[2][6] ;
+	double x8  = xl[0][7] ; double y8  = xl[1][7] ; double z8  = xl[2][7] ;
+	double x9  = xl[0][8] ; double y9  = xl[1][8] ; double z9  = xl[2][8] ;
+	double x10 = xl[0][9] ; double y10 = xl[1][9] ; double z10 = xl[2][9] ;
 
-	// double x21 = -x12;
-	// double x31 = -x13;
-	// double x41 = -x14;
-	// double x32 = -x23;
-	// double x42 = -x24;
-	// double x43 = -x34;
-
-	// double y12 = xl[1][0] - xl[1][1];
-	// double y13 = xl[1][0] - xl[1][2];
-	// double y14 = xl[1][0] - xl[1][3];
-	// double y23 = xl[1][1] - xl[1][2];
-	// double y24 = xl[1][1] - xl[1][3];
-	// double y34 = xl[1][2] - xl[1][3];
-
-	// double y21 = -y12;
-	// double y31 = -y13;
-	// double y41 = -y14;
-	// double y32 = -y23;
-	// double y42 = -y24;
-	// double y43 = -y34;
-
-	// double z12 = xl[2][0] - xl[2][1];
-	// double z13 = xl[2][0] - xl[2][2];
-	// double z14 = xl[2][0] - xl[2][3];
-	// double z23 = xl[2][1] - xl[2][2];
-	// double z24 = xl[2][1] - xl[2][3];
-	// double z34 = xl[2][2] - xl[2][3];
-
-	// double z21 = -z12;
-	// double z31 = -z13;
-	// double z41 = -z14;
-	// double z32 = -z23;
-	// double z42 = -z24;
-	// double z43 = -z34;
-
-	// *
-	double x1  = xl[0][0]; double y1  = xl[1][0] ; double z1  = xl[2][0]; // *
-	double x2  = xl[0][1]; double y2  = xl[1][1] ; double z2  = xl[2][1]; // *
-	double x3  = xl[0][2]; double y3  = xl[1][2] ; double z3  = xl[2][2]; // *
-	double x4  = xl[0][3]; double y4  = xl[1][3] ; double z4  = xl[2][3]; // *
-	double x5  = xl[0][4]; double y5  = xl[1][4] ; double z5  = xl[2][4]; // *
-	double x6  = xl[0][5]; double y6  = xl[1][5] ; double z6  = xl[2][5]; // *
-	double x7  = xl[0][6]; double y7  = xl[1][6] ; double z7  = xl[2][6]; // *
-	double x8  = xl[0][7]; double y8  = xl[1][7] ; double z8  = xl[2][7]; // *
-	double x9  = xl[0][8]; double y9  = xl[1][8] ; double z9  = xl[2][8]; // *
-	double x10 = xl[0][9]; double y10 = xl[1][9] ; double z10 = xl[2][9]; // *
-
-	// * 
-	double a1 = y2*(z4-z3)-y3*(z4-z2)+y4*(z3-z2) ; double b1 = -x2*(z4-z3)+x3*(z4-z2)-x4*(z3-z2); double c1 = x2*(y4-y3)-x3*(y4-y2)+x4*(y3-y2);
-	// double a1 = y42 * z32 - y32 * z42; double b1 = x32 * z42 - x42 * z32; double c1 = x42 * y32 - x32 * y42;
-	double a2 = -y1*(z4-z3)+y3*(z4-z1)-y4*(z3-z1); double b2 = x1*(z4-z3)-x3*(z4-z1)+x4*(z3-z1) ; double c2 = -x1*(y4-y3)+x3*(y4-y1)-x4*(y3-y1);
-	// double a2 = y31 * z43 - y34 * z13; double b2 = x43 * z31 - x13 * z34; double c2 = x31 * y43 - x34 * y13;
-	double a3 = y1*(z4-z2)-y2*(z4-z1)+y4*(z2-z1) ; double b3 = -x1*(z4-z2)+x2*(z4-z1)-x4*(z2-z1); double c3 = x1*(y4-y2)-x2*(y4-y1)+x4*(y2-y1);
-	// double a3 = y24 * z14 - y14 * z24; double b3 = x14 * z24 - x24 * z14; double c3 = x24 * y14 - x14 * y24;
-	double a4 = -y1*(z3-z2)+y2*(z3-z1)-y3*(z2-z1); double b4 = x1*(z3-z2)-x2*(z3-z1)+x3*(z2-z1) ; double c4 = -x1*(y3-y2)+x2*(y3-y1)-x3*(y2-y1);
-	// double a4 = y13 * z21 - y12 * z31; double b4 = x21 * z13 - x31 * z12; double c4 = x13 * y21 - x12 * y31;
+	double a1 = y2*(z4-z3)-y3*(z4-z2)+y4*(z3-z2)  ; double b1 = -x2*(z4-z3)+x3*(z4-z2)-x4*(z3-z2) ; double c1 = x2*(y4-y3)-x3*(y4-y2)+x4*(y3-y2) ;
+	double a2 = -y1*(z4-z3)+y3*(z4-z1)-y4*(z3-z1) ; double b2 = x1*(z4-z3)-x3*(z4-z1)+x4*(z3-z1)  ; double c2 = -x1*(y4-y3)+x3*(y4-y1)-x4*(y3-y1) ;
+	double a3 = y1*(z4-z2)-y2*(z4-z1)+y4*(z2-z1)  ; double b3 = -x1*(z4-z2)+x2*(z4-z1)-x4*(z2-z1) ; double c3 = x1*(y4-y2)-x2*(y4-y1)+x4*(y2-y1) ;
+	double a4 = -y1*(z3-z2)+y2*(z3-z1)-y3*(z2-z1) ; double b4 = x1*(z3-z2)-x2*(z3-z1)+x3*(z2-z1)  ; double c4 = -x1*(y3-y2)+x2*(y3-y1)-x3*(y2-y1) ;
 
 	// dNi/dzeta1
-	double dN1_dzeta1  = 4*zeta[0]-1; double dN2_dzeta1 = 0;
-	double dN3_dzeta1  = 0          ; double dN4_dzeta1 = 0;
-	double dN5_dzeta1  = 4*zeta[1]  ; double dN6_dzeta1 = 0;
-	double dN7_dzeta1  = 4*zeta[2]  ; double dN8_dzeta1 = 4*zeta4;
-	double dN10_dzeta1 = 0          ; double dN9_dzeta1 = 0; // *
-	// double dN9_dzeta1 = 0; double dN10_dzeta1 = 0;
+	double dN1_dzeta1  = 4*zeta1-1 ; double dN2_dzeta1 = 0 ;
+	double dN3_dzeta1  = 0         ; double dN4_dzeta1 = 0 ;
+	double dN5_dzeta1  = 4*zeta2   ; double dN6_dzeta1 = 0 ;
+	double dN7_dzeta1  = 4*zeta3   ; double dN8_dzeta1 = 4*zeta4 ;
+	double dN10_dzeta1 = 0         ; double dN9_dzeta1 = 0 ; 
 
 	// dNi/dzeta2
-	double dN1_dzeta2  = 0        ; double dN2_dzeta2 = 4*zeta[1]-1;
-	double dN3_dzeta2  = 0        ; double dN4_dzeta2 = 0;
-	double dN5_dzeta2  = 4*zeta[0]; double dN6_dzeta2 = 4*zeta[2];
-	double dN7_dzeta2  = 0        ; double dN8_dzeta2 = 0;
-	double dN10_dzeta2 = 4*zeta4  ; double dN9_dzeta2 = 0; // *
-	// double dN9_dzeta2 = 4*zeta4; double dN10_dzeta2 = 0;
+	double dN1_dzeta2  = 0       ; double dN2_dzeta2 = 4*zeta2-1 ;
+	double dN3_dzeta2  = 0       ; double dN4_dzeta2 = 0 ;
+	double dN5_dzeta2  = 4*zeta1 ; double dN6_dzeta2 = 4*zeta3 ;
+	double dN7_dzeta2  = 0       ; double dN8_dzeta2 = 0 ;
+	double dN10_dzeta2 = 4*zeta4 ; double dN9_dzeta2 = 0 ; 
 
 	// dNi/dzeta3
-	double dN1_dzeta3  = 0          ; double dN2_dzeta3 = 0;
-	double dN3_dzeta3  = 4*zeta[2]-1; double dN4_dzeta3 = 0;
-	double dN5_dzeta3  = 0          ; double dN6_dzeta3 = 4*zeta[1];
-	double dN7_dzeta3  = 4*zeta[0]  ; double dN8_dzeta3 = 0;
-	double dN10_dzeta3 = 0          ; double dN9_dzeta3 = 4*zeta4; // *
-	// double dN9_dzeta3 = 0; double dN10_dzeta3 = 4*zeta4;
+	double dN1_dzeta3  = 0         ; double dN2_dzeta3 = 0 ;
+	double dN3_dzeta3  = 4*zeta3-1 ; double dN4_dzeta3 = 0 ;
+	double dN5_dzeta3  = 0         ; double dN6_dzeta3 = 4*zeta2 ;
+	double dN7_dzeta3  = 4*zeta1   ; double dN8_dzeta3 = 0 ;
+	double dN10_dzeta3 = 0         ; double dN9_dzeta3 = 4*zeta4 ;
 
-	// dNi/dzeta3
-	double dN1_dzeta4  = 0        ; double dN2_dzeta4 = 0;
-	double dN3_dzeta4  = 0        ; double dN4_dzeta4 = 4*zeta4-1;
-	double dN5_dzeta4  = 0        ; double dN6_dzeta4 = 0;
-	double dN7_dzeta4  = 0        ; double dN8_dzeta4 = 4*zeta[0];
-	double dN10_dzeta4 = 4*zeta[1]; double dN9_dzeta4 = 4*zeta[2]; // *
-	// double dN9_dzeta4 = 4*zeta[1]; double dN10_dzeta4 = 4*zeta[2];
+	// dNi/dzeta4
+	double dN1_dzeta4  = 0       ; double dN2_dzeta4 = 0 ;
+	double dN3_dzeta4  = 0       ; double dN4_dzeta4 = 4*zeta4-1 ;
+	double dN5_dzeta4  = 0       ; double dN6_dzeta4 = 0 ;
+	double dN7_dzeta4  = 0       ; double dN8_dzeta4 = 4*zeta1 ;
+	double dN10_dzeta4 = 4*zeta2 ; double dN9_dzeta4 = 4*zeta3 ;
 
-	// *
-	double Jx1 = x1*dN1_dzeta1 + x2*dN2_dzeta1 + x3*dN3_dzeta1 + x4*dN4_dzeta1 + x5*dN5_dzeta1 + x6*dN6_dzeta1 + x7*dN7_dzeta1 + x8*dN8_dzeta1 + x9*dN9_dzeta1 + x10*dN10_dzeta1; // *
-	double Jy1 = y1*dN1_dzeta1 + y2*dN2_dzeta1 + y3*dN3_dzeta1 + y4*dN4_dzeta1 + y5*dN5_dzeta1 + y6*dN6_dzeta1 + y7*dN7_dzeta1 + y8*dN8_dzeta1 + y9*dN9_dzeta1 + y10*dN10_dzeta1; // *
-	double Jz1 = z1*dN1_dzeta1 + z2*dN2_dzeta1 + z3*dN3_dzeta1 + z4*dN4_dzeta1 + z5*dN5_dzeta1 + z6*dN6_dzeta1 + z7*dN7_dzeta1 + z8*dN8_dzeta1 + z9*dN9_dzeta1 + z10*dN10_dzeta1; // *
-	// Terms in Jacobian Matrix (17.12)
-	// double Jx1 = xl[0][0]*(4*zeta[0]-1) + 4*xl[0][4]*zeta[1] + 4*xl[0][6]*zeta[2] + 4*xl[0][7]*zeta4;
-	// double Jy1 = xl[1][0]*(4*zeta[0]-1) + 4*xl[1][4]*zeta[1] + 4*xl[1][6]*zeta[2] + 4*xl[1][7]*zeta4;
-	// double Jz1 = xl[2][0]*(4*zeta[0]-1) + 4*xl[2][4]*zeta[1] + 4*xl[2][6]*zeta[2] + 4*xl[2][7]*zeta4;
+	// 
+	double Jx1 = x1*dN1_dzeta1 + x2*dN2_dzeta1 + x3*dN3_dzeta1 + x4*dN4_dzeta1 + x5*dN5_dzeta1 + x6*dN6_dzeta1 + x7*dN7_dzeta1 + x8*dN8_dzeta1 + x9*dN9_dzeta1 + x10*dN10_dzeta1 ;
+	double Jy1 = y1*dN1_dzeta1 + y2*dN2_dzeta1 + y3*dN3_dzeta1 + y4*dN4_dzeta1 + y5*dN5_dzeta1 + y6*dN6_dzeta1 + y7*dN7_dzeta1 + y8*dN8_dzeta1 + y9*dN9_dzeta1 + y10*dN10_dzeta1 ;
+	double Jz1 = z1*dN1_dzeta1 + z2*dN2_dzeta1 + z3*dN3_dzeta1 + z4*dN4_dzeta1 + z5*dN5_dzeta1 + z6*dN6_dzeta1 + z7*dN7_dzeta1 + z8*dN8_dzeta1 + z9*dN9_dzeta1 + z10*dN10_dzeta1 ;
 
-	double Jx2 = x1*dN1_dzeta2 + x2*dN2_dzeta2 + x3*dN3_dzeta2 + x4*dN4_dzeta2 + x5*dN5_dzeta2 + x6*dN6_dzeta2 + x7*dN7_dzeta2 + x8*dN8_dzeta2 + x9*dN9_dzeta2 + x10*dN10_dzeta2; // *
-	double Jy2 = y1*dN1_dzeta2 + y2*dN2_dzeta2 + y3*dN3_dzeta2 + y4*dN4_dzeta2 + y5*dN5_dzeta2 + y6*dN6_dzeta2 + y7*dN7_dzeta2 + y8*dN8_dzeta2 + y9*dN9_dzeta2 + y10*dN10_dzeta2; // *
-	double Jz2 = z1*dN1_dzeta2 + z2*dN2_dzeta2 + z3*dN3_dzeta2 + z4*dN4_dzeta2 + z5*dN5_dzeta2 + z6*dN6_dzeta2 + z7*dN7_dzeta2 + z8*dN8_dzeta2 + z9*dN9_dzeta2 + z10*dN10_dzeta2; // *
-	// double Jx2 = xl[0][1]*(4*zeta[1]-1) + 4*xl[0][5]*zeta[2] + 4*xl[0][4]*zeta[0] + 4*xl[0][8]*zeta4;
-	// double Jy2 = xl[1][1]*(4*zeta[1]-1) + 4*xl[1][5]*zeta[2] + 4*xl[1][4]*zeta[0] + 4*xl[1][8]*zeta4;
-	// double Jz2 = xl[2][1]*(4*zeta[1]-1) + 4*xl[2][5]*zeta[2] + 4*xl[2][4]*zeta[0] + 4*xl[2][8]*zeta4;
+	double Jx2 = x1*dN1_dzeta2 + x2*dN2_dzeta2 + x3*dN3_dzeta2 + x4*dN4_dzeta2 + x5*dN5_dzeta2 + x6*dN6_dzeta2 + x7*dN7_dzeta2 + x8*dN8_dzeta2 + x9*dN9_dzeta2 + x10*dN10_dzeta2 ;
+	double Jy2 = y1*dN1_dzeta2 + y2*dN2_dzeta2 + y3*dN3_dzeta2 + y4*dN4_dzeta2 + y5*dN5_dzeta2 + y6*dN6_dzeta2 + y7*dN7_dzeta2 + y8*dN8_dzeta2 + y9*dN9_dzeta2 + y10*dN10_dzeta2 ;
+	double Jz2 = z1*dN1_dzeta2 + z2*dN2_dzeta2 + z3*dN3_dzeta2 + z4*dN4_dzeta2 + z5*dN5_dzeta2 + z6*dN6_dzeta2 + z7*dN7_dzeta2 + z8*dN8_dzeta2 + z9*dN9_dzeta2 + z10*dN10_dzeta2 ;
 
-	double Jx3 = x1*dN1_dzeta3 + x2*dN2_dzeta3 + x3*dN3_dzeta3 + x4*dN4_dzeta3 + x5*dN5_dzeta3 + x6*dN6_dzeta3 + x7*dN7_dzeta3 + x8*dN8_dzeta3 + x9*dN9_dzeta3 + x10*dN10_dzeta3; // *
-	double Jy3 = y1*dN1_dzeta3 + y2*dN2_dzeta3 + y3*dN3_dzeta3 + y4*dN4_dzeta3 + y5*dN5_dzeta3 + y6*dN6_dzeta3 + y7*dN7_dzeta3 + y8*dN8_dzeta3 + y9*dN9_dzeta3 + y10*dN10_dzeta3; // *
-	double Jz3 = z1*dN1_dzeta3 + z2*dN2_dzeta3 + z3*dN3_dzeta3 + z4*dN4_dzeta3 + z5*dN5_dzeta3 + z6*dN6_dzeta3 + z7*dN7_dzeta3 + z8*dN8_dzeta3 + z9*dN9_dzeta3 + z10*dN10_dzeta3; // *
-	// double Jx3 = xl[0][2]*(4*zeta[2]-1) + 4*xl[0][6]*zeta[0] + 4*xl[0][5]*zeta[1] + 4*xl[0][9]*zeta4;
-	// double Jy3 = xl[1][2]*(4*zeta[2]-1) + 4*xl[1][6]*zeta[0] + 4*xl[1][5]*zeta[1] + 4*xl[1][9]*zeta4;
-	// double Jz3 = xl[2][2]*(4*zeta[2]-1) + 4*xl[2][6]*zeta[0] + 4*xl[2][5]*zeta[1] + 4*xl[2][9]*zeta4;
+	double Jx3 = x1*dN1_dzeta3 + x2*dN2_dzeta3 + x3*dN3_dzeta3 + x4*dN4_dzeta3 + x5*dN5_dzeta3 + x6*dN6_dzeta3 + x7*dN7_dzeta3 + x8*dN8_dzeta3 + x9*dN9_dzeta3 + x10*dN10_dzeta3 ;
+	double Jy3 = y1*dN1_dzeta3 + y2*dN2_dzeta3 + y3*dN3_dzeta3 + y4*dN4_dzeta3 + y5*dN5_dzeta3 + y6*dN6_dzeta3 + y7*dN7_dzeta3 + y8*dN8_dzeta3 + y9*dN9_dzeta3 + y10*dN10_dzeta3 ;
+	double Jz3 = z1*dN1_dzeta3 + z2*dN2_dzeta3 + z3*dN3_dzeta3 + z4*dN4_dzeta3 + z5*dN5_dzeta3 + z6*dN6_dzeta3 + z7*dN7_dzeta3 + z8*dN8_dzeta3 + z9*dN9_dzeta3 + z10*dN10_dzeta3 ;
 
-	double Jx4 = x1*dN1_dzeta4 + x2*dN2_dzeta4 + x3*dN3_dzeta4 + x4*dN4_dzeta4 + x5*dN5_dzeta4 + x6*dN6_dzeta4 + x7*dN7_dzeta4 + x8*dN8_dzeta4 + x9*dN9_dzeta4 + x10*dN10_dzeta4; // *
-	double Jy4 = y1*dN1_dzeta4 + y2*dN2_dzeta4 + y3*dN3_dzeta4 + y4*dN4_dzeta4 + y5*dN5_dzeta4 + y6*dN6_dzeta4 + y7*dN7_dzeta4 + y8*dN8_dzeta4 + y9*dN9_dzeta4 + y10*dN10_dzeta4; // *
-	double Jz4 = z1*dN1_dzeta4 + z2*dN2_dzeta4 + z3*dN3_dzeta4 + z4*dN4_dzeta4 + z5*dN5_dzeta4 + z6*dN6_dzeta4 + z7*dN7_dzeta4 + z8*dN8_dzeta4 + z9*dN9_dzeta4 + z10*dN10_dzeta4; // *
-	// double Jx4 = xl[0][3]*(4*zeta4-1) + 4*xl[0][7]*zeta[0] + 4*xl[0][8]*zeta[1] + 4*xl[0][9]*zeta[2];
-	// double Jy4 = xl[1][3]*(4*zeta4-1) + 4*xl[1][7]*zeta[0] + 4*xl[1][8]*zeta[1] + 4*xl[1][9]*zeta[2];
-	// double Jz4 = xl[2][3]*(4*zeta4-1) + 4*xl[2][7]*zeta[0] + 4*xl[2][8]*zeta[1] + 4*xl[2][9]*zeta[2];
+	double Jx4 = x1*dN1_dzeta4 + x2*dN2_dzeta4 + x3*dN3_dzeta4 + x4*dN4_dzeta4 + x5*dN5_dzeta4 + x6*dN6_dzeta4 + x7*dN7_dzeta4 + x8*dN8_dzeta4 + x9*dN9_dzeta4 + x10*dN10_dzeta4 ;
+	double Jy4 = y1*dN1_dzeta4 + y2*dN2_dzeta4 + y3*dN3_dzeta4 + y4*dN4_dzeta4 + y5*dN5_dzeta4 + y6*dN6_dzeta4 + y7*dN7_dzeta4 + y8*dN8_dzeta4 + y9*dN9_dzeta4 + y10*dN10_dzeta4 ;
+	double Jz4 = z1*dN1_dzeta4 + z2*dN2_dzeta4 + z3*dN3_dzeta4 + z4*dN4_dzeta4 + z5*dN5_dzeta4 + z6*dN6_dzeta4 + z7*dN7_dzeta4 + z8*dN8_dzeta4 + z9*dN9_dzeta4 + z10*dN10_dzeta4 ;
 
 	// Terms in simplified Jacobian Matrix (3x3)
-	double t1 = Jx2-Jx1; double t2 = Jx3-Jx1; double t3 = Jx4-Jx1;
-	double t4 = Jy2-Jy1; double t5 = Jy3-Jy1; double t6 = Jy4-Jy1;
-	double t7 = Jz2-Jz1; double t8 = Jz3-Jz1; double t9 = Jz4-Jz1;
+	double t1 = Jx2-Jx1 ; double t2 = Jx3-Jx1 ; double t3 = Jx4-Jx1 ;
+	double t4 = Jy2-Jy1 ; double t5 = Jy3-Jy1 ; double t6 = Jy4-Jy1 ;
+	double t7 = Jz2-Jz1 ; double t8 = Jz3-Jz1 ; double t9 = Jz4-Jz1 ;
 
 	// Assembling the Jacobians Determinant
-	double Jdet = (t1*(t5*t9-t6*t8) - t2*(t4*t9-t6*t7) + t3*(t4*t8-t5*t7))/6.0;
+	double Jdet = t1 * (t5 * t9 - t6 * t8) - t2 * (t4 * t9 - t6 * t7) + t3 * (t4 * t8 - t5 * t7) ;
 
 	// Saving the Jacobians Determinant
-	xsj = Jdet;
+	xsj = Jdet ;
 
 	// qx1 - qx10 (17.24)
-	shp[0][0] = 1/(6.0*Jdet)*(dN1_dzeta1*a1  + dN1_dzeta2*a2  + dN1_dzeta3*a3  + dN1_dzeta4*a4);
-	shp[0][1] = 1/(6.0*Jdet)*(dN2_dzeta1*a1  + dN2_dzeta2*a2  + dN2_dzeta3*a3  + dN2_dzeta4*a4);
-	shp[0][2] = 1/(6.0*Jdet)*(dN3_dzeta1*a1  + dN3_dzeta2*a2  + dN3_dzeta3*a3  + dN3_dzeta4*a4);
-	shp[0][3] = 1/(6.0*Jdet)*(dN4_dzeta1*a1  + dN4_dzeta2*a2  + dN4_dzeta3*a3  + dN4_dzeta4*a4);
-	shp[0][4] = 1/(6.0*Jdet)*(dN5_dzeta1*a1  + dN5_dzeta2*a2  + dN5_dzeta3*a3  + dN5_dzeta4*a4);
-	shp[0][5] = 1/(6.0*Jdet)*(dN6_dzeta1*a1  + dN6_dzeta2*a2  + dN6_dzeta3*a3  + dN6_dzeta4*a4);
-	shp[0][6] = 1/(6.0*Jdet)*(dN7_dzeta1*a1  + dN7_dzeta2*a2  + dN7_dzeta3*a3  + dN7_dzeta4*a4);
-	shp[0][7] = 1/(6.0*Jdet)*(dN8_dzeta1*a1  + dN8_dzeta2*a2  + dN8_dzeta3*a3  + dN8_dzeta4*a4);
-	shp[0][8] = 1/(6.0*Jdet)*(dN9_dzeta1*a1  + dN9_dzeta2*a2  + dN9_dzeta3*a3  + dN9_dzeta4*a4);
-	shp[0][9] = 1/(6.0*Jdet)*(dN10_dzeta1*a1 + dN10_dzeta2*a2 + dN10_dzeta3*a3 + dN10_dzeta4*a4);
+	shp[0][0] = ( 1 / Jdet ) * (dN1_dzeta1*a1  + dN1_dzeta2*a2  + dN1_dzeta3*a3  + dN1_dzeta4*a4) ;
+	shp[0][1] = ( 1 / Jdet ) * (dN2_dzeta1*a1  + dN2_dzeta2*a2  + dN2_dzeta3*a3  + dN2_dzeta4*a4) ;
+	shp[0][2] = ( 1 / Jdet ) * (dN3_dzeta1*a1  + dN3_dzeta2*a2  + dN3_dzeta3*a3  + dN3_dzeta4*a4) ;
+	shp[0][3] = ( 1 / Jdet ) * (dN4_dzeta1*a1  + dN4_dzeta2*a2  + dN4_dzeta3*a3  + dN4_dzeta4*a4) ;
+	shp[0][4] = ( 1 / Jdet ) * (dN5_dzeta1*a1  + dN5_dzeta2*a2  + dN5_dzeta3*a3  + dN5_dzeta4*a4) ;
+	shp[0][5] = ( 1 / Jdet ) * (dN6_dzeta1*a1  + dN6_dzeta2*a2  + dN6_dzeta3*a3  + dN6_dzeta4*a4) ;
+	shp[0][6] = ( 1 / Jdet ) * (dN7_dzeta1*a1  + dN7_dzeta2*a2  + dN7_dzeta3*a3  + dN7_dzeta4*a4) ;
+	shp[0][7] = ( 1 / Jdet ) * (dN8_dzeta1*a1  + dN8_dzeta2*a2  + dN8_dzeta3*a3  + dN8_dzeta4*a4) ;
+	shp[0][8] = ( 1 / Jdet ) * (dN9_dzeta1*a1  + dN9_dzeta2*a2  + dN9_dzeta3*a3  + dN9_dzeta4*a4) ;
+	shp[0][9] = ( 1 / Jdet ) * (dN10_dzeta1*a1 + dN10_dzeta2*a2 + dN10_dzeta3*a3 + dN10_dzeta4*a4) ;
 
 	// qy1 - qy10 (17.24)
-	shp[1][0] = 1/(6.0*Jdet)*(dN1_dzeta1*b1  + dN1_dzeta2*b2  + dN1_dzeta3*b3  + dN1_dzeta4*b4);
-	shp[1][1] = 1/(6.0*Jdet)*(dN2_dzeta1*b1  + dN2_dzeta2*b2  + dN2_dzeta3*b3  + dN2_dzeta4*b4);
-	shp[1][2] = 1/(6.0*Jdet)*(dN3_dzeta1*b1  + dN3_dzeta2*b2  + dN3_dzeta3*b3  + dN3_dzeta4*b4);
-	shp[1][3] = 1/(6.0*Jdet)*(dN4_dzeta1*b1  + dN4_dzeta2*b2  + dN4_dzeta3*b3  + dN4_dzeta4*b4);
-	shp[1][4] = 1/(6.0*Jdet)*(dN5_dzeta1*b1  + dN5_dzeta2*b2  + dN5_dzeta3*b3  + dN5_dzeta4*b4);
-	shp[1][5] = 1/(6.0*Jdet)*(dN6_dzeta1*b1  + dN6_dzeta2*b2  + dN6_dzeta3*b3  + dN6_dzeta4*b4);
-	shp[1][6] = 1/(6.0*Jdet)*(dN7_dzeta1*b1  + dN7_dzeta2*b2  + dN7_dzeta3*b3  + dN7_dzeta4*b4);
-	shp[1][7] = 1/(6.0*Jdet)*(dN8_dzeta1*b1  + dN8_dzeta2*b2  + dN8_dzeta3*b3  + dN8_dzeta4*b4);
-	shp[1][8] = 1/(6.0*Jdet)*(dN9_dzeta1*b1  + dN9_dzeta2*b2  + dN9_dzeta3*b3  + dN9_dzeta4*b4);
-	shp[1][9] = 1/(6.0*Jdet)*(dN10_dzeta1*b1 + dN10_dzeta2*b2 + dN10_dzeta3*b3 + dN10_dzeta4*b4);
+	shp[1][0] = ( 1 / Jdet ) * (dN1_dzeta1*b1  + dN1_dzeta2*b2  + dN1_dzeta3*b3  + dN1_dzeta4*b4) ;
+	shp[1][1] = ( 1 / Jdet ) * (dN2_dzeta1*b1  + dN2_dzeta2*b2  + dN2_dzeta3*b3  + dN2_dzeta4*b4) ;
+	shp[1][2] = ( 1 / Jdet ) * (dN3_dzeta1*b1  + dN3_dzeta2*b2  + dN3_dzeta3*b3  + dN3_dzeta4*b4) ;
+	shp[1][3] = ( 1 / Jdet ) * (dN4_dzeta1*b1  + dN4_dzeta2*b2  + dN4_dzeta3*b3  + dN4_dzeta4*b4) ;
+	shp[1][4] = ( 1 / Jdet ) * (dN5_dzeta1*b1  + dN5_dzeta2*b2  + dN5_dzeta3*b3  + dN5_dzeta4*b4) ;
+	shp[1][5] = ( 1 / Jdet ) * (dN6_dzeta1*b1  + dN6_dzeta2*b2  + dN6_dzeta3*b3  + dN6_dzeta4*b4) ;
+	shp[1][6] = ( 1 / Jdet ) * (dN7_dzeta1*b1  + dN7_dzeta2*b2  + dN7_dzeta3*b3  + dN7_dzeta4*b4) ;
+	shp[1][7] = ( 1 / Jdet ) * (dN8_dzeta1*b1  + dN8_dzeta2*b2  + dN8_dzeta3*b3  + dN8_dzeta4*b4) ;
+	shp[1][8] = ( 1 / Jdet ) * (dN9_dzeta1*b1  + dN9_dzeta2*b2  + dN9_dzeta3*b3  + dN9_dzeta4*b4) ;
+	shp[1][9] = ( 1 / Jdet ) * (dN10_dzeta1*b1 + dN10_dzeta2*b2 + dN10_dzeta3*b3 + dN10_dzeta4*b4) ;
 
 	// qz1 - qz10 (17.24)
-	shp[2][0] = 1/(6.0*Jdet)*(dN1_dzeta1*c1  + dN1_dzeta2*c2  + dN1_dzeta3*c3  + dN1_dzeta4*c4);
-	shp[2][1] = 1/(6.0*Jdet)*(dN2_dzeta1*c1  + dN2_dzeta2*c2  + dN2_dzeta3*c3  + dN2_dzeta4*c4);
-	shp[2][2] = 1/(6.0*Jdet)*(dN3_dzeta1*c1  + dN3_dzeta2*c2  + dN3_dzeta3*c3  + dN3_dzeta4*c4);
-	shp[2][3] = 1/(6.0*Jdet)*(dN4_dzeta1*c1  + dN4_dzeta2*c2  + dN4_dzeta3*c3  + dN4_dzeta4*c4);
-	shp[2][4] = 1/(6.0*Jdet)*(dN5_dzeta1*c1  + dN5_dzeta2*c2  + dN5_dzeta3*c3  + dN5_dzeta4*c4);
-	shp[2][5] = 1/(6.0*Jdet)*(dN6_dzeta1*c1  + dN6_dzeta2*c2  + dN6_dzeta3*c3  + dN6_dzeta4*c4);
-	shp[2][6] = 1/(6.0*Jdet)*(dN7_dzeta1*c1  + dN7_dzeta2*c2  + dN7_dzeta3*c3  + dN7_dzeta4*c4);
-	shp[2][7] = 1/(6.0*Jdet)*(dN8_dzeta1*c1  + dN8_dzeta2*c2  + dN8_dzeta3*c3  + dN8_dzeta4*c4);
-	shp[2][8] = 1/(6.0*Jdet)*(dN9_dzeta1*c1  + dN9_dzeta2*c2  + dN9_dzeta3*c3  + dN9_dzeta4*c4);
-	shp[2][9] = 1/(6.0*Jdet)*(dN10_dzeta1*c1 + dN10_dzeta2*c2 + dN10_dzeta3*c3 + dN10_dzeta4*c4);
+	shp[2][0] = ( 1 / Jdet ) * (dN1_dzeta1*c1  + dN1_dzeta2*c2  + dN1_dzeta3*c3  + dN1_dzeta4*c4) ;
+	shp[2][1] = ( 1 / Jdet ) * (dN2_dzeta1*c1  + dN2_dzeta2*c2  + dN2_dzeta3*c3  + dN2_dzeta4*c4) ;
+	shp[2][2] = ( 1 / Jdet ) * (dN3_dzeta1*c1  + dN3_dzeta2*c2  + dN3_dzeta3*c3  + dN3_dzeta4*c4) ;
+	shp[2][3] = ( 1 / Jdet ) * (dN4_dzeta1*c1  + dN4_dzeta2*c2  + dN4_dzeta3*c3  + dN4_dzeta4*c4) ;
+	shp[2][4] = ( 1 / Jdet ) * (dN5_dzeta1*c1  + dN5_dzeta2*c2  + dN5_dzeta3*c3  + dN5_dzeta4*c4) ;
+	shp[2][5] = ( 1 / Jdet ) * (dN6_dzeta1*c1  + dN6_dzeta2*c2  + dN6_dzeta3*c3  + dN6_dzeta4*c4) ;
+	shp[2][6] = ( 1 / Jdet ) * (dN7_dzeta1*c1  + dN7_dzeta2*c2  + dN7_dzeta3*c3  + dN7_dzeta4*c4) ;
+	shp[2][7] = ( 1 / Jdet ) * (dN8_dzeta1*c1  + dN8_dzeta2*c2  + dN8_dzeta3*c3  + dN8_dzeta4*c4) ;
+	shp[2][8] = ( 1 / Jdet ) * (dN9_dzeta1*c1  + dN9_dzeta2*c2  + dN9_dzeta3*c3  + dN9_dzeta4*c4) ;
+	shp[2][9] = ( 1 / Jdet ) * (dN10_dzeta1*c1 + dN10_dzeta2*c2 + dN10_dzeta3*c3 + dN10_dzeta4*c4) ;
 
 	// N1 - N10 (notice N9 and N10 are switched up)
-	shp[3][0] = zeta[0]*(2*zeta[0]-1);
-	shp[3][1] = zeta[1]*(2*zeta[1]-1);
-	shp[3][2] = zeta[2]*(2*zeta[2]-1);
-	shp[3][3] = zeta4*(2*zeta4-1);
-	shp[3][4] = 4*zeta[0]*zeta[1];
-	shp[3][5] = 4*zeta[1]*zeta[2];
-	shp[3][6] = 4*zeta[2]*zeta[0];
-	shp[3][7] = 4*zeta[0]*zeta4;
-	shp[3][9] = 4*zeta[1]*zeta4; // *
-	// shp[3][8] = 4*zeta[1]*zeta4;
-	shp[3][8] = 4*zeta[2]*zeta4; // *
-	// shp[3][9] = 4*zeta[2]*zeta4;
+	shp[3][0] = zeta1*(2*zeta1-1) ;
+	shp[3][1] = zeta2*(2*zeta2-1) ;
+	shp[3][2] = zeta3*(2*zeta3-1) ;
+	shp[3][3] = zeta4*(2*zeta4-1) ;
+	shp[3][4] = 4*zeta1*zeta2 ;
+	shp[3][5] = 4*zeta2*zeta3 ;
+	shp[3][6] = 4*zeta3*zeta1 ;
+	shp[3][7] = 4*zeta1*zeta4 ;
+	shp[3][9] = 4*zeta2*zeta4 ;
+	shp[3][8] = 4*zeta3*zeta4 ;
 
 	return ;
 }
