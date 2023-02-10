@@ -292,6 +292,7 @@
     <ClCompile Include="..\..\..\SRC\element\tetrahedron\FourNodeTetrahedron.cpp" />
     <ClCompile Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedron.cpp" />
     <ClCompile Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedronThermal.cpp" />
+    <ClCompile Include="..\..\..\SRC\element\tetrahedron\SixNodeBoundryCondition.cpp" />
     <ClCompile Include="..\..\..\SRC\element\truss\InertiaTruss.cpp" />
     <ClCompile Include="..\..\..\SRC\element\truss\N4BiaxialTruss.cpp" />
     <ClCompile Include="..\..\..\SRC\element\twoNodeLink\Inerter.cpp" />
@@ -583,6 +584,7 @@
     <ClInclude Include="..\..\..\SRC\element\tetrahedron\FourNodeTetrahedron.h" />
     <ClInclude Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedron.h" />
     <ClInclude Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedronThermal.h" />
+    <ClInclude Include="..\..\..\SRC\element\tetrahedron\SixNodeBoundryCondition.h" />
     <ClInclude Include="..\..\..\SRC\element\truss\InertiaTruss.h" />
     <ClInclude Include="..\..\..\SRC\element\truss\N4BiaxialTruss.h" />
     <ClInclude Include="..\..\..\SRC\element\twoNodeLink\Inerter.h" />

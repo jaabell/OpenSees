@@ -3921,6 +3921,17 @@ namespace mpco {
 					int_type = ElementIntegrationRuleType::Tetrahedron_GaussLegendre_2;
 				}
 				/*
+				6-node LST Boundry Conditions with 1x1x1 gp
+				*/
+				else if (
+					// ./tetrahedron
+					elem_class_tag == ELE_TAG_SixNodeBoundryConditions
+					)
+				{
+					geom_type = ElementGeometryType::Triangle_6N;
+					int_type = ElementIntegrationRuleType::Triangle_GaussLegendre_2;
+				}
+				/*
 				8-node hexahedron with 1x1x1 gp
 				*/
 				else if (

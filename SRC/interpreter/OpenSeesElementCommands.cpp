@@ -60,6 +60,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <FourNodeTetrahedron.h>
 #include <TenNodeTetrahedron.h>
 #include <TenNodeTetrahedronThermal.h>
+#include <SixNodeBoundryCondition.h>
 
 #include <BeamIntegration.h>
 #include <LobattoBeamIntegration.h>
@@ -232,6 +233,7 @@ void* OPS_YamamotoBiaxialHDR();
 void* OPS_FourNodeTetrahedron();
 void* OPS_TenNodeTetrahedron();
 void* OPS_TenNodeTetrahedronThermal();
+void* OPS_SixNodeBoundryCondition();
 void* OPS_CatenaryCableElement();
 void *OPS_ASDEmbeddedNodeElement(void);
 void* OPS_GradientInelasticBeamColumn2d();
@@ -740,6 +742,7 @@ namespace {
 	functionMap.insert(std::make_pair("FourNodeTetrahedron", &OPS_FourNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedron", &OPS_TenNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedronThermal", &OPS_TenNodeTetrahedronThermal));
+	functionMap.insert(std::make_pair("SixNodeBoundryCondition", &OPS_SixNodeBoundryCondition));
 	functionMap.insert(std::make_pair("CatenaryCable", &OPS_CatenaryCableElement));
 	functionMap.insert(std::make_pair("ASDEmbeddedNodeElement", &OPS_ASDEmbeddedNodeElement));
 	functionMap.insert(std::make_pair("gradientInelasticBeamColumn", &OPS_GradientInelasticBeamColumn));
