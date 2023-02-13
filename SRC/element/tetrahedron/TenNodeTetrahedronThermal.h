@@ -19,13 +19,12 @@
 ** ****************************************************************** */
 
 // ============================================================================
-// 2022 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
+// 2023 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
-// Implements a standard 10-node tetrahedron element.
+// Implements a standard 10-node thermal tetrahedron element.
 //
 // This element has 4 Gauss points of integration.
-//
 // ============================================================================
 
 
@@ -46,11 +45,11 @@
 
 
 //Number of Gauss-points
-#define NumGaussPoints 4
-#define NumNodes 10
-#define NumDOFsPerNode 1
-#define NumStressComponents 3
-#define NumDOFsTotal NumNodes*NumDOFsPerNode
+// #define NumGaussPoints 4
+// #define NumNodes 10
+// #define NumDOFsPerNode 1
+// #define NumStressComponents 3
+// #define NumDOFsTotal NumNodes*NumDOFsPerNode
 
 class TenNodeTetrahedronThermal : public Element {
 
@@ -145,6 +144,13 @@ public :
 
 private :
 
+    //Number of Gauss-points
+    enum {NumGaussPoints=4} ;
+    enum {NumNodes=10} ;
+    enum {NumDOFsPerNode=1} ;
+    enum {NumStressComponents=3} ;
+    enum {NumDOFsTotal=NumNodes*NumDOFsPerNode} ;
+
     // Routine to compute shape functions and their derivatives. These get stored as follows. 
     // for node n:
     //   shp[0][n] --> dN_n / d x, 
@@ -178,6 +184,8 @@ private :
     static Matrix mass ; 
     static Matrix damping ;
 
+    static Matrix B ;
+
     //quadrature data
     static const double root3 ;
     static const double one_over_root3 ;
@@ -205,7 +213,6 @@ private :
 
     //compute B matrix
     const Matrix& computeB( int node, const double shp[4][NumNodes] ) ;
-
 } ;
 
 #endif

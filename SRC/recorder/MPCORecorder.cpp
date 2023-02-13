@@ -3925,7 +3925,7 @@ namespace mpco {
 				*/
 				else if (
 					// ./tetrahedron
-					elem_class_tag == ELE_TAG_SixNodeBoundryConditions
+					elem_class_tag == ELE_TAG_SixNodeBoundryCondition
 					)
 				{
 					geom_type = ElementGeometryType::Triangle_6N;

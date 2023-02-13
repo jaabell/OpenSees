@@ -19,7 +19,7 @@
 ** ****************************************************************** */
 
 // ============================================================================
-// 2022 By Jose Abell and José Larenas @ Universidad de los Andes, Chile
+// 2023 By Jose Abell and José Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
 // Please read detailed description in TenNodeTetrahedronThermal.h.
@@ -101,7 +101,9 @@ const double  TenNodeTetrahedronThermal::sg[]  = { alpha, beta, beta, beta } ;
 const double  TenNodeTetrahedronThermal::wg[]  = { 1.0 / 4.0 }              ;
 // const double  TenNodeTetrahedronThermal::wg[]  = { 1.0 / 24.0 }              ;
 
-static Matrix B(NumStressComponents, NumDOFsPerNode) ;
+// static Matrix B(NumStressComponents, NumDOFsPerNode) ;
+Matrix TenNodeTetrahedronThermal::B(NumStressComponents, NumDOFsPerNode) ;
+
 
 //null constructor
 TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )

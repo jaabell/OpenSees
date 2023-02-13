@@ -19,7 +19,7 @@
 ** ****************************************************************** */
 
 // ============================================================================
-// 2022 By Jose Abell and José Larenas @ Universidad de los Andes, Chile
+// 2023 By Jose Abell and José Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
 // Please read detailed description in SixNodeBoundryCondition.h.
@@ -49,27 +49,27 @@
 
 void* OPS_SixNodeBoundryCondition()
 {
-    if (OPS_GetNumRemainingInputArgs() < 11)
+    if (OPS_GetNumRemainingInputArgs() < 7)
     {
         opserr << "WARNING insufficient arguments\n";
-        opserr << "Want: element SixNodeBoundryCondition eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? kxx, kyy, kzz, rho, cp\n";
+        opserr << "Want: element SixNodeBoundryCondition eleTag? Node1? Node2? Node3? Node4? Node5? Node6? beta, k, tamb\n";
         return 0;
     }
 
-    int idata[11];
-    int num = 11;
+    int idata[7];
+    int num = 7;
     if (OPS_GetIntInput(&num, idata) < 0)
     {
         opserr << "WARNING: invalid integer data\n";
         return 0;
     }
 
-    double data[5] = {0, 0, 0, 0, 0};
+    double data[3] = {0, 0, 0};
     num = OPS_GetNumRemainingInputArgs();
 
-    if (num > 5)
+    if (num > 3)
     {
-        num = 5;
+        num = 3;
     }
     if (num > 0)
     {
@@ -80,7 +80,7 @@ void* OPS_SixNodeBoundryCondition()
         }
     }
 
-    return new SixNodeBoundryCondition(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], data[0], data[1], data[2], data[3], data[4]);
+    return new SixNodeBoundryCondition(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], data[0], data[1], data[2]);
 }
 
 //static data
@@ -99,9 +99,9 @@ const double  SixNodeBoundryCondition::beta  = ( 5.0 - sqrt( 5.0 ) ) / 20.      
 
 const double  SixNodeBoundryCondition::sg[]  = { alpha, beta, beta, beta } ;
 const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 4.0 }              ;
-// const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 24.0 }              ;
 
-static Matrix B(NumStressComponents, NumDOFsPerNode) ;
+// static Matrix B(NumStressComponents, NumDOFsPerNode) ;
+Matrix SixNodeBoundryCondition::B(NumStressComponents, NumDOFsPerNode) ;
 
 //null constructor
 SixNodeBoundryCondition::SixNodeBoundryCondition( )
@@ -111,11 +111,9 @@ SixNodeBoundryCondition::SixNodeBoundryCondition( )
 {
     B.Zero();
 
-    krc[0] = 0.0;
-    krc[1] = 0.0;
-    krc[2] = 0.0;
-    krc[3] = 0.0;
-    krc[4] = 0.0;
+    inp_info[0] = 0.0;
+    inp_info[1] = 0.0;
+    inp_info[2] = 0.0;
 
     for (int i = 0; i < NumNodes; i++ ) {
         nodePointers[i] = 0;
@@ -132,15 +130,9 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
         int node4,
         int node5,
         int node6,
-        int node7,
-        int node8,
-        int node9,
-        int node10,
-        double kxx,
-        double kyy,
-        double kzz,
-        double rho,
-        double cp)
+        double beta,
+        double k,
+        double tamb)
     : Element(tag, ELE_TAG_SixNodeBoundryCondition),
       connectedExternalNodes(NumNodes), load(0), Ki(0)
 {
@@ -151,20 +143,14 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
     connectedExternalNodes(3) = node4 ;
     connectedExternalNodes(4) = node5 ;
     connectedExternalNodes(5) = node6 ;
-    connectedExternalNodes(6) = node7 ;
-    connectedExternalNodes(7) = node8 ;
-    connectedExternalNodes(8) = node9 ;
-    connectedExternalNodes(9) = node10 ;
 
     for (int i = 0; i < NumNodes; i++ ) {
         nodePointers[i] = 0;
     }
 
-    krc[0] = kxx;
-    krc[1] = kyy;
-    krc[2] = kzz;
-    krc[3] = rho;
-    krc[4] = cp;
+    inp_info[0] = beta;
+    inp_info[1] = k;
+    inp_info[2] = tamb;
 }
 
 //******************************************************************
@@ -392,9 +378,9 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
             }
         } // end for p
 
-        dd(0, 0) = krc[0] * dvol[i];
-        dd(1, 1) = krc[1] * dvol[i];
-        dd(2, 2) = krc[2] * dvol[i];
+        dd(0, 0) = inp_info[0] * dvol[i];
+        dd(1, 1) = inp_info[1] * dvol[i];
+        dd(2, 2) = inp_info[2] * dvol[i];
 
         jj = 0;
         for ( j = 0; j < numberNodes; j++ )
@@ -608,7 +594,7 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
 
             if ( tangFlag == 1 )
             {
-                temp *= krc[3] * krc[4] ; // rho * cp
+                temp *= inp_info[3] * inp_info[4] ; // rho * cp
 
                 //node-node mass
                 kk = 0 ;
@@ -742,9 +728,9 @@ void  SixNodeBoundryCondition::formResidAndTangent( int tang_flag )
         } // end for p
 
         if ( tang_flag == 1 ) {
-            dd(0, 0) = krc[0] * dvol[i];
-            dd(1, 1) = krc[1] * dvol[i];
-            dd(2, 2) = krc[2] * dvol[i]; 
+            dd(0, 0) = inp_info[0] * dvol[i];
+            dd(1, 1) = inp_info[1] * dvol[i];
+            dd(2, 2) = inp_info[2] * dvol[i]; 
         } //end if tang_flag
 
         //residual and tangent calculations node loops
@@ -852,7 +838,7 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
     // along with its dbTag and the commitTag passed in the arguments
 
     // Now quad sends the ids of its materials
-    static ID idData(30);
+    static ID idData(26);
 
     idData(20) = connectedExternalNodes(0);
     idData(21) = connectedExternalNodes(1);
@@ -860,10 +846,6 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
     idData(23) = connectedExternalNodes(3);
     idData(24) = connectedExternalNodes(4);
     idData(25) = connectedExternalNodes(5);
-    idData(26) = connectedExternalNodes(6);
-    idData(27) = connectedExternalNodes(7);
-    idData(28) = connectedExternalNodes(8);
-    idData(29) = connectedExternalNodes(9);
 
     res += theChannel.sendID(dataTag, commitTag, idData);
     if (res < 0) {
@@ -871,16 +853,14 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
         return res;
     }
 
-    static Vector dData(9);
+    static Vector dData(7);
     dData(0) = alphaM;
     dData(1) = betaK;
     dData(2) = betaK0;
     dData(3) = betaKc;
-    dData(4) = krc[0];
-    dData(5) = krc[1];
-    dData(6) = krc[2];
-    dData(7) = krc[3];
-    dData(8) = krc[4];
+    dData(4) = inp_info[0];
+    dData(5) = inp_info[1];
+    dData(6) = inp_info[2];
 
     if (theChannel.sendVector(dataTag, commitTag, dData) < 0) {
         opserr << "SixNodeBoundryCondition::sendSelf() - failed to send double data\n";
@@ -898,16 +878,16 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
 
     int dataTag = this->getDbTag();
 
-    static ID idData(30);
+    static ID idData(26);
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING SixNodeBoundryCondition::recvSelf() - " << this->getTag() << " failed to receive ID\n";
         return res;
     }
 
-    this->setTag(idData(30));
+    this->setTag(idData(26));
 
-    static Vector dData(9);
+    static Vector dData(7);
     if (theChannel.recvVector(dataTag, commitTag, dData) < 0) {
         opserr << "DispBeamColumn2d::sendSelf() - failed to recv double data\n";
         return -1;
@@ -917,11 +897,9 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
     betaK  = dData(1);
     betaK0 = dData(2);
     betaKc = dData(3);
-    krc[0] = dData(4);
-    krc[1] = dData(5);
-    krc[2] = dData(6);
-    krc[3] = dData(7);
-    krc[4] = dData(8);
+    inp_info[0] = dData(4);
+    inp_info[1] = dData(5);
+    inp_info[2] = dData(6);
 
     connectedExternalNodes(0) = idData(20);
     connectedExternalNodes(1) = idData(21);
@@ -929,10 +907,6 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
     connectedExternalNodes(3) = idData(23);
     connectedExternalNodes(4) = idData(24);
     connectedExternalNodes(5) = idData(25);
-    connectedExternalNodes(6) = idData(26);
-    connectedExternalNodes(7) = idData(27);
-    connectedExternalNodes(8) = idData(28);
-    connectedExternalNodes(9) = idData(29);
 
     return res;
 }
@@ -949,10 +923,6 @@ SixNodeBoundryCondition::displaySelf(Renderer &theViewer, int displayMode, float
     static Vector v4(3);
     static Vector v5(3);
     static Vector v6(3);
-    static Vector v7(3);
-    static Vector v8(3);
-    static Vector v9(3);
-    static Vector v10(3);
 
     nodePointers[0]->getDisplayCrds(v1, fact, displayMode);
     nodePointers[1]->getDisplayCrds(v2, fact, displayMode);
@@ -960,69 +930,28 @@ SixNodeBoundryCondition::displaySelf(Renderer &theViewer, int displayMode, float
     nodePointers[3]->getDisplayCrds(v4, fact, displayMode);
     nodePointers[4]->getDisplayCrds(v5, fact, displayMode);
     nodePointers[5]->getDisplayCrds(v6, fact, displayMode);
-    nodePointers[6]->getDisplayCrds(v7, fact, displayMode);
-    nodePointers[7]->getDisplayCrds(v8, fact, displayMode);
-    nodePointers[8]->getDisplayCrds(v9, fact, displayMode);
-    nodePointers[9]->getDisplayCrds(v10, fact, displayMode);
 
     // color vector
-    static Vector values(10);
+    static Vector values(6);
     values(0) = 0;
     values(1) = 0;
     values(2) = 0;
     values(3) = 0;
     values(4) = 0;
     values(5) = 0;
-    values(6) = 0;
-    values(7) = 0;
-    values(8) = 0;
-    values(9) = 0;
 
     // draw polygons for each tetrahedron face -ambaker1
     int res = 0;
-    static Matrix coords(10, 3); // rows are face nodes
+    static Matrix coords(6, 3); // rows are face nodes
 
     // face 1 (1 3 2)
     for (int i = 0; i < 3; i++) {
         coords(0, i) = v1(i);
-        coords(1, i) = v5(i);
+        coords(1, i) = v4(i);
         coords(2, i) = v2(i);
-        coords(3, i) = v6(i);
+        coords(3, i) = v5(i);
         coords(4, i) = v3(i);
-        coords(5, i) = v7(i);
-    }
-    res += theViewer.drawPolygon(coords, values, this->getTag());
-
-    // face 2 (1 2 4)
-    for (int i = 0; i < 3; i++) {
-        coords(0, i) = v1(i);
-        coords(1, i) = v5(i);
-        coords(2, i) = v2(i);
-        coords(3, i) = v10(i);
-        coords(4, i) = v4(i);
-        coords(5, i) = v8(i);
-    }
-    res += theViewer.drawPolygon(coords, values, this->getTag());
-
-    // face 3 (1 4 3)
-    for (int i = 0; i < 3; i++) {
-        coords(0, i) = v1(i);
-        coords(1, i) = v7(i);
-        coords(2, i) = v3(i);
-        coords(3, i) = v9(i);
-        coords(4, i) = v4(i);
-        coords(5, i) = v8(i);
-    }
-    res += theViewer.drawPolygon(coords, values, this->getTag());
-
-    // face 4 (2 3 4)
-    for (int i = 0; i < 3; i++) {
-        coords(0, i) = v2(i);
-        coords(1, i) = v6(i);
-        coords(2, i) = v3(i);
-        coords(3, i) = v9(i);
-        coords(4, i) = v4(i);
-        coords(5, i) = v10(i);
+        coords(5, i) = v6(i);
     }
     res += theViewer.drawPolygon(coords, values, this->getTag());
 
@@ -1039,7 +968,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
     output.tag("ElementOutput");
     output.attr("eleType", "SixNodeBoundryCondition");
     output.attr("eleTag", this->getTag());
-    for (int i = 1; i <= 10; i++)
+    for (int i = 1; i <= 6; i++)
     {
         sprintf(outputData, "node%d", i);
         output.attr(outputData, nodePointers[i - 1]->getTag());
@@ -1191,7 +1120,7 @@ SixNodeBoundryCondition::updateParameter(int parameterID, Information &info)
         int new_do_update = int(info.theDouble);
         if (new_do_update == 0)
         {
-            opserr << "10Ntet::updateParameter - ele tag = " << this->getTag()  << " - will not update\n";
+            opserr << "6NBC::updateParameter - ele tag = " << this->getTag()  << " - will not update\n";
         }
         return 0;
     }
@@ -1203,13 +1132,13 @@ SixNodeBoundryCondition::updateParameter(int parameterID, Information &info)
 }
 
 void
-SixNodeBoundryCondition::shp3d( const double zeta[4], double &xsj, double shp[4][NumNodes], const double xl[3][NumNodes]   )
+SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[4][NumNodes], const double xl[3][NumNodes]   )
 {
     // Mathematica formulation by Carlos Felippa.
     // Modified by José Larenas so that it works when
     // switching N9 with N10.
 
-    double zeta4 = 1 - zeta[0] - zeta[1] - zeta[2] ;
+    double zeta3 = 1 - zeta[0] - zeta[1] ;
 
     double x1  = xl[0][0]; double y1  = xl[1][0] ; double z1  = xl[2][0] ;
     double x2  = xl[0][1]; double y2  = xl[1][1] ; double z2  = xl[2][1] ;
@@ -1217,10 +1146,9 @@ SixNodeBoundryCondition::shp3d( const double zeta[4], double &xsj, double shp[4]
     double x4  = xl[0][3]; double y4  = xl[1][3] ; double z4  = xl[2][3] ;
     double x5  = xl[0][4]; double y5  = xl[1][4] ; double z5  = xl[2][4] ;
     double x6  = xl[0][5]; double y6  = xl[1][5] ; double z6  = xl[2][5] ;
-    double x7  = xl[0][6]; double y7  = xl[1][6] ; double z7  = xl[2][6] ;
-    double x8  = xl[0][7]; double y8  = xl[1][7] ; double z8  = xl[2][7] ;
-    double x9  = xl[0][8]; double y9  = xl[1][8] ; double z9  = xl[2][8] ;
-    double x10 = xl[0][9]; double y10 = xl[1][9] ; double z10 = xl[2][9] ;
+
+
+
 
     double a1 = y2 * (z4 - z3) - y3 * (z4 - z2) + y4 * (z3 - z2)  ; double b1 = -x2 * (z4 - z3) + x3 * (z4 - z2) - x4 * (z3 - z2) ; double c1 = x2 * (y4 - y3) - x3 * (y4 - y2) + x4 * (y3 - y2)  ;
     double a2 = -y1 * (z4 - z3) + y3 * (z4 - z1) - y4 * (z3 - z1) ; double b2 = x1 * (z4 - z3) - x3 * (z4 - z1) + x4 * (z3 - z1)  ; double c2 = -x1 * (y4 - y3) + x3 * (y4 - y1) - x4 * (y3 - y1) ;

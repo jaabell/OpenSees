@@ -19,13 +19,13 @@
 ** ****************************************************************** */
 
 // ============================================================================
-// 2022 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
+// 2023 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
-// Implements a standard 10-node tetrahedron element.
+// Implements a 6-node triangle element that accounts for boundry conditions
+// for a thermal analysis.
 //
-// This element has 4 Gauss points of integration.
-//
+// This element has 3 Gauss points of integration.
 // ============================================================================
 
 
@@ -46,11 +46,11 @@
 
 
 //Number of Gauss-points
-#define NumGaussPoints 3
-#define NumNodes 6
-#define NumDOFsPerNode 1
-#define NumStressComponents 3
-#define NumDOFsTotal NumNodes*NumDOFsPerNode
+// #define NumGaussPoints 3
+// #define NumNodes 6
+// #define NumDOFsPerNode 1
+// #define NumStressComponents 3
+// #define NumDOFsTotal NumNodes*NumDOFsPerNode
 
 class SixNodeBoundryCondition : public Element {
 
@@ -67,11 +67,9 @@ public :
                        int node4,
                        int node5,
                        int node6,
-                       double kxx = 0.0,
-                       double kyy = 0.0,
-                       double kzz = 0.0,
-                       double rho = 0.0,
-                       double cp  = 0.0);
+                       double beta = 0.0,
+                       double k    = 0.0,
+                       double tamb = 0.0);
 
     //destructor
     virtual ~SixNodeBoundryCondition( ) ;
@@ -141,6 +139,13 @@ public :
 
 private :
 
+    //Number of Gauss-points
+    enum {NumGaussPoints=3} ;
+    enum {NumNodes=6} ;
+    enum {NumDOFsPerNode=1} ;
+    enum {NumStressComponents=3} ;
+    enum {NumDOFsTotal=NumNodes*NumDOFsPerNode} ;
+
     // Routine to compute shape functions and their derivatives. These get stored as follows. 
     // for node n:
     //   shp[0][n] --> dN_n / d x, 
@@ -148,7 +153,7 @@ private :
     //   shp[2][n] --> dN_n / d z
     //   shp[3][n] --> N_n, shape function n value at the z values 
     void shp3d( 
-        const double zeta[4],  // Tetrahedral coordinates  (input)
+        const double zeta[3],  // Tetrahedral coordinates  (input)
         double &xsj,         // Jacobian determinant (output)
         double shp[4][NumNodes], // Shape function and derivatives values at the tetrahedral coordinates (output) 
         const double xl[3][NumNodes]   ); // Node coordinates (input)
@@ -160,7 +165,7 @@ private :
     ID connectedExternalNodes ;  //four node numbers
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
-    double krc[5];
+    double inp_info[3];
 
     Vector *load;
     Matrix *Ki;
@@ -173,6 +178,8 @@ private :
     static Vector resid ;
     static Matrix mass ; 
     static Matrix damping ;
+
+    static Matrix B ;
 
     //quadrature data
     static const double root3 ;
@@ -201,7 +208,6 @@ private :
 
     //compute B matrix
     const Matrix& computeB( int node, const double shp[4][NumNodes] ) ;
-
 } ;
 
 #endif
