@@ -52,7 +52,7 @@ void* OPS_SixNodeBoundryCondition()
     if (OPS_GetNumRemainingInputArgs() < 7)
     {
         opserr << "WARNING insufficient arguments\n";
-        opserr << "Want: element SixNodeBoundryCondition eleTag? Node1? Node2? Node3? Node4? Node5? Node6? beta, k, tamb\n";
+        opserr << "Want: element SixNodeBoundryCondition eleTag? Node1? Node2? Node3? Node4? Node5? Node6? beta, k, tamb, th\n";
         return 0;
     }
 
@@ -64,12 +64,12 @@ void* OPS_SixNodeBoundryCondition()
         return 0;
     }
 
-    double data[3] = {0, 0, 0};
+    double data[4] = {0, 0, 0, 0};
     num = OPS_GetNumRemainingInputArgs();
 
-    if (num > 3)
+    if (num > 4)
     {
-        num = 3;
+        num = 4;
     }
     if (num > 0)
     {
@@ -80,7 +80,7 @@ void* OPS_SixNodeBoundryCondition()
         }
     }
 
-    return new SixNodeBoundryCondition(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], data[0], data[1], data[2]);
+    return new SixNodeBoundryCondition(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], data[0], data[1], data[2], data[3]);
 }
 
 //static data
@@ -88,17 +88,12 @@ double  SixNodeBoundryCondition::xl[3][NumNodes]                     ;
 Matrix  SixNodeBoundryCondition::stiff(NumDOFsTotal, NumDOFsTotal)   ;
 Vector  SixNodeBoundryCondition::resid(NumDOFsTotal)                 ;
 Matrix  SixNodeBoundryCondition::mass(NumDOFsTotal, NumDOFsTotal)    ;
-Matrix  SixNodeBoundryCondition::damping(NumDOFsTotal, NumDOFsTotal) ;
 
 //quadrature data
-const double  SixNodeBoundryCondition::root3 = sqrt( 3.0 ) ;
-const double  SixNodeBoundryCondition::one_over_root3 = 1.0 / root3 ;
-
-const double  SixNodeBoundryCondition::alpha = ( 5.0 + 3.0 * sqrt( 5.0 ) ) / 20. ;
-const double  SixNodeBoundryCondition::beta  = ( 5.0 - sqrt( 5.0 ) ) / 20.       ;
-
-const double  SixNodeBoundryCondition::sg[]  = { alpha, beta, beta, beta } ;
-const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 4.0 }              ;
+const double  SixNodeBoundryCondition::alpha = 2.0 / 3.0 ;
+const double  SixNodeBoundryCondition::beta  = 1.0 / 6.0 ;
+const double  SixNodeBoundryCondition::sg[]  = { alpha, beta, beta } ;
+const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 3.0 } ;
 
 // static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 Matrix SixNodeBoundryCondition::B(NumStressComponents, NumDOFsPerNode) ;
@@ -107,13 +102,14 @@ Matrix SixNodeBoundryCondition::B(NumStressComponents, NumDOFsPerNode) ;
 SixNodeBoundryCondition::SixNodeBoundryCondition( )
     : Element( 0, ELE_TAG_SixNodeBoundryCondition ),
       connectedExternalNodes(NumNodes),
-      load(0), Ki(0)
+      applyLoad(0), load(0), Ki(0)
 {
     B.Zero();
 
     inp_info[0] = 0.0;
     inp_info[1] = 0.0;
     inp_info[2] = 0.0;
+    inp_info[3] = 1.0;
 
     for (int i = 0; i < NumNodes; i++ ) {
         nodePointers[i] = 0;
@@ -132,9 +128,10 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
         int node6,
         double beta,
         double k,
-        double tamb)
+        double tamb,
+        double th)
     : Element(tag, ELE_TAG_SixNodeBoundryCondition),
-      connectedExternalNodes(NumNodes), load(0), Ki(0)
+      connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
 {
     B.Zero();
     connectedExternalNodes(0) = node1 ;
@@ -148,9 +145,10 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
         nodePointers[i] = 0;
     }
 
-    inp_info[0] = beta;
-    inp_info[1] = k;
-    inp_info[2] = tamb;
+    inp_info[0] = beta ;
+    inp_info[1] = k ;
+    inp_info[2] = tamb ;
+    inp_info[3] = th ;
 }
 
 //******************************************************************
@@ -277,10 +275,6 @@ const Matrix&  SixNodeBoundryCondition::getTangentStiff( )
     //do tangent and residual here
     formResidAndTangent( tang_flag ) ;
 
-    // opserr << "STIFF = " << stiff << endln ;
-
-    // exit( -1 ) ;
-
     return stiff ;
 }
 
@@ -290,42 +284,40 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
     if (Ki != 0)
         return *Ki;
 
-    //strains ordered : eps11, eps22, eps33, 2*eps12, 2*eps23, 2*eps31
+
     static const int ndm = 3 ;
+
     static const int ndf = NumDOFsPerNode ;
-    static const int nstress = NumStressComponents ;
+
     static const int numberNodes = NumNodes ;
+
     static const int numberGauss = NumGaussPoints ;
-    static const int nShape = 4 ;
+
+    static const int nShape = 3 ;
+
+    static const int massIndex = nShape - 1 ;
+
+    static const int stiffIndex = nShape - 1 ;
+
+    static double volume ;
+
+    static double xsj ;  // determinant jacaobian matrix
+
+    static double dvol[numberGauss] ; //volume element
+
+    static double shp[nShape][numberNodes] ;  //shape functions at a gauss point
+
+    static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
+
+    static double gaussPoint[2] ;
+
+    static Vector momentum(ndf) ;
 
     int i, j, k, p, q ;
     int jj, kk ;
 
-    static double volume ;
-    static double xsj ;  // determinant jacaobian matrix
-    static double dvol[numberGauss] ; //volume element
-    static double gaussPoint[ndm] ;
-    static Vector strain(nstress) ;  //strain
-    static double shp[nShape][numberNodes] ;  //shape functions at a gauss point
-    static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
-    static Matrix stiffJK(ndf, ndf) ; //nodeJK stiffness
-    static Matrix dd(3, 3) ; //material tangent
+    static double temp, stiffJK ;
 
-    dd.Zero();
-
-    //---------B-matrices------------------------------------
-
-    static Matrix BJ(nstress, ndf) ;     // B matrix node J
-
-    static Matrix BJtran(ndf, nstress) ;
-
-    static Matrix BK(nstress, ndf) ;     // B matrix node k
-
-    static Matrix BJtranD(ndf, nstress) ;
-
-    //-------------------------------------------------------
-
-    //zero stiffness and residual
     stiff.Zero( ) ;
     resid.Zero( ) ;
 
@@ -340,13 +332,6 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
     {
         gaussPoint[0] = sg[k] ;
         gaussPoint[1] = sg[abs(1 - k)] ;
-        gaussPoint[2] = sg[abs(2 - k)] ;
-
-        // sg = [alpha, beta, beta, beta]
-        // k = 0: alpha beta beta
-        // k = 1: beta alpha beta
-        // k = 2: beta beta alpha
-        // k = 3: beta beta beta
 
         //get shape functions
         shp3d( gaussPoint, xsj, shp, xl ) ;
@@ -359,12 +344,12 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
                 Shape[p][q][count] = shp[p][q] ;
             }
         } // end for p
+
         //volume element to also be saved
         dvol[count] = wg[0] * xsj ;
         volume += dvol[count] ;
         count++ ;
     } //end for k
-
 
     //gauss loop
     for ( i = 0; i < numberGauss; i++ )
@@ -378,39 +363,21 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
             }
         } // end for p
 
-        dd(0, 0) = inp_info[0] * dvol[i];
-        dd(1, 1) = inp_info[1] * dvol[i];
-        dd(2, 2) = inp_info[2] * dvol[i];
-
-        jj = 0;
+        //residual and tangent calculations node loops
+        jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
-            BJ = computeB( j, shp ) ;
-            //transpose
-            for (p = 0; p < ndf; p++)
-            {
-                for (q = 0; q < nstress; q++)
-                {
-                    BJtran(p, q) = BJ(q, p) ;
-                }
-            }//end for p
+            temp = shp[stiffIndex][j] * dvol[i] * (inp_info[0] / inp_info[1]) * inp_info[3] ;
 
-            BJtranD.addMatrixProduct(0.0,  BJtran, dd, 1.0) ;
-
+            //node-node mass
             kk = 0 ;
             for ( k = 0; k < numberNodes; k++ )
             {
-                BK = computeB( k, shp ) ;
-
-                stiffJK.addMatrixProduct(0.0,  BJtranD, BK, 1.0) ;
-
+                stiffJK = temp * shp[stiffIndex][k] ;
                 for ( p = 0; p < ndf; p++ )
                 {
-                    for ( q = 0; q < ndf; q++ )
-                    {
-                        stiff( jj + p, kk + q ) += stiffJK( p, q ) ;
-                    }
-                } //end for p
+                    stiff( jj + p, kk + p ) += stiffJK ;
+                }
                 kk += ndf ;
             } // end for k loop
 
@@ -433,24 +400,13 @@ const Matrix&  SixNodeBoundryCondition::getMass( )
     return mass ;
 }
 
-//return damping matrix
-const Matrix&  SixNodeBoundryCondition::getDamp( )
-{
-    int tangFlag = 1 ;
-
-    formDampingTerms( tangFlag ) ;
-
-    // opserr << "DAMP = " << damping << endln ;
-
-    // exit( -1 ) ;
-
-    return damping ;
-}
-
 void  SixNodeBoundryCondition::zeroLoad( )
 {
     if (load != 0)
         load->Zero();
+
+    applyLoad = 0 ;
+    appliedQ = 0 ; 
 
     return ;
 }
@@ -458,6 +414,23 @@ void  SixNodeBoundryCondition::zeroLoad( )
 int
 SixNodeBoundryCondition::addLoad(ElementalLoad *theLoad, double loadFactor)
 {
+    int type;
+    const Vector &data = theLoad->getData(type, loadFactor);
+
+    if (type == LOAD_TAG_BrickSelfWeight) {
+        applyLoad = 1;
+        appliedQ += loadFactor * inp_info[2] * (inp_info[0] / inp_info[1]);
+        return 0;
+    } else if (type == LOAD_TAG_SelfWeight) {
+        // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
+        applyLoad = 1;
+        appliedQ += loadFactor * data(2) * inp_info[2] * (inp_info[0] / inp_info[1]);
+        return 0;
+    } else {
+        opserr << "SixNodeBoundryCondition::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
+        return -1;
+    }
+
     return -1;
 }
 
@@ -494,9 +467,10 @@ const Vector&  SixNodeBoundryCondition::getResistingForceIncInertia( )
 
     formInertiaTerms( tang_flag ) ;
 
-    formDampingTerms( tang_flag ) ;
-
     res = resid;
+
+    if (load != 0)
+        res -= *load;
 
     return res;
 }
@@ -509,7 +483,8 @@ void   SixNodeBoundryCondition::formInertiaTerms( int tangFlag )
     mass.Zero( ) ;
 }
 
-void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
+//form residual and tangent
+void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
 {
     static const int ndm = 3 ;
 
@@ -519,11 +494,11 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
 
     static const int numberGauss = NumGaussPoints ;
 
-    static const int nShape = 4 ;
+    static const int nShape = 3 ;
 
     static const int massIndex = nShape - 1 ;
 
-    static const int dampingIndex = nShape - 1 ;
+    static const int stiffIndex = nShape - 1 ;
 
     double xsj ;  // determinant jacaobian matrix
 
@@ -533,16 +508,16 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
 
     static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
 
-    static double gaussPoint[ndm] ;
+    static double gaussPoint[2] ;
 
     static Vector momentum(ndf) ;
 
     int i, j, k, p, q ;
     int jj, kk ;
 
-    double temp, dampingJK ;
+    double temp, stiffJK ;
 
-    damping.Zero( ) ;
+    stiff.Zero( ) ;
 
     //compute basis vectors and local nodal coordinates
     computeBasis( ) ;
@@ -554,7 +529,6 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
     {
         gaussPoint[0] = sg[k] ;
         gaussPoint[1] = sg[abs(1 - k)] ;
-        gaussPoint[2] = sg[abs(2 - k)] ;
 
         //get shape functions
         shp3d( gaussPoint, xsj, shp, xl ) ;
@@ -590,20 +564,18 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
-            temp = shp[dampingIndex][j] * dvol[i] ;
+            temp = shp[stiffIndex][j] * dvol[i] * (inp_info[0] / inp_info[1]) * inp_info[3] ;
 
             if ( tangFlag == 1 )
             {
-                temp *= inp_info[3] * inp_info[4] ; // rho * cp
-
                 //node-node mass
                 kk = 0 ;
                 for ( k = 0; k < numberNodes; k++ )
                 {
-                    dampingJK = temp * shp[dampingIndex][k] ;
+                    stiffJK = temp * shp[stiffIndex][k] ;
                     for ( p = 0; p < ndf; p++ )
                     {
-                        damping( jj + p, kk + p ) += dampingJK ;
+                        stiff( jj + p, kk + p ) += stiffJK ;
                     }
                     kk += ndf ;
                 } // end for k loop
@@ -617,11 +589,11 @@ void   SixNodeBoundryCondition::formDampingTerms( int tangFlag )
 
     for (int i = 0; i < NumNodes; ++i)
     {
-        const Vector &temp_dot_node_i = nodePointers[i]->getTrialVel( ) ;
+        const Vector &temp_dot_node_i = nodePointers[i]->getTrialDisp( ) ;
         nodeTemp_dot(i) = temp_dot_node_i(0);
     }
 
-    resid.addMatrixVector(1.0, damping, nodeTemp_dot,  1.0);
+    resid.addMatrixVector(0.0, stiff, nodeTemp_dot,  1.0);
 }
 
 //*********************************************************************
@@ -633,157 +605,6 @@ SixNodeBoundryCondition::update(void)
     return 0;
 }
 
-//*********************************************************************
-
-//form residual and tangent
-void  SixNodeBoundryCondition::formResidAndTangent( int tang_flag )
-{
-    static const int ndm = 3 ;
-
-    static const int ndf = NumDOFsPerNode ;
-
-    static const int nstress = NumStressComponents ;
-
-    static const int numberNodes = NumNodes ;
-
-    static const int numberGauss = NumGaussPoints ;
-
-    static const int nShape = 4 ;
-
-    int i, j, k, p, q ;
-
-    static double volume ;
-
-    static double xsj ;  // determinant jacaobian matrix
-
-    static double dvol[numberGauss] ; //volume element
-
-    static double gaussPoint[ndm] ;
-
-    static double shp[nShape][numberNodes] ;  //shape functions at a gauss point
-
-    static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
-
-    static Vector residJ(ndf) ; //nodeJ residual
-
-    static Matrix stiffJK(ndf, ndf) ; //nodeJK stiffness
-
-    static Vector stress(nstress) ;  //stress
-
-    static Matrix dd(3, 3) ; //material tangent
-
-    //---------B-matrices------------------------------------
-
-    static Matrix BJ(nstress, ndf) ;     // B matrix node J
-
-    static Matrix BJtran(ndf, nstress) ;
-
-    static Matrix BK(nstress, ndf) ;     // B matrix node k
-
-    static Matrix BJtranD(ndf, nstress) ;
-
-    //-------------------------------------------------------
-
-    //zero stiffness and residual
-    stiff.Zero( ) ;
-    resid.Zero( ) ;
-
-    //compute basis vectors and local nodal coordinates
-    computeBasis( ) ;
-
-    //gauss loop to compute and save shape functions
-    volume = 0.0 ;
-    int count = 0; 
-
-    for ( k = 0; k < numberGauss; k++ )
-    {
-        gaussPoint[0] = sg[k] ;
-        gaussPoint[1] = sg[abs(1 - k)] ;
-        gaussPoint[2] = sg[abs(2 - k)] ;
-
-        //get shape functions
-        shp3d( gaussPoint, xsj, shp, xl ) ;
-
-        //save shape functions
-        for ( p = 0; p < nShape; p++ ) {
-            for ( q = 0; q < numberNodes; q++ ) {
-                Shape[p][q][count] = shp[p][q] ;
-            }
-        } // end for p
-        //volume element to also be saved
-        dvol[count] = wg[0] * xsj ;
-        count++ ;
-    } //end for k
-
-    //gauss loop
-    for ( i = 0; i < numberGauss; i++ )
-    {
-        //extract shape functions from saved array
-        for ( p = 0; p < nShape; p++ )
-        {
-            for ( q = 0; q < numberNodes; q++ )
-            {
-                shp[p][q]  = Shape[p][q][i] ;
-            }
-        } // end for p
-
-        if ( tang_flag == 1 ) {
-            dd(0, 0) = inp_info[0] * dvol[i];
-            dd(1, 1) = inp_info[1] * dvol[i];
-            dd(2, 2) = inp_info[2] * dvol[i]; 
-        } //end if tang_flag
-
-        //residual and tangent calculations node loops
-        int jj = 0 ;
-        for ( j = 0; j < numberNodes; j++ )
-        {
-            BJ = computeB( j, shp ) ;
-
-            //transpose
-            for (p = 0; p < ndf; p++)
-            {
-                for (q = 0; q < nstress; q++)
-                {
-                    BJtran(p, q) = BJ(q, p) ;
-                }
-            }//end for p
-
-            if ( tang_flag == 1 )
-            {
-                BJtranD.addMatrixProduct(0.0,  BJtran, dd, 1.0) ;
-
-                int kk = 0 ;
-                for ( k = 0; k < numberNodes; k++ )
-                {
-                    BK = computeB( k, shp ) ;
-                    stiffJK.addMatrixProduct(0.0,  BJtranD, BK, 1.0) ;
-
-                    for ( p = 0; p < ndf; p++ )
-                    {
-                        for ( q = 0; q < ndf; q++ )
-                        {
-                            stiff( jj + p, kk + q ) += stiffJK( p, q ) ;
-                        }
-                    } //end for p
-                    kk += ndf ;
-                } // end for k loop
-            } // end if tang_flag
-            jj += ndf ;
-        } // end for j loop
-    } //end for i gauss loop
-
-    Vector nodeTemp(NumNodes);
-
-    for (int i = 0; i < NumNodes; ++i)
-    {
-        const Vector &temperature_node_i = nodePointers[i]->getTrialDisp( ) ;
-        nodeTemp(i) = temperature_node_i(0);
-    }
-
-    resid.addMatrixVector(0.0, stiff, nodeTemp, 1.0);
-
-    return ;
-}
 
 //************************************************************************
 
@@ -804,21 +625,19 @@ void   SixNodeBoundryCondition::computeBasis( )
 
 //compute B
 const Matrix&
-SixNodeBoundryCondition::computeB( int node, const double shp[4][NumNodes] )
+SixNodeBoundryCondition::computeB( int node, const double shp[3][NumNodes] )
 {
     //--------------------------------------------------------------------
     //
     //                -    -
     //               | N,x  |
-    //   B       =   | N,y  |
-    //               | N,z  |   (3x1)
+    //   B       =   | N,y  | (2x1)
     //                -    -
     //
     //-------------------------------------------------------------------
 
     B(0, 0) = shp[0][node] ;
     B(1, 0) = shp[1][node] ;
-    B(2, 0) = shp[2][node] ;
 
     return B ;
 }
@@ -998,11 +817,6 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
         theResponse = new ElementResponse(this, 3, mass);
     }
 
-    else if (strcmp(argv[0],"damp") == 0)
-    {
-        theResponse = new ElementResponse(this, 4, damping);
-    }
-
     else if (strcmp(argv[0], "material") == 0 || strcmp(argv[0], "integrPoint") == 0)
     {
         int pointNum = atoi(argv[1]);
@@ -1031,7 +845,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
 
             output.endTag(); // GaussPoint
         }
-        theResponse =  new ElementResponse(this, 5, Vector(6*10));
+        theResponse =  new ElementResponse(this, 4, Vector(6*10));
     }
 
     else if (strcmp(argv[0], "strains") == 0)
@@ -1071,9 +885,6 @@ SixNodeBoundryCondition::getResponse(int responseID, Information &eleInfo)
 
     else if (responseID == 3)
         return eleInfo.setMatrix(this->getMass());
-
-    else if (responseID == 4)
-        return eleInfo.setMatrix(this->getDamp());
 
     else
         return -1;
@@ -1132,134 +943,85 @@ SixNodeBoundryCondition::updateParameter(int parameterID, Information &info)
 }
 
 void
-SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[4][NumNodes], const double xl[3][NumNodes]   )
+SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3][NumNodes], const double xl[3][NumNodes]   )
 {
     // Mathematica formulation by Carlos Felippa.
-    // Modified by José Larenas so that it works when
-    // switching N9 with N10.
+    // shp3d
+    double zeta1 = zeta[0] ;
+    double zeta2 = zeta[1] ;
+    double zeta3 = 1.0 - zeta1 - zeta2 ;
 
-    double zeta3 = 1 - zeta[0] - zeta[1] ;
+    double x1 = xl[0][0] ; double y1 = xl[1][0] ; double z1 = xl[2][0] ;
+    double x2 = xl[0][1] ; double y2 = xl[1][1] ; double z2 = xl[2][1] ;
+    double x3 = xl[0][2] ; double y3 = xl[1][2] ; double z3 = xl[2][2] ;
+    double x4 = xl[0][3] ; double y4 = xl[1][3] ; double z4 = xl[2][3] ;
+    double x5 = xl[0][4] ; double y5 = xl[1][4] ; double z5 = xl[2][4] ;
+    double x6 = xl[0][5] ; double y6 = xl[1][5] ; double z6 = xl[2][5] ;
 
-    double x1  = xl[0][0]; double y1  = xl[1][0] ; double z1  = xl[2][0] ;
-    double x2  = xl[0][1]; double y2  = xl[1][1] ; double z2  = xl[2][1] ;
-    double x3  = xl[0][2]; double y3  = xl[1][2] ; double z3  = xl[2][2] ;
-    double x4  = xl[0][3]; double y4  = xl[1][3] ; double z4  = xl[2][3] ;
-    double x5  = xl[0][4]; double y5  = xl[1][4] ; double z5  = xl[2][4] ;
-    double x6  = xl[0][5]; double y6  = xl[1][5] ; double z6  = xl[2][5] ;
-
-
-
-
-    double a1 = y2 * (z4 - z3) - y3 * (z4 - z2) + y4 * (z3 - z2)  ; double b1 = -x2 * (z4 - z3) + x3 * (z4 - z2) - x4 * (z3 - z2) ; double c1 = x2 * (y4 - y3) - x3 * (y4 - y2) + x4 * (y3 - y2)  ;
-    double a2 = -y1 * (z4 - z3) + y3 * (z4 - z1) - y4 * (z3 - z1) ; double b2 = x1 * (z4 - z3) - x3 * (z4 - z1) + x4 * (z3 - z1)  ; double c2 = -x1 * (y4 - y3) + x3 * (y4 - y1) - x4 * (y3 - y1) ;
-    double a3 = y1 * (z4 - z2) - y2 * (z4 - z1) + y4 * (z2 - z1)  ; double b3 = -x1 * (z4 - z2) + x2 * (z4 - z1) - x4 * (z2 - z1) ; double c3 = x1 * (y4 - y2) - x2 * (y4 - y1) + x4 * (y2 - y1)  ;
-    double a4 = -y1 * (z3 - z2) + y2 * (z3 - z1) - y3 * (z2 - z1) ; double b4 = x1 * (z3 - z2) - x2 * (z3 - z1) + x3 * (z2 - z1)  ; double c4 = -x1 * (y3 - y2) + x2 * (y3 - y1) - x3 * (y2 - y1) ;
+    // dNi/dzeta0
+    double dN0_dzeta0  = 4.0 * zeta1 - 1.0 ; double dN1_dzeta0 = 0.0               ;
+    double dN2_dzeta0  = 0.0               ; double dN3_dzeta0 = 4.0 * zeta2       ;
+    double dN4_dzeta0  = 0.0               ; double dN5_dzeta0 = 4.0 * zeta3       ;
 
     // dNi/dzeta1
-    double dN1_dzeta1  = 4 * zeta[0] - 1 ; double dN2_dzeta1 = 0         ;
-    double dN3_dzeta1  = 0               ; double dN4_dzeta1 = 0         ;
-    double dN5_dzeta1  = 4 * zeta[1]     ; double dN6_dzeta1 = 0         ;
-    double dN7_dzeta1  = 4 * zeta[2]     ; double dN8_dzeta1 = 4 * zeta4 ;
-    double dN10_dzeta1 = 0               ; double dN9_dzeta1 = 0         ;
-
-    // dNi/dzeta2
-    double dN1_dzeta2  = 0           ; double dN2_dzeta2 = 4 * zeta[1] - 1 ;
-    double dN3_dzeta2  = 0           ; double dN4_dzeta2 = 0               ;
-    double dN5_dzeta2  = 4 * zeta[0] ; double dN6_dzeta2 = 4 * zeta[2]     ;
-    double dN7_dzeta2  = 0           ; double dN8_dzeta2 = 0               ;
-    double dN10_dzeta2 = 4 * zeta4   ; double dN9_dzeta2 = 0               ;
+    double dN0_dzeta1  = 0.0               ; double dN1_dzeta1 = 4.0 * zeta2 - 1.0 ;
+    double dN2_dzeta1  = 0.0               ; double dN3_dzeta1 = 4.0 * zeta1       ;
+    double dN4_dzeta1  = 4.0 * zeta3       ; double dN5_dzeta1 = 0.0               ;
 
     // dNi/dzeta3
-    double dN1_dzeta3  = 0               ; double dN2_dzeta3 = 0           ;
-    double dN3_dzeta3  = 4 * zeta[2] - 1 ; double dN4_dzeta3 = 0           ;
-    double dN5_dzeta3  = 0               ; double dN6_dzeta3 = 4 * zeta[1] ;
-    double dN7_dzeta3  = 4 * zeta[0]     ; double dN8_dzeta3 = 0           ;
-    double dN10_dzeta3 = 0               ; double dN9_dzeta3 = 4 * zeta4   ;
+    double dN0_dzeta3  = 0.0               ; double dN1_dzeta3 = 0.0               ;
+    double dN2_dzeta3  = 4.0 * zeta3 - 1.0 ; double dN3_dzeta3 = 0.0               ;
+    double dN4_dzeta3  = 4.0 * zeta2       ; double dN5_dzeta3 = 4.0 * zeta1       ;
 
-    // dNi/dzeta3
-    double dN1_dzeta4  = 0           ; double dN2_dzeta4 = 0             ;
-    double dN3_dzeta4  = 0           ; double dN4_dzeta4 = 4 * zeta4 - 1 ;
-    double dN5_dzeta4  = 0           ; double dN6_dzeta4 = 0             ;
-    double dN7_dzeta4  = 0           ; double dN8_dzeta4 = 4 * zeta[0]   ;
-    double dN10_dzeta4 = 4 * zeta[1] ; double dN9_dzeta4 = 4 * zeta[2]   ;
+    // IFEM.Ch24 (Eq. 24.7)
+    // 
+    //                       |  1      1      1  |
+    // Jdet = (1 / 2) * det( | Jx1    Jx2    Jx3 | )
+    //                       | Jy1    Jy2    Jy3 |
+    //
 
-    double Jx1 = x1 * dN1_dzeta1 + x2 * dN2_dzeta1 + x3 * dN3_dzeta1 + x4 * dN4_dzeta1 + x5 * dN5_dzeta1 + x6 * dN6_dzeta1 + x7 * dN7_dzeta1 + x8 * dN8_dzeta1 + x9 * dN9_dzeta1 + x10 * dN10_dzeta1 ;
-    double Jy1 = y1 * dN1_dzeta1 + y2 * dN2_dzeta1 + y3 * dN3_dzeta1 + y4 * dN4_dzeta1 + y5 * dN5_dzeta1 + y6 * dN6_dzeta1 + y7 * dN7_dzeta1 + y8 * dN8_dzeta1 + y9 * dN9_dzeta1 + y10 * dN10_dzeta1 ;
-    double Jz1 = z1 * dN1_dzeta1 + z2 * dN2_dzeta1 + z3 * dN3_dzeta1 + z4 * dN4_dzeta1 + z5 * dN5_dzeta1 + z6 * dN6_dzeta1 + z7 * dN7_dzeta1 + z8 * dN8_dzeta1 + z9 * dN9_dzeta1 + z10 * dN10_dzeta1 ;
+    double dx4 = x4 - (x1 + x2) / 2.0 ;
+    double dx5 = x5 - (x2 + x3) / 2.0 ;
+    double dx6 = x6 - (x3 + x1) / 2.0 ;
 
-    double Jx2 = x1 * dN1_dzeta2 + x2 * dN2_dzeta2 + x3 * dN3_dzeta2 + x4 * dN4_dzeta2 + x5 * dN5_dzeta2 + x6 * dN6_dzeta2 + x7 * dN7_dzeta2 + x8 * dN8_dzeta2 + x9 * dN9_dzeta2 + x10 * dN10_dzeta2 ;
-    double Jy2 = y1 * dN1_dzeta2 + y2 * dN2_dzeta2 + y3 * dN3_dzeta2 + y4 * dN4_dzeta2 + y5 * dN5_dzeta2 + y6 * dN6_dzeta2 + y7 * dN7_dzeta2 + y8 * dN8_dzeta2 + y9 * dN9_dzeta2 + y10 * dN10_dzeta2 ;
-    double Jz2 = z1 * dN1_dzeta2 + z2 * dN2_dzeta2 + z3 * dN3_dzeta2 + z4 * dN4_dzeta2 + z5 * dN5_dzeta2 + z6 * dN6_dzeta2 + z7 * dN7_dzeta2 + z8 * dN8_dzeta2 + z9 * dN9_dzeta2 + z10 * dN10_dzeta2 ;
+    double dy4 = y4 - (y1 + y2) / 2.0 ;
+    double dy5 = y5 - (y2 + y3) / 2.0 ;
+    double dy6 = y6 - (y3 + y1) / 2.0 ;
 
-    double Jx3 = x1 * dN1_dzeta3 + x2 * dN2_dzeta3 + x3 * dN3_dzeta3 + x4 * dN4_dzeta3 + x5 * dN5_dzeta3 + x6 * dN6_dzeta3 + x7 * dN7_dzeta3 + x8 * dN8_dzeta3 + x9 * dN9_dzeta3 + x10 * dN10_dzeta3 ;
-    double Jy3 = y1 * dN1_dzeta3 + y2 * dN2_dzeta3 + y3 * dN3_dzeta3 + y4 * dN4_dzeta3 + y5 * dN5_dzeta3 + y6 * dN6_dzeta3 + y7 * dN7_dzeta3 + y8 * dN8_dzeta3 + y9 * dN9_dzeta3 + y10 * dN10_dzeta3 ;
-    double Jz3 = z1 * dN1_dzeta3 + z2 * dN2_dzeta3 + z3 * dN3_dzeta3 + z4 * dN4_dzeta3 + z5 * dN5_dzeta3 + z6 * dN6_dzeta3 + z7 * dN7_dzeta3 + z8 * dN8_dzeta3 + z9 * dN9_dzeta3 + z10 * dN10_dzeta3 ;
+    double Jx21 = (x2 - x1) + 4 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
+    double Jx32 = (x3 - x2) + 4 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
+    double Jx13 = (x1 - x3) + 4 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
 
-    double Jx4 = x1 * dN1_dzeta4 + x2 * dN2_dzeta4 + x3 * dN3_dzeta4 + x4 * dN4_dzeta4 + x5 * dN5_dzeta4 + x6 * dN6_dzeta4 + x7 * dN7_dzeta4 + x8 * dN8_dzeta4 + x9 * dN9_dzeta4 + x10 * dN10_dzeta4 ;
-    double Jy4 = y1 * dN1_dzeta4 + y2 * dN2_dzeta4 + y3 * dN3_dzeta4 + y4 * dN4_dzeta4 + y5 * dN5_dzeta4 + y6 * dN6_dzeta4 + y7 * dN7_dzeta4 + y8 * dN8_dzeta4 + y9 * dN9_dzeta4 + y10 * dN10_dzeta4 ;
-    double Jz4 = z1 * dN1_dzeta4 + z2 * dN2_dzeta4 + z3 * dN3_dzeta4 + z4 * dN4_dzeta4 + z5 * dN5_dzeta4 + z6 * dN6_dzeta4 + z7 * dN7_dzeta4 + z8 * dN8_dzeta4 + z9 * dN9_dzeta4 + z10 * dN10_dzeta4 ;
+    double Jy12 = (y1 - y2) + 4 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
+    double Jy23 = (y2 - y3) + 4 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
+    double Jy31 = (y3 - y1) + 4 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
 
-    // Terms in simplified Jacobian Matrix (3x3)
-    double t1 = Jx2 - Jx1 ; double t2 = Jx3 - Jx1 ; double t3 = Jx4 - Jx1 ;
-    double t4 = Jy2 - Jy1 ; double t5 = Jy3 - Jy1 ; double t6 = Jy4 - Jy1 ;
-    double t7 = Jz2 - Jz1 ; double t8 = Jz3 - Jz1 ; double t9 = Jz4 - Jz1 ;
-
-    // Assembling the Jacobians Determinant
-    double Jdet = t1 * (t5 * t9 - t6 * t8) - t2 * (t4 * t9 - t6 * t7) + t3 * (t4 * t8 - t5 * t7) ;
-
-    // opserr << "DET J" << Jdet << endln ;
+    double Jdet = ( Jx21 * Jy31 - Jy12 * Jx13 ) ;
 
     // Saving the Jacobians Determinant
-    xsj = Jdet ;
-    // xsj = Jdet / 6.0 ;
+    xsj = Jdet / 2.0 ;
 
-    // qx1 - qx10 (17.24)
-    shp[0][0] = ( 1 / Jdet ) * (dN1_dzeta1 * a1  + dN1_dzeta2 * a2  + dN1_dzeta3 * a3  + dN1_dzeta4 * a4)  ;
-    shp[0][1] = ( 1 / Jdet ) * (dN2_dzeta1 * a1  + dN2_dzeta2 * a2  + dN2_dzeta3 * a3  + dN2_dzeta4 * a4)  ;
-    shp[0][2] = ( 1 / Jdet ) * (dN3_dzeta1 * a1  + dN3_dzeta2 * a2  + dN3_dzeta3 * a3  + dN3_dzeta4 * a4)  ;
-    shp[0][3] = ( 1 / Jdet ) * (dN4_dzeta1 * a1  + dN4_dzeta2 * a2  + dN4_dzeta3 * a3  + dN4_dzeta4 * a4)  ;
-    shp[0][4] = ( 1 / Jdet ) * (dN5_dzeta1 * a1  + dN5_dzeta2 * a2  + dN5_dzeta3 * a3  + dN5_dzeta4 * a4)  ;
-    shp[0][5] = ( 1 / Jdet ) * (dN6_dzeta1 * a1  + dN6_dzeta2 * a2  + dN6_dzeta3 * a3  + dN6_dzeta4 * a4)  ;
-    shp[0][6] = ( 1 / Jdet ) * (dN7_dzeta1 * a1  + dN7_dzeta2 * a2  + dN7_dzeta3 * a3  + dN7_dzeta4 * a4)  ;
-    shp[0][7] = ( 1 / Jdet ) * (dN8_dzeta1 * a1  + dN8_dzeta2 * a2  + dN8_dzeta3 * a3  + dN8_dzeta4 * a4)  ;
-    shp[0][8] = ( 1 / Jdet ) * (dN9_dzeta1 * a1  + dN9_dzeta2 * a2  + dN9_dzeta3 * a3  + dN9_dzeta4 * a4)  ;
-    shp[0][9] = ( 1 / Jdet ) * (dN10_dzeta1 * a1 + dN10_dzeta2 * a2 + dN10_dzeta3 * a3 + dN10_dzeta4 * a4) ;
+    shp[0][0] = (4 * zeta1 - 1) * Jy23 / Jdet ;
+    shp[0][1] = (4 * zeta2 - 1) * Jy31 / Jdet ;
+    shp[0][2] = (4 * zeta3 - 1) * Jy12 / Jdet ;
+    shp[0][3] = 4 * (zeta2 * Jy23 + zeta1 * Jy31) / Jdet ;
+    shp[0][4] = 4 * (zeta3 * Jy31 + zeta2 * Jy12) / Jdet ;
+    shp[0][5] = 4 * (zeta1 * Jy12 + zeta3 * Jy23) / Jdet ;
 
-    // qy1 - qy10 (17.24)
-    shp[1][0] = ( 1 / Jdet ) * (dN1_dzeta1 * b1  + dN1_dzeta2 * b2  + dN1_dzeta3 * b3  + dN1_dzeta4 * b4)  ;
-    shp[1][1] = ( 1 / Jdet ) * (dN2_dzeta1 * b1  + dN2_dzeta2 * b2  + dN2_dzeta3 * b3  + dN2_dzeta4 * b4)  ;
-    shp[1][2] = ( 1 / Jdet ) * (dN3_dzeta1 * b1  + dN3_dzeta2 * b2  + dN3_dzeta3 * b3  + dN3_dzeta4 * b4)  ;
-    shp[1][3] = ( 1 / Jdet ) * (dN4_dzeta1 * b1  + dN4_dzeta2 * b2  + dN4_dzeta3 * b3  + dN4_dzeta4 * b4)  ;
-    shp[1][4] = ( 1 / Jdet ) * (dN5_dzeta1 * b1  + dN5_dzeta2 * b2  + dN5_dzeta3 * b3  + dN5_dzeta4 * b4)  ;
-    shp[1][5] = ( 1 / Jdet ) * (dN6_dzeta1 * b1  + dN6_dzeta2 * b2  + dN6_dzeta3 * b3  + dN6_dzeta4 * b4)  ;
-    shp[1][6] = ( 1 / Jdet ) * (dN7_dzeta1 * b1  + dN7_dzeta2 * b2  + dN7_dzeta3 * b3  + dN7_dzeta4 * b4)  ;
-    shp[1][7] = ( 1 / Jdet ) * (dN8_dzeta1 * b1  + dN8_dzeta2 * b2  + dN8_dzeta3 * b3  + dN8_dzeta4 * b4)  ;
-    shp[1][8] = ( 1 / Jdet ) * (dN9_dzeta1 * b1  + dN9_dzeta2 * b2  + dN9_dzeta3 * b3  + dN9_dzeta4 * b4)  ;
-    shp[1][9] = ( 1 / Jdet ) * (dN10_dzeta1 * b1 + dN10_dzeta2 * b2 + dN10_dzeta3 * b3 + dN10_dzeta4 * b4) ;
+    shp[1][0] = (4 * zeta1 - 1) * Jx32 / Jdet ;
+    shp[1][1] = (4 * zeta2 - 1) * Jx13 / Jdet ;
+    shp[1][2] = (4 * zeta3 - 1) * Jx21 / Jdet ;
+    shp[1][3] = 4 * (zeta2 * Jx32 + zeta1 * Jx13) / Jdet ;
+    shp[1][4] = 4 * (zeta3 * Jx13 + zeta2 * Jx21) / Jdet ;
+    shp[1][5] = 4 * (zeta1 * Jx21 + zeta3 * Jx32) / Jdet ;
 
-    // qz1 - qz10 (17.24)
-    shp[2][0] = ( 1 / Jdet ) * (dN1_dzeta1 * c1  + dN1_dzeta2 * c2  + dN1_dzeta3 * c3  + dN1_dzeta4 * c4)  ;
-    shp[2][1] = ( 1 / Jdet ) * (dN2_dzeta1 * c1  + dN2_dzeta2 * c2  + dN2_dzeta3 * c3  + dN2_dzeta4 * c4)  ;
-    shp[2][2] = ( 1 / Jdet ) * (dN3_dzeta1 * c1  + dN3_dzeta2 * c2  + dN3_dzeta3 * c3  + dN3_dzeta4 * c4)  ;
-    shp[2][3] = ( 1 / Jdet ) * (dN4_dzeta1 * c1  + dN4_dzeta2 * c2  + dN4_dzeta3 * c3  + dN4_dzeta4 * c4)  ;
-    shp[2][4] = ( 1 / Jdet ) * (dN5_dzeta1 * c1  + dN5_dzeta2 * c2  + dN5_dzeta3 * c3  + dN5_dzeta4 * c4)  ;
-    shp[2][5] = ( 1 / Jdet ) * (dN6_dzeta1 * c1  + dN6_dzeta2 * c2  + dN6_dzeta3 * c3  + dN6_dzeta4 * c4)  ;
-    shp[2][6] = ( 1 / Jdet ) * (dN7_dzeta1 * c1  + dN7_dzeta2 * c2  + dN7_dzeta3 * c3  + dN7_dzeta4 * c4)  ;
-    shp[2][7] = ( 1 / Jdet ) * (dN8_dzeta1 * c1  + dN8_dzeta2 * c2  + dN8_dzeta3 * c3  + dN8_dzeta4 * c4)  ;
-    shp[2][8] = ( 1 / Jdet ) * (dN9_dzeta1 * c1  + dN9_dzeta2 * c2  + dN9_dzeta3 * c3  + dN9_dzeta4 * c4)  ;
-    shp[2][9] = ( 1 / Jdet ) * (dN10_dzeta1 * c1 + dN10_dzeta2 * c2 + dN10_dzeta3 * c3 + dN10_dzeta4 * c4) ;
-
-    // N1 - N10 (notice N9 and N10 are switched up)
-    shp[3][0] = zeta[0] * (2 * zeta[0] - 1) ;
-    shp[3][1] = zeta[1] * (2 * zeta[1] - 1) ;
-    shp[3][2] = zeta[2] * (2 * zeta[2] - 1) ;
-    shp[3][3] = zeta4 * (2 * zeta4 - 1)     ;
-    shp[3][4] = 4 * zeta[0] * zeta[1]       ;
-    shp[3][5] = 4 * zeta[1] * zeta[2]       ;
-    shp[3][6] = 4 * zeta[2] * zeta[0]       ;
-    shp[3][7] = 4 * zeta[0] * zeta4         ;
-    shp[3][9] = 4 * zeta[1] * zeta4         ; 
-    shp[3][8] = 4 * zeta[2] * zeta4         ; 
+    // N1 - N6
+    shp[2][0] = zeta1 * (2 * zeta1 - 1) ;
+    shp[2][1] = zeta2 * (2 * zeta2 - 1) ;
+    shp[2][2] = zeta3 * (2 * zeta3 - 1) ;
+    shp[2][3] = 4 * zeta1 * zeta2 ;
+    shp[2][4] = 4 * zeta2 * zeta3 ;
+    shp[2][5] = 4 * zeta3 * zeta1 ;
 
     return ;
 }

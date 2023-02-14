@@ -44,13 +44,6 @@
 #include <NDMaterial.h>
 
 
-//Number of Gauss-points
-// #define NumGaussPoints 4
-// #define NumNodes 10
-// #define NumDOFsPerNode 3
-// #define NumStressComponents 6
-// #define NumDOFsTotal NumNodes*NumDOFsPerNode
-
 class TenNodeTetrahedron : public Element {
 
 public :
@@ -188,8 +181,6 @@ private :
     static Matrix B ;
 
     //quadrature data
-    static const double root3 ;
-    static const double one_over_root3 ;
     static const double alpha ;
     static const double beta ;
     static const double sg[4] ;

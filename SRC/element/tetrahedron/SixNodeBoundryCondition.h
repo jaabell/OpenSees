@@ -44,14 +44,6 @@
 #include <Node.h>
 #include <NDMaterial.h>
 
-
-//Number of Gauss-points
-// #define NumGaussPoints 3
-// #define NumNodes 6
-// #define NumDOFsPerNode 1
-// #define NumStressComponents 3
-// #define NumDOFsTotal NumNodes*NumDOFsPerNode
-
 class SixNodeBoundryCondition : public Element {
 
 public :
@@ -69,7 +61,8 @@ public :
                        int node6,
                        double beta = 0.0,
                        double k    = 0.0,
-                       double tamb = 0.0);
+                       double tamb = 0.0,
+                       double th   = 1.0);
 
     //destructor
     virtual ~SixNodeBoundryCondition( ) ;
@@ -108,7 +101,6 @@ public :
     const Matrix &getTangentStiff();
     const Matrix &getInitialStiff();
     const Matrix &getMass();
-    const Matrix &getDamp();
 
     void zeroLoad( ) ;
     int addLoad(ElementalLoad *theLoad, double loadFactor);
@@ -155,7 +147,7 @@ private :
     void shp3d( 
         const double zeta[3],  // Tetrahedral coordinates  (input)
         double &xsj,         // Jacobian determinant (output)
-        double shp[4][NumNodes], // Shape function and derivatives values at the tetrahedral coordinates (output) 
+        double shp[3][NumNodes], // Shape function and derivatives values at the tetrahedral coordinates (output) 
         const double xl[3][NumNodes]   ); // Node coordinates (input)
 
     //
@@ -165,7 +157,9 @@ private :
     ID connectedExternalNodes ;  //four node numbers
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
-    double inp_info[3];
+    double inp_info[4];
+    double appliedQ = 0.0;
+    int applyLoad ;
 
     Vector *load;
     Matrix *Ki;
@@ -177,16 +171,13 @@ private :
     static Matrix stiff ;
     static Vector resid ;
     static Matrix mass ; 
-    static Matrix damping ;
 
     static Matrix B ;
 
     //quadrature data
-    static const double root3 ;
-    static const double one_over_root3 ;
     static const double alpha ;
     static const double beta ;
-    static const double sg[4] ;
+    static const double sg[3] ;
     static const double wg[1] ;
 
     //local nodal coordinates, three coordinates for each of four nodes
@@ -207,7 +198,7 @@ private :
     void computeBasis( ) ;
 
     //compute B matrix
-    const Matrix& computeB( int node, const double shp[4][NumNodes] ) ;
+    const Matrix& computeB( int node, const double shp[3][NumNodes] ) ;
 } ;
 
 #endif

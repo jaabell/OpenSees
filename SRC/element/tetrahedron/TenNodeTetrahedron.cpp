@@ -104,14 +104,9 @@ Matrix  TenNodeTetrahedron::damping(NumDOFsTotal, NumDOFsTotal) ;
 
 
 //quadrature data
-const double  TenNodeTetrahedron::root3 = sqrt(3.0) ;
-const double  TenNodeTetrahedron::one_over_root3 = 1.0 / root3 ;
-
 const double  TenNodeTetrahedron::alpha = (5.0 + 3.0*sqrt(5.0))/20. ;
 const double  TenNodeTetrahedron::beta = (5.0 - sqrt(5.0))/20. ;
-
 const double  TenNodeTetrahedron::sg[] = { alpha, beta, beta, beta} ;
-
 const double  TenNodeTetrahedron::wg[] = { 1.0 / 4.0 } ;
 
 

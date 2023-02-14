@@ -49,10 +49,10 @@
 
 void* OPS_TenNodeTetrahedronThermal()
 {
-    if (OPS_GetNumRemainingInputArgs() < 11)
+    if (OPS_GetNumRemainingInputArgs() < 12)
     {
         opserr << "WARNING insufficient arguments\n";
-        opserr << "Want: element TenNodeTetrahedronThermal eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? kxx, kyy, kzz, rho, cp\n";
+        opserr << "Want: element TenNodeTetrahedronThermal eleTag? Node1? Node2? Node3? Node4? Node5? Node6? Node7? Node8? Node9? Node10? kxx, kyy, kzz, rho, cp, Q\n";
         return 0;
     }
 
@@ -64,12 +64,12 @@ void* OPS_TenNodeTetrahedronThermal()
         return 0;
     }
 
-    double data[5] = {0, 0, 0, 0, 0};
+    double data[6] = {0, 0, 0, 0, 0, 0};
     num = OPS_GetNumRemainingInputArgs();
 
-    if (num > 5)
+    if (num > 6)
     {
-        num = 5;
+        num = 6;
     }
     if (num > 0)
     {
@@ -80,7 +80,7 @@ void* OPS_TenNodeTetrahedronThermal()
         }
     }
 
-    return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], data[0], data[1], data[2], data[3], data[4]);
+    return new TenNodeTetrahedronThermal(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[9], idata[10], data[0], data[1], data[2], data[3], data[4], data[5]);
 }
 
 //static data
@@ -91,15 +91,11 @@ Matrix  TenNodeTetrahedronThermal::mass(NumDOFsTotal, NumDOFsTotal)    ;
 Matrix  TenNodeTetrahedronThermal::damping(NumDOFsTotal, NumDOFsTotal) ;
 
 //quadrature data
-const double  TenNodeTetrahedronThermal::root3 = sqrt( 3.0 ) ;
-const double  TenNodeTetrahedronThermal::one_over_root3 = 1.0 / root3 ;
-
 const double  TenNodeTetrahedronThermal::alpha = ( 5.0 + 3.0 * sqrt( 5.0 ) ) / 20. ;
-const double  TenNodeTetrahedronThermal::beta  = ( 5.0 - sqrt( 5.0 ) ) / 20.       ;
+const double  TenNodeTetrahedronThermal::beta = ( 5.0 - sqrt( 5.0 ) ) / 20. ;
 
-const double  TenNodeTetrahedronThermal::sg[]  = { alpha, beta, beta, beta } ;
-const double  TenNodeTetrahedronThermal::wg[]  = { 1.0 / 4.0 }              ;
-// const double  TenNodeTetrahedronThermal::wg[]  = { 1.0 / 24.0 }              ;
+const double  TenNodeTetrahedronThermal::sg[] = { alpha, beta, beta, beta } ;
+const double  TenNodeTetrahedronThermal::wg[] = { 1.0 / 4.0 } ;
 
 // static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 Matrix TenNodeTetrahedronThermal::B(NumStressComponents, NumDOFsPerNode) ;
@@ -109,15 +105,16 @@ Matrix TenNodeTetrahedronThermal::B(NumStressComponents, NumDOFsPerNode) ;
 TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
     : Element( 0, ELE_TAG_TenNodeTetrahedronThermal ),
       connectedExternalNodes(NumNodes),
-      load(0), Ki(0)
+      applyLoad(0), load(0), Ki(0)
 {
     B.Zero();
 
-    krc[0] = 0.0;
-    krc[1] = 0.0;
-    krc[2] = 0.0;
-    krc[3] = 0.0;
-    krc[4] = 0.0;
+    inp_info[0] = 0.0;
+    inp_info[1] = 0.0;
+    inp_info[2] = 0.0;
+    inp_info[3] = 0.0;
+    inp_info[4] = 0.0;
+    inp_info[5] = 0.0;
 
     for (int i = 0; i < NumNodes; i++ ) {
         nodePointers[i] = 0;
@@ -142,9 +139,10 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
         double kyy,
         double kzz,
         double rho,
-        double cp)
+        double cp,
+        double Q)
     : Element(tag, ELE_TAG_TenNodeTetrahedronThermal),
-      connectedExternalNodes(NumNodes), load(0), Ki(0)
+      connectedExternalNodes(NumNodes), applyLoad(0), load(0), Ki(0)
 {
     B.Zero();
     connectedExternalNodes(0) = node1 ;
@@ -162,11 +160,12 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
         nodePointers[i] = 0;
     }
 
-    krc[0] = kxx;
-    krc[1] = kyy;
-    krc[2] = kzz;
-    krc[3] = rho;
-    krc[4] = cp;
+    inp_info[0] = kxx;
+    inp_info[1] = kyy;
+    inp_info[2] = kzz;
+    inp_info[3] = rho;
+    inp_info[4] = cp;
+    inp_info[5] = Q;
 }
 
 //******************************************************************
@@ -264,7 +263,27 @@ void  TenNodeTetrahedronThermal::Print(OPS_Stream &s, int flag)
             s << "#NODE " << nodeCrd(0) << " " << nodeCrd(1) << " " << nodeCrd(2)
               << " " << nodeDisp(0) << " " << nodeDisp(1) << " " << nodeDisp(2) << endln;
         }
+
+        const int numMaterials = 1 ;
+        static Vector avgStrain(nstress) ;
+        avgStrain.Zero() ;
+
+        // for (int i = 0; i < numMaterials; i++)
+        // {
+        //     avgStrain += materialPointers[i]->getStrain() ;
+        // }
+
+        // avgStrain /= numMaterials ; 
+
+        s << "#AVERAGE_STRAIN " ;
+        for (int i = 0; i < nstress; i++)
+        {
+            s << avgStrain(i) << " " ;
+        }
+        s << endln ;
+
     }
+
 
     if (flag == OPS_PRINT_CURRENTSTATE) {
         s << "Standard TenNodeTetrahedronThermal \n";
@@ -292,10 +311,6 @@ const Matrix&  TenNodeTetrahedronThermal::getTangentStiff( )
 
     //do tangent and residual here
     formResidAndTangent( tang_flag ) ;
-
-    // opserr << "STIFF = " << stiff << endln ;
-
-    // exit( -1 ) ;
 
     return stiff ;
 }
@@ -394,9 +409,9 @@ const Matrix&  TenNodeTetrahedronThermal::getInitialStiff( )
             }
         } // end for p
 
-        dd(0, 0) = krc[0] * dvol[i];
-        dd(1, 1) = krc[1] * dvol[i];
-        dd(2, 2) = krc[2] * dvol[i];
+        dd(0, 0) = inp_info[0] * dvol[i];
+        dd(1, 1) = inp_info[1] * dvol[i];
+        dd(2, 2) = inp_info[2] * dvol[i];
 
         jj = 0;
         for ( j = 0; j < numberNodes; j++ )
@@ -456,10 +471,6 @@ const Matrix&  TenNodeTetrahedronThermal::getDamp( )
 
     formDampingTerms( tangFlag ) ;
 
-    // opserr << "DAMP = " << damping << endln ;
-
-    // exit( -1 ) ;
-
     return damping ;
 }
 
@@ -468,12 +479,31 @@ void  TenNodeTetrahedronThermal::zeroLoad( )
     if (load != 0)
         load->Zero();
 
+    applyLoad = 0 ;
+    appliedQ = 0 ;
+
     return ;
 }
 
 int
 TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
 {
+    int type;
+    const Vector &data = theLoad->getData(type, loadFactor);
+
+    if (type == LOAD_TAG_BrickSelfWeight) {
+        applyLoad = 1;
+        appliedQ += loadFactor * inp_info[5];
+        return 0;
+    } else if (type == LOAD_TAG_SelfWeight) {
+        // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
+        applyLoad = 1;
+        appliedQ += loadFactor * data(5) * inp_info[5];
+        return 0;
+    } else {
+        opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
+        return -1;
+    }
     return -1;
 }
 
@@ -513,6 +543,9 @@ const Vector&  TenNodeTetrahedronThermal::getResistingForceIncInertia( )
     formDampingTerms( tang_flag ) ;
 
     res = resid;
+
+    if (load != 0)
+        res -= *load;
 
     return res;
 }
@@ -610,7 +643,7 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
 
             if ( tangFlag == 1 )
             {
-                temp *= krc[3] * krc[4] ; // rho * cp
+                temp *= inp_info[3] * inp_info[4] ; // rho * cp
 
                 //node-node mass
                 kk = 0 ;
@@ -744,9 +777,9 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
         } // end for p
 
         if ( tang_flag == 1 ) {
-            dd(0, 0) = krc[0] * dvol[i];
-            dd(1, 1) = krc[1] * dvol[i];
-            dd(2, 2) = krc[2] * dvol[i]; 
+            dd(0, 0) = inp_info[0] * dvol[i];
+            dd(1, 1) = inp_info[1] * dvol[i];
+            dd(2, 2) = inp_info[2] * dvol[i]; 
         } //end if tang_flag
 
         //residual and tangent calculations node loops
@@ -800,6 +833,7 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 
     return ;
 }
+
 
 //************************************************************************
 
@@ -873,16 +907,17 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
         return res;
     }
 
-    static Vector dData(9);
+    static Vector dData(10);
     dData(0) = alphaM;
     dData(1) = betaK;
     dData(2) = betaK0;
     dData(3) = betaKc;
-    dData(4) = krc[0];
-    dData(5) = krc[1];
-    dData(6) = krc[2];
-    dData(7) = krc[3];
-    dData(8) = krc[4];
+    dData(4) = inp_info[0];
+    dData(5) = inp_info[1];
+    dData(6) = inp_info[2];
+    dData(7) = inp_info[3];
+    dData(8) = inp_info[4];
+    dData(9) = inp_info[5];
 
     if (theChannel.sendVector(dataTag, commitTag, dData) < 0) {
         opserr << "TenNodeTetrahedronThermal::sendSelf() - failed to send double data\n";
@@ -909,7 +944,7 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 
     this->setTag(idData(30));
 
-    static Vector dData(9);
+    static Vector dData(10);
     if (theChannel.recvVector(dataTag, commitTag, dData) < 0) {
         opserr << "DispBeamColumn2d::sendSelf() - failed to recv double data\n";
         return -1;
@@ -919,11 +954,12 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
     betaK  = dData(1);
     betaK0 = dData(2);
     betaKc = dData(3);
-    krc[0] = dData(4);
-    krc[1] = dData(5);
-    krc[2] = dData(6);
-    krc[3] = dData(7);
-    krc[4] = dData(8);
+    inp_info[0] = dData(4);
+    inp_info[1] = dData(5);
+    inp_info[2] = dData(6);
+    inp_info[3] = dData(7);
+    inp_info[4] = dData(8);
+    inp_info[5] = dData(9);
 
     connectedExternalNodes(0) = idData(20);
     connectedExternalNodes(1) = idData(21);
@@ -1090,7 +1126,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 
     else if (strcmp(argv[0], "stresses") == 0)
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 10; i++)
         {
             output.tag("GaussPoint");
             output.attr("number", i + 1);
@@ -1098,18 +1134,15 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
             output.tag("ResponseType", "sigma11");
             output.tag("ResponseType", "sigma22");
             output.tag("ResponseType", "sigma33");
-            output.tag("ResponseType", "sigma12");
-            output.tag("ResponseType", "sigma23");
-            output.tag("ResponseType", "sigma13");
 
             output.endTag(); // GaussPoint
         }
-        theResponse =  new ElementResponse(this, 5, Vector(6*10));
+        theResponse =  new ElementResponse(this, 5, Vector(3*10));
     }
 
     else if (strcmp(argv[0], "strains") == 0)
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 10; i++)
         {
             output.tag("GaussPoint");
             output.attr("number", i + 1);
@@ -1117,13 +1150,10 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
             output.tag("ResponseType", "eps11");
             output.tag("ResponseType", "eps22");
             output.tag("ResponseType", "eps33");
-            output.tag("ResponseType", "eps12");
-            output.tag("ResponseType", "eps23");
-            output.tag("ResponseType", "eps13");
 
             output.endTag(); // GaussPoint
         }
-        theResponse =  new ElementResponse(this, 5, Vector(6*10));
+        theResponse =  new ElementResponse(this, 6, Vector(3*10));
     }
 
     output.endTag(); // ElementOutput
@@ -1134,7 +1164,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
 int
 TenNodeTetrahedronThermal::getResponse(int responseID, Information &eleInfo)
 {
-    static Vector stresses(3*10);
+    static Vector stresses(3);
 
     if (responseID == 1)
         return eleInfo.setVector(this->getResistingForce());
@@ -1147,6 +1177,35 @@ TenNodeTetrahedronThermal::getResponse(int responseID, Information &eleInfo)
 
     else if (responseID == 4)
         return eleInfo.setMatrix(this->getDamp());
+    
+    // else if (responseID == 5) {
+
+    //     // Loop over the integration points
+    //     int cnt = 0;
+    //     for (int i = 0; i < 10; i++) {
+
+    //         // Get material stress response
+    //         const Vector &sigma = materialPointers[i]->getStress();
+    //         stresses(cnt++) = sigma(0);
+    //         stresses(cnt++) = sigma(1);
+    //         stresses(cnt++) = sigma(2);
+    //     }
+    //     return eleInfo.setVector(stresses);
+
+    // } else if (responseID == 6) {
+
+    //     // Loop over the integration points
+    //     int cnt = 0;
+    //     for (int i = 0; i < 10; i++) {
+
+    //         // Get material stress response
+    //         const Vector &sigma = materialPointers[i]->getStrain();
+    //         stresses(cnt++) = sigma(0);
+    //         stresses(cnt++) = sigma(1);
+    //         stresses(cnt++) = sigma(2);
+    //     }
+    //     return eleInfo.setVector(stresses);
+    // }
 
     else
         return -1;

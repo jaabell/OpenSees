@@ -44,13 +44,6 @@
 #include <NDMaterial.h>
 
 
-//Number of Gauss-points
-// #define NumGaussPoints 4
-// #define NumNodes 10
-// #define NumDOFsPerNode 1
-// #define NumStressComponents 3
-// #define NumDOFsTotal NumNodes*NumDOFsPerNode
-
 class TenNodeTetrahedronThermal : public Element {
 
 public :
@@ -74,7 +67,8 @@ public :
                        double kyy = 0.0,
                        double kzz = 0.0,
                        double rho = 0.0,
-                       double cp  = 0.0);
+                       double cp  = 0.0,
+                       double Q   = 0.0);
 
     //destructor
     virtual ~TenNodeTetrahedronThermal( ) ;
@@ -170,7 +164,10 @@ private :
     ID connectedExternalNodes ;  //four node numbers
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
-    double krc[5];
+    double inp_info[6] ;
+    double appliedQ = 0.0 ;
+    int applyLoad ;
+
 
     Vector *load;
     Matrix *Ki;
@@ -187,8 +184,6 @@ private :
     static Matrix B ;
 
     //quadrature data
-    static const double root3 ;
-    static const double one_over_root3 ;
     static const double alpha ;
     static const double beta ;
     static const double sg[4] ;
