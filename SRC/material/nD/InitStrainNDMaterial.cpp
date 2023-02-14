@@ -22,13 +22,13 @@
 // $Date$
 // $Source$
 
-// Written: MHS
-// Created: Dec 2012
+// Written: Jose Larenas (Universidad de los Andes, Chile)
+// Created: Dec 2023
 
 #include <stdlib.h>
 #include <math.h>
 
-#include <InitStressNDMaterial.h>
+#include <InitStrainNDMaterial.h>
 #include <Matrix.h>
 #include <ID.h>
 #include <Channel.h>
@@ -41,7 +41,7 @@
 #define OPS_Export 
 
 OPS_Export void *
-OPS_InitStressNDMaterial(void)
+OPS_InitStrainNDMaterial(void)
 {
   // Pointer to a uniaxial material that will be returned
   NDMaterial *theMaterial = 0;
@@ -57,7 +57,7 @@ OPS_InitStressNDMaterial(void)
   int    dim[1];
   int numData = 2;
   if (OPS_GetIntInput(&numData, iData) != 0) {
-    opserr << "WARNING invalid nDMaterial InitStressNDMaterial $tag $otherTag $nDim" << endln;
+    opserr << "WARNING invalid nDMaterial InitStrainNDMaterial $tag $otherTag $nDim" << endln;
     return 0;
   }
 
@@ -96,13 +96,13 @@ OPS_InitStressNDMaterial(void)
 
   // Parsing was successful, allocate the material
   if (numArgs == 4) {
-    theMaterial = new InitStressNDMaterial(iData[0], *theOtherMaterial, sig0, dim[0]);
+    theMaterial = new InitStrainNDMaterial(iData[0], *theOtherMaterial, sig0, dim[0]);
   } else {
-    theMaterial = new InitStressNDMaterial(iData[0], *theOtherMaterial, sig0);
+    theMaterial = new InitStrainNDMaterial(iData[0], *theOtherMaterial, sig0);
   }
 
   if (theMaterial == 0) {
-    opserr << "WARNING could not create uniaxialMaterial of type InitStressNDMaterial\n";
+    opserr << "WARNING could not create uniaxialMaterial of type InitStrainNDMaterial\n";
     return 0;
   }
 
@@ -110,8 +110,8 @@ OPS_InitStressNDMaterial(void)
 }
 
 
-InitStressNDMaterial::InitStressNDMaterial(int tag, NDMaterial &material, const Vector &epsini, int ndim)
-  :NDMaterial(tag,ND_TAG_InitStressNDMaterial), theMaterial(0),
+InitStrainNDMaterial::InitStrainNDMaterial(int tag, NDMaterial &material, const Vector &epsini, int ndim)
+  :NDMaterial(tag,ND_TAG_InitStrainNDMaterial), theMaterial(0),
    epsInit(3*ndim-3), sigInit(sigini)
 {
 
@@ -126,109 +126,92 @@ InitStressNDMaterial::InitStressNDMaterial(int tag, NDMaterial &material, const 
   }
 
   if (theMaterial == 0) {
-    opserr <<  "InitStressNDMaterial::InitStressNDMaterial -- failed to get copy of material\n";
+    opserr <<  "InitStrainNDMaterial::InitStrainNDMaterial -- failed to get copy of material\n";
     exit(-1);
   }
 
-  // determine the initial strain
-  int mDim = 3*numDim-3;
-  double tol=1e-12;
-  Vector dSig(sigInit);
-  Vector dStrain(mDim);
-  Vector tStrain(mDim);
-  Vector tStress(mDim);
-  Matrix K(mDim,mDim);
-  int count = 0;
-
   epsInit = epsini;
-
-  if (dStrain.Norm() < tol) 
-    theMaterial->setTrialStrain(epsInit);
-  else {
-    opserr << "WARNING: InitStressNDMaterial - could not find initStrain to within tol for material: " << tag;
-    opserr << " wanted sigInit: " << sigInit << " using tStress: " << theMaterial->getStress() << endln;
-  }
-
+  theMaterial->setTrialStrain(epsInit);
   theMaterial->commitState();
 }
 
-InitStressNDMaterial::InitStressNDMaterial()
-  :NDMaterial(0,ND_TAG_InitStressNDMaterial), theMaterial(0),
+InitStrainNDMaterial::InitStrainNDMaterial()
+  :NDMaterial(0,ND_TAG_InitStrainNDMaterial), theMaterial(0),
    epsInit(6), sigInit(6)
 {
 
 }
 
-InitStressNDMaterial::~InitStressNDMaterial()
+InitStrainNDMaterial::~InitStrainNDMaterial()
 {
   if (theMaterial)
     delete theMaterial;
 }
 
 int 
-InitStressNDMaterial::setTrialStrain(const Vector &strain) 
+InitStrainNDMaterial::setTrialStrain(const Vector &strain) 
 {
-  return theMaterial->setTrialStrain(strain+epsInit);
+  return theMaterial->setTrialStrain(strain-epsInit);
 }
 
 int 
-InitStressNDMaterial::setTrialStrain(const Vector &strain, 
+InitStrainNDMaterial::setTrialStrain(const Vector &strain, 
 				     const Vector &strainRate)
 {
-  return theMaterial->setTrialStrain(strain+epsInit, strainRate);
+  return theMaterial->setTrialStrain(strain-epsInit, strainRate);
 }
 
 int 
-InitStressNDMaterial::setTrialStrainIncr(const Vector &strain) 
+InitStrainNDMaterial::setTrialStrainIncr(const Vector &strain) 
 {
   return theMaterial->setTrialStrainIncr(strain);
 }
 
 int 
-InitStressNDMaterial::setTrialStrainIncr(const Vector &strain, 
+InitStrainNDMaterial::setTrialStrainIncr(const Vector &strain, 
 					 const Vector &strainRate)
 {
   return theMaterial->setTrialStrainIncr(strain, strainRate);
 }
 
 const Vector &
-InitStressNDMaterial::getStress(void)
+InitStrainNDMaterial::getStress(void)
 {
   return theMaterial->getStress();
 }
 
 const Matrix &
-InitStressNDMaterial::getTangent(void)
+InitStrainNDMaterial::getTangent(void)
 {
   return theMaterial->getTangent();  
 }
 
 const Matrix &
-InitStressNDMaterial::getInitialTangent(void)
+InitStrainNDMaterial::getInitialTangent(void)
 {
   return theMaterial->getInitialTangent();  
 }
 
 const Vector & 
-InitStressNDMaterial::getStrain(void)
+InitStrainNDMaterial::getStrain(void)
 {
   return theMaterial->getStrain();
 }
 
 int 
-InitStressNDMaterial::commitState(void)
+InitStrainNDMaterial::commitState(void)
 {	
   return theMaterial->commitState();
 }
 
 int 
-InitStressNDMaterial::revertToLastCommit(void)
+InitStrainNDMaterial::revertToLastCommit(void)
 {
   return theMaterial->revertToLastCommit();
 }
 
 int 
-InitStressNDMaterial::revertToStart(void)
+InitStrainNDMaterial::revertToStart(void)
 {
   int res = 0;
   res = theMaterial->revertToStart();
@@ -238,26 +221,26 @@ InitStressNDMaterial::revertToStart(void)
 }
 
 double 
-InitStressNDMaterial::getRho(void) 
+InitStrainNDMaterial::getRho(void) 
 {
 	return theMaterial->getRho();
 }
 
 NDMaterial *
-InitStressNDMaterial::getCopy(void)
+InitStrainNDMaterial::getCopy(void)
 {
-  InitStressNDMaterial *theCopy = 
-    new InitStressNDMaterial(this->getTag(), *theMaterial, sigInit, numDim);
+  InitStrainNDMaterial *theCopy = 
+    new InitStrainNDMaterial(this->getTag(), *theMaterial, sigInit, numDim);
         
   return theCopy;
 }
 
 NDMaterial *
-InitStressNDMaterial::getCopy(const char *type)
+InitStrainNDMaterial::getCopy(const char *type)
 {
   /*if (strcmp(type,"ThreeDimensional") == 0) {
-    InitStressNDMaterial *theCopy = 
-      new InitStressNDMaterial(this->getTag(), *theMaterial, sigInit);
+    InitStrainNDMaterial *theCopy = 
+      new InitStrainNDMaterial(this->getTag(), *theMaterial, sigInit);
 
     return theCopy;
   }
@@ -268,13 +251,13 @@ InitStressNDMaterial::getCopy(const char *type)
 }
 
 const char*
-InitStressNDMaterial::getType(void) const
+InitStrainNDMaterial::getType(void) const
 {
   return theMaterial->getType();
 }
 
 int 
-InitStressNDMaterial::sendSelf(int cTag, Channel &theChannel)
+InitStrainNDMaterial::sendSelf(int cTag, Channel &theChannel)
 {
   int dbTag = this->getDbTag();
 
@@ -288,7 +271,7 @@ InitStressNDMaterial::sendSelf(int cTag, Channel &theChannel)
   }
   dataID(2) = matDbTag;
   if (theChannel.sendID(dbTag, cTag, dataID) < 0) {
-    opserr << "InitStressNDMaterial::sendSelf() - failed to send the ID\n";
+    opserr << "InitStrainNDMaterial::sendSelf() - failed to send the ID\n";
     return -1;
   }
 
@@ -296,12 +279,12 @@ InitStressNDMaterial::sendSelf(int cTag, Channel &theChannel)
   //dataVec(0) = epsInit;
 
   if (theChannel.sendVector(dbTag, cTag, dataVec) < 0) {
-    opserr << "InitStressNDMaterial::sendSelf() - failed to send the Vector\n";
+    opserr << "InitStrainNDMaterial::sendSelf() - failed to send the Vector\n";
     return -2;
   }
 
   if (theMaterial->sendSelf(cTag, theChannel) < 0) {
-    opserr << "InitStressNDMaterial::sendSelf() - failed to send the Material\n";
+    opserr << "InitStrainNDMaterial::sendSelf() - failed to send the Material\n";
     return -3;
   }
 
@@ -309,14 +292,14 @@ InitStressNDMaterial::sendSelf(int cTag, Channel &theChannel)
 }
 
 int 
-InitStressNDMaterial::recvSelf(int cTag, Channel &theChannel, 
+InitStrainNDMaterial::recvSelf(int cTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker)
 {
   int dbTag = this->getDbTag();
 
   static ID dataID(3);
   if (theChannel.recvID(dbTag, cTag, dataID) < 0) {
-    opserr << "InitStressNDMaterial::recvSelf() - failed to get the ID\n";
+    opserr << "InitStrainNDMaterial::recvSelf() - failed to get the ID\n";
     return -1;
   }
   this->setTag(int(dataID(0)));
@@ -326,7 +309,7 @@ InitStressNDMaterial::recvSelf(int cTag, Channel &theChannel,
     int matClassTag = int(dataID(1));
     theMaterial = theBroker.getNewNDMaterial(matClassTag);
     if (theMaterial == 0) {
-      opserr << "InitStressNDMaterial::recvSelf() - failed to create Material with classTag " 
+      opserr << "InitStrainNDMaterial::recvSelf() - failed to create Material with classTag " 
 	   << dataID(0) << endln;
       return -2;
     }
@@ -335,23 +318,23 @@ InitStressNDMaterial::recvSelf(int cTag, Channel &theChannel,
 
   static Vector dataVec(1);
   if (theChannel.recvVector(dbTag, cTag, dataVec) < 0) {
-    opserr << "InitStressNDMaterial::recvSelf() - failed to get the Vector\n";
+    opserr << "InitStrainNDMaterial::recvSelf() - failed to get the Vector\n";
     return -3;
   }
 
   //epsInit = dataVec(0);
   
   if (theMaterial->recvSelf(cTag, theChannel, theBroker) < 0) {
-    opserr << "InitStressNDMaterial::recvSelf() - failed to get the Material\n";
+    opserr << "InitStrainNDMaterial::recvSelf() - failed to get the Material\n";
     return -4;
   }
   return 0;
 }
 
 void 
-InitStressNDMaterial::Print(OPS_Stream &s, int flag)
+InitStrainNDMaterial::Print(OPS_Stream &s, int flag)
 {
-  s << "InitStressNDMaterial tag: " << this->getTag() << endln;
+  s << "InitStrainNDMaterial tag: " << this->getTag() << endln;
   s << "\tMaterial: " << theMaterial->getTag() << endln;
   s << "\tinitital strain: " << epsInit << endln;
 }
@@ -377,7 +360,7 @@ InitStrainMaterial::updateParameter(int parameterID, Information &info)
   if (parameterID == 1) {
     this->epsInit = info.theDouble;
     if (theMaterial) {
-      theMaterial->setTrialStrain(localStrain+epsInit);
+      theMaterial->setTrialStrain(localStrain-epsInit);
       theMaterial->commitState();
     } else
       return -1;
@@ -387,13 +370,13 @@ InitStrainMaterial::updateParameter(int parameterID, Information &info)
 }
 
 const Vector &
-InitStressNDMaterial::getStressSensitivity(int gradIndex, bool conditional)
+InitStrainNDMaterial::getStressSensitivity(int gradIndex, bool conditional)
 {
   return theMaterial->getStressSensitivity(gradIndex, conditional);
 }
 
 int
-InitStressNDMaterial::commitSensitivity(const Vector &depsdh, 
+InitStrainNDMaterial::commitSensitivity(const Vector &depsdh, 
 					int gradIndex, int numGrads)
 {
   return theMaterial->commitSensitivity(depsdh, gradIndex, numGrads);

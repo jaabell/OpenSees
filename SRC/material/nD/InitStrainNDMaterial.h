@@ -22,27 +22,27 @@
 // $Date$
 // $Source$
 
-// Written: MHS
-// Created: Dec 2012
+// Written: Jose Larenas (Universidad de los Andes, Chile)
+// Created: Dec 2023
 //
 // Description: This file contains the class definition for 
-// InitStressNDMaterial.  InitStressNDMaterial wraps a UniaxialMaterial
+// InitStrainNDMaterial.  InitStrainNDMaterial wraps a UniaxialMaterial
 // and imposes an initial strain
 
 
-#ifndef InitStressNDMaterial_h
-#define InitStressNDMaterial_h
+#ifndef InitStrainNDMaterial_h
+#define InitStrainNDMaterial_h
 
 #include <NDMaterial.h>
 
-class InitStressNDMaterial : public NDMaterial
+class InitStrainNDMaterial : public NDMaterial
 {
   public:
-    InitStressNDMaterial(int tag, NDMaterial &material, const Vector &epsini, int ndim = 3); 
-    InitStressNDMaterial();
-    ~InitStressNDMaterial();
+    InitStrainNDMaterial(int tag, NDMaterial &material, const Vector &epsInit, int ndim = 3); 
+    InitStrainNDMaterial();
+    ~InitStrainNDMaterial();
     
-    const char *getClassType(void) const {return "InitStressNDMaterial";};
+    const char *getClassType(void) const {return "InitStrainNDMaterial";};
 
     int setTrialStrain(const Vector &strain); 
     int setTrialStrain(const Vector &strain, const Vector &rate); 
