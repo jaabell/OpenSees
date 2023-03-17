@@ -94,7 +94,7 @@ class IncrementalElasticIsotropicThreeDimensional : public ElasticIsotropicMater
 
     static bool printnow;
     
-    Vector depsilon_initial = Vector(6);
+    Vector depsilon_internal = Vector(6);
 };
 
 #endif

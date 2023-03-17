@@ -235,9 +235,9 @@ IncrementalElasticIsotropicThreeDimensional::getStress (void)
   double mu = 0.50*mu2;
   mu2 += lam;
 
-  double deps0 = depsilon(0) - depsilon_initial(0); 
-  double deps1 = depsilon(1) - depsilon_initial(1);
-  double deps2 = depsilon(2) - depsilon_initial(2);
+  double deps0 = depsilon(0) - depsilon_internal(0); // Δε
+  double deps1 = depsilon(1) - depsilon_internal(1); // Δε
+  double deps2 = depsilon(2) - depsilon_internal(2); // Δε
 
   D(0,0) = D(1,1) = D(2,2) = mu2;
   D(0,1) = D(1,0) = D(0,2) = D(2,0) = D(1,2) = D(2,1) = lam;
@@ -348,7 +348,7 @@ int IncrementalElasticIsotropicThreeDimensional::setParameter(const char** argv,
 
   // 4000 - init strain
   if (strcmp(argv[0], "initNormalStrain") == 0) {
-    double initNormalStrain = depsilon_initial(0)
+    double initNormalStrain = depsilon_internal(0) ;
     param.setValue(initNormalStrain);
     return param.addObject(4001, this);
   }
@@ -374,8 +374,8 @@ int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID
   case 4001:
   {
     double initNormalStrain = info.theDouble;
-    depsilon_initial.Zero();
-    depsilon_initial(0) = depsilon_initial(1) = depsilon_initial(2) = initNormalStrain;
+    depsilon_internal.Zero();
+    depsilon_internal(0) = depsilon_internal(1) = depsilon_internal(2) = initNormalStrain;
     return 0;
   }
 

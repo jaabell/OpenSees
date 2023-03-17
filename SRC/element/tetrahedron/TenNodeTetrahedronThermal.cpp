@@ -1083,36 +1083,7 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
         output.attr(outputData, nodePointers[i - 1]->getTag());
     }
 
-    if (strcmp(argv[0], "force") == 0 || strcmp(argv[0], "forces") == 0)
-    {
-        for (int i = 1; i <= 10; i++)
-        {
-            sprintf(outputData, "P1_%d", i);
-            output.tag("ResponseType", outputData);
-            sprintf(outputData, "P2_%d", i);
-            output.tag("ResponseType", outputData);
-            sprintf(outputData, "P3_%d", i);
-            output.tag("ResponseType", outputData);
-        }
-        theResponse = new ElementResponse(this, 1, resid);
-    }
-
-    else if (strcmp(argv[0],"stiff") == 0 || strcmp(argv[0],"stiffness") == 0)
-    {
-        theResponse = new ElementResponse(this, 2, stiff);
-    }
-
-    else if (strcmp(argv[0],"mass") == 0)
-    {
-        theResponse = new ElementResponse(this, 3, mass);
-    }
-
-    else if (strcmp(argv[0],"damp") == 0)
-    {
-        theResponse = new ElementResponse(this, 4, damping);
-    }
-
-    else if (strcmp(argv[0], "material") == 0 || strcmp(argv[0], "integrPoint") == 0)
+    if (strcmp(argv[0], "material") == 0 || strcmp(argv[0], "integrPoint") == 0)
     {
         int pointNum = atoi(argv[1]);
 
@@ -1124,36 +1095,23 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
         }
     }
 
-    else if (strcmp(argv[0], "stresses") == 0)
+    else if (strcmp(argv[0], "gaussTemperature") == 0)
     {
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 4; i++)
         {
+            opserr << "" ;
+            
             output.tag("GaussPoint");
             output.attr("number", i + 1);
 
-            output.tag("ResponseType", "sigma11");
-            output.tag("ResponseType", "sigma22");
-            output.tag("ResponseType", "sigma33");
+            output.tag("ResponseType", "T1");
+            output.tag("ResponseType", "T2");
+            output.tag("ResponseType", "T3");
+            output.tag("ResponseType", "T4");
 
             output.endTag(); // GaussPoint
         }
-        theResponse =  new ElementResponse(this, 5, Vector(3*10));
-    }
-
-    else if (strcmp(argv[0], "strains") == 0)
-    {
-        for (int i = 0; i < 10; i++)
-        {
-            output.tag("GaussPoint");
-            output.attr("number", i + 1);
-
-            output.tag("ResponseType", "eps11");
-            output.tag("ResponseType", "eps22");
-            output.tag("ResponseType", "eps33");
-
-            output.endTag(); // GaussPoint
-        }
-        theResponse =  new ElementResponse(this, 6, Vector(3*10));
+        theResponse =  new ElementResponse(this, 1, Vector(4));
     }
 
     output.endTag(); // ElementOutput
@@ -1167,48 +1125,48 @@ TenNodeTetrahedronThermal::getResponse(int responseID, Information &eleInfo)
     static Vector stresses(3);
 
     if (responseID == 1)
-        return eleInfo.setVector(this->getResistingForce());
-
-    else if (responseID == 2)
-        return eleInfo.setMatrix(this->getTangentStiff());
-
-    else if (responseID == 3)
-        return eleInfo.setMatrix(this->getMass());
-
-    else if (responseID == 4)
-        return eleInfo.setMatrix(this->getDamp());
-    
-    // else if (responseID == 5) {
-
-    //     // Loop over the integration points
-    //     int cnt = 0;
-    //     for (int i = 0; i < 10; i++) {
-
-    //         // Get material stress response
-    //         const Vector &sigma = materialPointers[i]->getStress();
-    //         stresses(cnt++) = sigma(0);
-    //         stresses(cnt++) = sigma(1);
-    //         stresses(cnt++) = sigma(2);
-    //     }
-    //     return eleInfo.setVector(stresses);
-
-    // } else if (responseID == 6) {
-
-    //     // Loop over the integration points
-    //     int cnt = 0;
-    //     for (int i = 0; i < 10; i++) {
-
-    //         // Get material stress response
-    //         const Vector &sigma = materialPointers[i]->getStrain();
-    //         stresses(cnt++) = sigma(0);
-    //         stresses(cnt++) = sigma(1);
-    //         stresses(cnt++) = sigma(2);
-    //     }
-    //     return eleInfo.setVector(stresses);
-    // }
-
+        return eleInfo.setVector(this->getGaussTemperature());
     else
         return -1;
+}
+
+Vector
+TenNodeTetrahedronThermal::getGaussTemperature( )
+{
+    static const int ndm = 3 ;
+    static const int ndf = NumDOFsPerNode ;
+    static const int numberNodes = NumNodes ;
+    static const int numberGauss = NumGaussPoints ;
+    static const int nShape = 4 ;
+    static double gaussPoint[ndm] ;
+    double xsj ;  // determinant jacaobian matrix
+    static double shp[nShape][numberNodes] ;  //shape functions at a gauss point
+    static double Shape[nShape][numberNodes][numberGauss] ; //all the shape functions
+
+    Vector gaussTemp(numberGauss) ;
+    Vector nodeTemp(NumNodes);
+
+    for (int i = 0; i < NumNodes; ++i)
+    {
+        const Vector &temperature_node_i = nodePointers[i]->getTrialDisp( ) ;
+        nodeTemp(i) = temperature_node_i(0);
+    }
+
+    for (int k = 0; k < numberGauss; k++ )
+    {
+        gaussPoint[0] = sg[k] ;
+        gaussPoint[1] = sg[abs(1 - k)] ;
+        gaussPoint[2] = sg[abs(2 - k)] ;
+
+        //get shape functions
+        shp3d( gaussPoint, xsj, shp, xl ) ;
+
+        for (int i = 0; i < NumNodes; ++i)
+            gaussTemp(k) += nodeTemp(i) * shp[3][i] ;
+
+    } //end for k
+
+    return gaussTemp ;
 }
 
 int
