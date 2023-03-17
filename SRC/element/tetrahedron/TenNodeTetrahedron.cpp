@@ -1892,133 +1892,130 @@ void
 TenNodeTetrahedron::shp3d( const double zeta[4], double &xsj, double shp[4][NumNodes], const double xl[3][NumNodes]   )
 {
 	// Mathematica formulation by Carlos Felippa.
-	// Modified by José Larenas so that it works when
-	// switching N9 with N10
+    // Modified by José Larenas so that it works when
+    // switching N9 with N10.
 
-	double zeta1 = zeta[0] ;
-	double zeta2 = zeta[1] ;
-	double zeta3 = zeta[2] ;
-	double zeta4 = 1 - zeta1 - zeta2 - zeta3;
+    double zeta1 = zeta[0] ; double zeta2 = zeta[1] ; double zeta3 = zeta[2] ; double zeta4 = 1 - zeta1 - zeta2 - zeta3;
 
-	double x1  = xl[0][0] ; double y1  = xl[1][0] ; double z1  = xl[2][0] ;
-	double x2  = xl[0][1] ; double y2  = xl[1][1] ; double z2  = xl[2][1] ;
-	double x3  = xl[0][2] ; double y3  = xl[1][2] ; double z3  = xl[2][2] ;
-	double x4  = xl[0][3] ; double y4  = xl[1][3] ; double z4  = xl[2][3] ;
-	double x5  = xl[0][4] ; double y5  = xl[1][4] ; double z5  = xl[2][4] ;
-	double x6  = xl[0][5] ; double y6  = xl[1][5] ; double z6  = xl[2][5] ;
-	double x7  = xl[0][6] ; double y7  = xl[1][6] ; double z7  = xl[2][6] ;
-	double x8  = xl[0][7] ; double y8  = xl[1][7] ; double z8  = xl[2][7] ;
-	double x9  = xl[0][8] ; double y9  = xl[1][8] ; double z9  = xl[2][8] ;
-	double x10 = xl[0][9] ; double y10 = xl[1][9] ; double z10 = xl[2][9] ;
+    double x1  = xl[0][0] ; double y1  = xl[1][0] ; double z1  = xl[2][0] ;
+    double x2  = xl[0][1] ; double y2  = xl[1][1] ; double z2  = xl[2][1] ;
+    double x3  = xl[0][2] ; double y3  = xl[1][2] ; double z3  = xl[2][2] ;
+    double x4  = xl[0][3] ; double y4  = xl[1][3] ; double z4  = xl[2][3] ;
+    double x5  = xl[0][4] ; double y5  = xl[1][4] ; double z5  = xl[2][4] ;
+    double x6  = xl[0][5] ; double y6  = xl[1][5] ; double z6  = xl[2][5] ;
+    double x7  = xl[0][6] ; double y7  = xl[1][6] ; double z7  = xl[2][6] ;
+    double x8  = xl[0][7] ; double y8  = xl[1][7] ; double z8  = xl[2][7] ;
+    double x9  = xl[0][8] ; double y9  = xl[1][8] ; double z9  = xl[2][8] ;
+    double x10 = xl[0][9] ; double y10 = xl[1][9] ; double z10 = xl[2][9] ;
 
-	double a1 = y2*(z4-z3)-y3*(z4-z2)+y4*(z3-z2)  ; double b1 = -x2*(z4-z3)+x3*(z4-z2)-x4*(z3-z2) ; double c1 = x2*(y4-y3)-x3*(y4-y2)+x4*(y3-y2) ;
-	double a2 = -y1*(z4-z3)+y3*(z4-z1)-y4*(z3-z1) ; double b2 = x1*(z4-z3)-x3*(z4-z1)+x4*(z3-z1)  ; double c2 = -x1*(y4-y3)+x3*(y4-y1)-x4*(y3-y1) ;
-	double a3 = y1*(z4-z2)-y2*(z4-z1)+y4*(z2-z1)  ; double b3 = -x1*(z4-z2)+x2*(z4-z1)-x4*(z2-z1) ; double c3 = x1*(y4-y2)-x2*(y4-y1)+x4*(y2-y1) ;
-	double a4 = -y1*(z3-z2)+y2*(z3-z1)-y3*(z2-z1) ; double b4 = x1*(z3-z2)-x2*(z3-z1)+x3*(z2-z1)  ; double c4 = -x1*(y3-y2)+x2*(y3-y1)-x3*(y2-y1) ;
+    double a1 = y2 * (z4 - z3) - y3 * (z4 - z2) + y4 * (z3 - z2)  ; double b1 = -x2 * (z4 - z3) + x3 * (z4 - z2) - x4 * (z3 - z2) ; double c1 = x2 * (y4 - y3) - x3 * (y4 - y2) + x4 * (y3 - y2)  ;
+    double a2 = -y1 * (z4 - z3) + y3 * (z4 - z1) - y4 * (z3 - z1) ; double b2 = x1 * (z4 - z3) - x3 * (z4 - z1) + x4 * (z3 - z1)  ; double c2 = -x1 * (y4 - y3) + x3 * (y4 - y1) - x4 * (y3 - y1) ;
+    double a3 = y1 * (z4 - z2) - y2 * (z4 - z1) + y4 * (z2 - z1)  ; double b3 = -x1 * (z4 - z2) + x2 * (z4 - z1) - x4 * (z2 - z1) ; double c3 = x1 * (y4 - y2) - x2 * (y4 - y1) + x4 * (y2 - y1)  ;
+    double a4 = -y1 * (z3 - z2) + y2 * (z3 - z1) - y3 * (z2 - z1) ; double b4 = x1 * (z3 - z2) - x2 * (z3 - z1) + x3 * (z2 - z1)  ; double c4 = -x1 * (y3 - y2) + x2 * (y3 - y1) - x3 * (y2 - y1) ;
 
-	// dNi/dzeta1
-	double dN1_dzeta1  = 4*zeta1-1 ; double dN2_dzeta1 = 0 ;
-	double dN3_dzeta1  = 0         ; double dN4_dzeta1 = 0 ;
-	double dN5_dzeta1  = 4*zeta2   ; double dN6_dzeta1 = 0 ;
-	double dN7_dzeta1  = 4*zeta3   ; double dN8_dzeta1 = 4*zeta4 ;
-	double dN10_dzeta1 = 0         ; double dN9_dzeta1 = 0 ; 
+    // dNi/dzeta1
+    double dN1_dzeta1  = 4.0 * zeta1 - 1.0 ; double dN2_dzeta1 = 0.0         ;
+    double dN3_dzeta1  = 0.0               ; double dN4_dzeta1 = 0.0         ;
+    double dN5_dzeta1  = 4.0 * zeta2       ; double dN6_dzeta1 = 0.0         ;
+    double dN7_dzeta1  = 4.0 * zeta3       ; double dN8_dzeta1 = 4.0 * zeta4 ;
+    double dN10_dzeta1 = 0.0               ; double dN9_dzeta1 = 0.0         ;
 
-	// dNi/dzeta2
-	double dN1_dzeta2  = 0       ; double dN2_dzeta2 = 4*zeta2-1 ;
-	double dN3_dzeta2  = 0       ; double dN4_dzeta2 = 0 ;
-	double dN5_dzeta2  = 4*zeta1 ; double dN6_dzeta2 = 4*zeta3 ;
-	double dN7_dzeta2  = 0       ; double dN8_dzeta2 = 0 ;
-	double dN10_dzeta2 = 4*zeta4 ; double dN9_dzeta2 = 0 ; 
+    // dNi/dzeta2
+    double dN1_dzeta2  = 0.0         ; double dN2_dzeta2 = 4.0 * zeta2 - 1.0 ;
+    double dN3_dzeta2  = 0.0         ; double dN4_dzeta2 = 0.0               ;
+    double dN5_dzeta2  = 4.0 * zeta1 ; double dN6_dzeta2 = 4.0 * zeta3       ;
+    double dN7_dzeta2  = 0.0         ; double dN8_dzeta2 = 0.0               ;
+    double dN10_dzeta2 = 4.0 * zeta4 ; double dN9_dzeta2 = 0.0               ;
 
-	// dNi/dzeta3
-	double dN1_dzeta3  = 0         ; double dN2_dzeta3 = 0 ;
-	double dN3_dzeta3  = 4*zeta3-1 ; double dN4_dzeta3 = 0 ;
-	double dN5_dzeta3  = 0         ; double dN6_dzeta3 = 4*zeta2 ;
-	double dN7_dzeta3  = 4*zeta1   ; double dN8_dzeta3 = 0 ;
-	double dN10_dzeta3 = 0         ; double dN9_dzeta3 = 4*zeta4 ;
+    // dNi/dzeta3
+    double dN1_dzeta3  = 0.0               ; double dN2_dzeta3 = 0.0         ;
+    double dN3_dzeta3  = 4.0 * zeta3 - 1.0 ; double dN4_dzeta3 = 0.0         ;
+    double dN5_dzeta3  = 0.0               ; double dN6_dzeta3 = 4.0 * zeta2 ;
+    double dN7_dzeta3  = 4.0 * zeta1       ; double dN8_dzeta3 = 0.0         ;
+    double dN10_dzeta3 = 0.0               ; double dN9_dzeta3 = 4.0 * zeta4 ;
 
-	// dNi/dzeta4
-	double dN1_dzeta4  = 0       ; double dN2_dzeta4 = 0 ;
-	double dN3_dzeta4  = 0       ; double dN4_dzeta4 = 4*zeta4-1 ;
-	double dN5_dzeta4  = 0       ; double dN6_dzeta4 = 0 ;
-	double dN7_dzeta4  = 0       ; double dN8_dzeta4 = 4*zeta1 ;
-	double dN10_dzeta4 = 4*zeta2 ; double dN9_dzeta4 = 4*zeta3 ;
+    // dNi/dzeta3
+    double dN1_dzeta4  = 0.0         ; double dN2_dzeta4 = 0.0               ;
+    double dN3_dzeta4  = 0.0         ; double dN4_dzeta4 = 4.0 * zeta4 - 1.0 ;
+    double dN5_dzeta4  = 0.0         ; double dN6_dzeta4 = 0.0               ;
+    double dN7_dzeta4  = 0.0         ; double dN8_dzeta4 = 4.0 * zeta1       ;
+    double dN10_dzeta4 = 4.0 * zeta2 ; double dN9_dzeta4 = 4.0 * zeta3       ;
 
-	// 
-	double Jx1 = x1*dN1_dzeta1 + x2*dN2_dzeta1 + x3*dN3_dzeta1 + x4*dN4_dzeta1 + x5*dN5_dzeta1 + x6*dN6_dzeta1 + x7*dN7_dzeta1 + x8*dN8_dzeta1 + x9*dN9_dzeta1 + x10*dN10_dzeta1 ;
-	double Jy1 = y1*dN1_dzeta1 + y2*dN2_dzeta1 + y3*dN3_dzeta1 + y4*dN4_dzeta1 + y5*dN5_dzeta1 + y6*dN6_dzeta1 + y7*dN7_dzeta1 + y8*dN8_dzeta1 + y9*dN9_dzeta1 + y10*dN10_dzeta1 ;
-	double Jz1 = z1*dN1_dzeta1 + z2*dN2_dzeta1 + z3*dN3_dzeta1 + z4*dN4_dzeta1 + z5*dN5_dzeta1 + z6*dN6_dzeta1 + z7*dN7_dzeta1 + z8*dN8_dzeta1 + z9*dN9_dzeta1 + z10*dN10_dzeta1 ;
+    // Jacobian components
+    double Jx1 = x1 * dN1_dzeta1 + x2 * dN2_dzeta1 + x3 * dN3_dzeta1 + x4 * dN4_dzeta1 + x5 * dN5_dzeta1 + x6 * dN6_dzeta1 + x7 * dN7_dzeta1 + x8 * dN8_dzeta1 + x9 * dN9_dzeta1 + x10 * dN10_dzeta1 ;
+    double Jy1 = y1 * dN1_dzeta1 + y2 * dN2_dzeta1 + y3 * dN3_dzeta1 + y4 * dN4_dzeta1 + y5 * dN5_dzeta1 + y6 * dN6_dzeta1 + y7 * dN7_dzeta1 + y8 * dN8_dzeta1 + y9 * dN9_dzeta1 + y10 * dN10_dzeta1 ;
+    double Jz1 = z1 * dN1_dzeta1 + z2 * dN2_dzeta1 + z3 * dN3_dzeta1 + z4 * dN4_dzeta1 + z5 * dN5_dzeta1 + z6 * dN6_dzeta1 + z7 * dN7_dzeta1 + z8 * dN8_dzeta1 + z9 * dN9_dzeta1 + z10 * dN10_dzeta1 ;
 
-	double Jx2 = x1*dN1_dzeta2 + x2*dN2_dzeta2 + x3*dN3_dzeta2 + x4*dN4_dzeta2 + x5*dN5_dzeta2 + x6*dN6_dzeta2 + x7*dN7_dzeta2 + x8*dN8_dzeta2 + x9*dN9_dzeta2 + x10*dN10_dzeta2 ;
-	double Jy2 = y1*dN1_dzeta2 + y2*dN2_dzeta2 + y3*dN3_dzeta2 + y4*dN4_dzeta2 + y5*dN5_dzeta2 + y6*dN6_dzeta2 + y7*dN7_dzeta2 + y8*dN8_dzeta2 + y9*dN9_dzeta2 + y10*dN10_dzeta2 ;
-	double Jz2 = z1*dN1_dzeta2 + z2*dN2_dzeta2 + z3*dN3_dzeta2 + z4*dN4_dzeta2 + z5*dN5_dzeta2 + z6*dN6_dzeta2 + z7*dN7_dzeta2 + z8*dN8_dzeta2 + z9*dN9_dzeta2 + z10*dN10_dzeta2 ;
+    double Jx2 = x1 * dN1_dzeta2 + x2 * dN2_dzeta2 + x3 * dN3_dzeta2 + x4 * dN4_dzeta2 + x5 * dN5_dzeta2 + x6 * dN6_dzeta2 + x7 * dN7_dzeta2 + x8 * dN8_dzeta2 + x9 * dN9_dzeta2 + x10 * dN10_dzeta2 ;
+    double Jy2 = y1 * dN1_dzeta2 + y2 * dN2_dzeta2 + y3 * dN3_dzeta2 + y4 * dN4_dzeta2 + y5 * dN5_dzeta2 + y6 * dN6_dzeta2 + y7 * dN7_dzeta2 + y8 * dN8_dzeta2 + y9 * dN9_dzeta2 + y10 * dN10_dzeta2 ;
+    double Jz2 = z1 * dN1_dzeta2 + z2 * dN2_dzeta2 + z3 * dN3_dzeta2 + z4 * dN4_dzeta2 + z5 * dN5_dzeta2 + z6 * dN6_dzeta2 + z7 * dN7_dzeta2 + z8 * dN8_dzeta2 + z9 * dN9_dzeta2 + z10 * dN10_dzeta2 ;
 
-	double Jx3 = x1*dN1_dzeta3 + x2*dN2_dzeta3 + x3*dN3_dzeta3 + x4*dN4_dzeta3 + x5*dN5_dzeta3 + x6*dN6_dzeta3 + x7*dN7_dzeta3 + x8*dN8_dzeta3 + x9*dN9_dzeta3 + x10*dN10_dzeta3 ;
-	double Jy3 = y1*dN1_dzeta3 + y2*dN2_dzeta3 + y3*dN3_dzeta3 + y4*dN4_dzeta3 + y5*dN5_dzeta3 + y6*dN6_dzeta3 + y7*dN7_dzeta3 + y8*dN8_dzeta3 + y9*dN9_dzeta3 + y10*dN10_dzeta3 ;
-	double Jz3 = z1*dN1_dzeta3 + z2*dN2_dzeta3 + z3*dN3_dzeta3 + z4*dN4_dzeta3 + z5*dN5_dzeta3 + z6*dN6_dzeta3 + z7*dN7_dzeta3 + z8*dN8_dzeta3 + z9*dN9_dzeta3 + z10*dN10_dzeta3 ;
+    double Jx3 = x1 * dN1_dzeta3 + x2 * dN2_dzeta3 + x3 * dN3_dzeta3 + x4 * dN4_dzeta3 + x5 * dN5_dzeta3 + x6 * dN6_dzeta3 + x7 * dN7_dzeta3 + x8 * dN8_dzeta3 + x9 * dN9_dzeta3 + x10 * dN10_dzeta3 ;
+    double Jy3 = y1 * dN1_dzeta3 + y2 * dN2_dzeta3 + y3 * dN3_dzeta3 + y4 * dN4_dzeta3 + y5 * dN5_dzeta3 + y6 * dN6_dzeta3 + y7 * dN7_dzeta3 + y8 * dN8_dzeta3 + y9 * dN9_dzeta3 + y10 * dN10_dzeta3 ;
+    double Jz3 = z1 * dN1_dzeta3 + z2 * dN2_dzeta3 + z3 * dN3_dzeta3 + z4 * dN4_dzeta3 + z5 * dN5_dzeta3 + z6 * dN6_dzeta3 + z7 * dN7_dzeta3 + z8 * dN8_dzeta3 + z9 * dN9_dzeta3 + z10 * dN10_dzeta3 ;
 
-	double Jx4 = x1*dN1_dzeta4 + x2*dN2_dzeta4 + x3*dN3_dzeta4 + x4*dN4_dzeta4 + x5*dN5_dzeta4 + x6*dN6_dzeta4 + x7*dN7_dzeta4 + x8*dN8_dzeta4 + x9*dN9_dzeta4 + x10*dN10_dzeta4 ;
-	double Jy4 = y1*dN1_dzeta4 + y2*dN2_dzeta4 + y3*dN3_dzeta4 + y4*dN4_dzeta4 + y5*dN5_dzeta4 + y6*dN6_dzeta4 + y7*dN7_dzeta4 + y8*dN8_dzeta4 + y9*dN9_dzeta4 + y10*dN10_dzeta4 ;
-	double Jz4 = z1*dN1_dzeta4 + z2*dN2_dzeta4 + z3*dN3_dzeta4 + z4*dN4_dzeta4 + z5*dN5_dzeta4 + z6*dN6_dzeta4 + z7*dN7_dzeta4 + z8*dN8_dzeta4 + z9*dN9_dzeta4 + z10*dN10_dzeta4 ;
+    double Jx4 = x1 * dN1_dzeta4 + x2 * dN2_dzeta4 + x3 * dN3_dzeta4 + x4 * dN4_dzeta4 + x5 * dN5_dzeta4 + x6 * dN6_dzeta4 + x7 * dN7_dzeta4 + x8 * dN8_dzeta4 + x9 * dN9_dzeta4 + x10 * dN10_dzeta4 ;
+    double Jy4 = y1 * dN1_dzeta4 + y2 * dN2_dzeta4 + y3 * dN3_dzeta4 + y4 * dN4_dzeta4 + y5 * dN5_dzeta4 + y6 * dN6_dzeta4 + y7 * dN7_dzeta4 + y8 * dN8_dzeta4 + y9 * dN9_dzeta4 + y10 * dN10_dzeta4 ;
+    double Jz4 = z1 * dN1_dzeta4 + z2 * dN2_dzeta4 + z3 * dN3_dzeta4 + z4 * dN4_dzeta4 + z5 * dN5_dzeta4 + z6 * dN6_dzeta4 + z7 * dN7_dzeta4 + z8 * dN8_dzeta4 + z9 * dN9_dzeta4 + z10 * dN10_dzeta4 ;
 
-	// Terms in simplified Jacobian Matrix (3x3)
-	double t1 = Jx2-Jx1 ; double t2 = Jx3-Jx1 ; double t3 = Jx4-Jx1 ;
-	double t4 = Jy2-Jy1 ; double t5 = Jy3-Jy1 ; double t6 = Jy4-Jy1 ;
-	double t7 = Jz2-Jz1 ; double t8 = Jz3-Jz1 ; double t9 = Jz4-Jz1 ;
+    // Terms in simplified Jacobian Matrix (3x3)
+    double t1 = Jx2 - Jx1 ; double t2 = Jx3 - Jx1 ; double t3 = Jx4 - Jx1 ;
+    double t4 = Jy2 - Jy1 ; double t5 = Jy3 - Jy1 ; double t6 = Jy4 - Jy1 ;
+    double t7 = Jz2 - Jz1 ; double t8 = Jz3 - Jz1 ; double t9 = Jz4 - Jz1 ;
 
-	// Assembling the Jacobians Determinant
-	double Jdet = t1 * (t5 * t9 - t6 * t8) - t2 * (t4 * t9 - t6 * t7) + t3 * (t4 * t8 - t5 * t7) ;
+    // Assembling the Jacobians Determinant
+    double Jdet = t1 * (t5 * t9 - t6 * t8) - t2 * (t4 * t9 - t6 * t7) + t3 * (t4 * t8 - t5 * t7) ;
 
-	// Saving the Jacobians Determinant
-	xsj = Jdet ;
+    // Saving the Jacobians Determinant
+    xsj = Jdet ;
 
-	// qx1 - qx10 (17.24)
-	shp[0][0] = ( 1 / Jdet ) * (dN1_dzeta1*a1  + dN1_dzeta2*a2  + dN1_dzeta3*a3  + dN1_dzeta4*a4) ;
-	shp[0][1] = ( 1 / Jdet ) * (dN2_dzeta1*a1  + dN2_dzeta2*a2  + dN2_dzeta3*a3  + dN2_dzeta4*a4) ;
-	shp[0][2] = ( 1 / Jdet ) * (dN3_dzeta1*a1  + dN3_dzeta2*a2  + dN3_dzeta3*a3  + dN3_dzeta4*a4) ;
-	shp[0][3] = ( 1 / Jdet ) * (dN4_dzeta1*a1  + dN4_dzeta2*a2  + dN4_dzeta3*a3  + dN4_dzeta4*a4) ;
-	shp[0][4] = ( 1 / Jdet ) * (dN5_dzeta1*a1  + dN5_dzeta2*a2  + dN5_dzeta3*a3  + dN5_dzeta4*a4) ;
-	shp[0][5] = ( 1 / Jdet ) * (dN6_dzeta1*a1  + dN6_dzeta2*a2  + dN6_dzeta3*a3  + dN6_dzeta4*a4) ;
-	shp[0][6] = ( 1 / Jdet ) * (dN7_dzeta1*a1  + dN7_dzeta2*a2  + dN7_dzeta3*a3  + dN7_dzeta4*a4) ;
-	shp[0][7] = ( 1 / Jdet ) * (dN8_dzeta1*a1  + dN8_dzeta2*a2  + dN8_dzeta3*a3  + dN8_dzeta4*a4) ;
-	shp[0][8] = ( 1 / Jdet ) * (dN9_dzeta1*a1  + dN9_dzeta2*a2  + dN9_dzeta3*a3  + dN9_dzeta4*a4) ;
-	shp[0][9] = ( 1 / Jdet ) * (dN10_dzeta1*a1 + dN10_dzeta2*a2 + dN10_dzeta3*a3 + dN10_dzeta4*a4) ;
+    // qx1 - qx10 (17.24)
+    shp[0][0] = (dN1_dzeta1 * a1  + dN1_dzeta2 * a2  + dN1_dzeta3 * a3  + dN1_dzeta4 * a4)  / Jdet ;
+    shp[0][1] = (dN2_dzeta1 * a1  + dN2_dzeta2 * a2  + dN2_dzeta3 * a3  + dN2_dzeta4 * a4)  / Jdet ;
+    shp[0][2] = (dN3_dzeta1 * a1  + dN3_dzeta2 * a2  + dN3_dzeta3 * a3  + dN3_dzeta4 * a4)  / Jdet ;
+    shp[0][3] = (dN4_dzeta1 * a1  + dN4_dzeta2 * a2  + dN4_dzeta3 * a3  + dN4_dzeta4 * a4)  / Jdet ;
+    shp[0][4] = (dN5_dzeta1 * a1  + dN5_dzeta2 * a2  + dN5_dzeta3 * a3  + dN5_dzeta4 * a4)  / Jdet ;
+    shp[0][5] = (dN6_dzeta1 * a1  + dN6_dzeta2 * a2  + dN6_dzeta3 * a3  + dN6_dzeta4 * a4)  / Jdet ;
+    shp[0][6] = (dN7_dzeta1 * a1  + dN7_dzeta2 * a2  + dN7_dzeta3 * a3  + dN7_dzeta4 * a4)  / Jdet ;
+    shp[0][7] = (dN8_dzeta1 * a1  + dN8_dzeta2 * a2  + dN8_dzeta3 * a3  + dN8_dzeta4 * a4)  / Jdet ;
+    shp[0][8] = (dN9_dzeta1 * a1  + dN9_dzeta2 * a2  + dN9_dzeta3 * a3  + dN9_dzeta4 * a4)  / Jdet ;
+    shp[0][9] = (dN10_dzeta1 * a1 + dN10_dzeta2 * a2 + dN10_dzeta3 * a3 + dN10_dzeta4 * a4) / Jdet ;
 
-	// qy1 - qy10 (17.24)
-	shp[1][0] = ( 1 / Jdet ) * (dN1_dzeta1*b1  + dN1_dzeta2*b2  + dN1_dzeta3*b3  + dN1_dzeta4*b4) ;
-	shp[1][1] = ( 1 / Jdet ) * (dN2_dzeta1*b1  + dN2_dzeta2*b2  + dN2_dzeta3*b3  + dN2_dzeta4*b4) ;
-	shp[1][2] = ( 1 / Jdet ) * (dN3_dzeta1*b1  + dN3_dzeta2*b2  + dN3_dzeta3*b3  + dN3_dzeta4*b4) ;
-	shp[1][3] = ( 1 / Jdet ) * (dN4_dzeta1*b1  + dN4_dzeta2*b2  + dN4_dzeta3*b3  + dN4_dzeta4*b4) ;
-	shp[1][4] = ( 1 / Jdet ) * (dN5_dzeta1*b1  + dN5_dzeta2*b2  + dN5_dzeta3*b3  + dN5_dzeta4*b4) ;
-	shp[1][5] = ( 1 / Jdet ) * (dN6_dzeta1*b1  + dN6_dzeta2*b2  + dN6_dzeta3*b3  + dN6_dzeta4*b4) ;
-	shp[1][6] = ( 1 / Jdet ) * (dN7_dzeta1*b1  + dN7_dzeta2*b2  + dN7_dzeta3*b3  + dN7_dzeta4*b4) ;
-	shp[1][7] = ( 1 / Jdet ) * (dN8_dzeta1*b1  + dN8_dzeta2*b2  + dN8_dzeta3*b3  + dN8_dzeta4*b4) ;
-	shp[1][8] = ( 1 / Jdet ) * (dN9_dzeta1*b1  + dN9_dzeta2*b2  + dN9_dzeta3*b3  + dN9_dzeta4*b4) ;
-	shp[1][9] = ( 1 / Jdet ) * (dN10_dzeta1*b1 + dN10_dzeta2*b2 + dN10_dzeta3*b3 + dN10_dzeta4*b4) ;
+    // qy1 - qy10 (17.24)
+    shp[1][0] = (dN1_dzeta1 * b1  + dN1_dzeta2 * b2  + dN1_dzeta3 * b3  + dN1_dzeta4 * b4)  / Jdet ;
+    shp[1][1] = (dN2_dzeta1 * b1  + dN2_dzeta2 * b2  + dN2_dzeta3 * b3  + dN2_dzeta4 * b4)  / Jdet ;
+    shp[1][2] = (dN3_dzeta1 * b1  + dN3_dzeta2 * b2  + dN3_dzeta3 * b3  + dN3_dzeta4 * b4)  / Jdet ;
+    shp[1][3] = (dN4_dzeta1 * b1  + dN4_dzeta2 * b2  + dN4_dzeta3 * b3  + dN4_dzeta4 * b4)  / Jdet ;
+    shp[1][4] = (dN5_dzeta1 * b1  + dN5_dzeta2 * b2  + dN5_dzeta3 * b3  + dN5_dzeta4 * b4)  / Jdet ;
+    shp[1][5] = (dN6_dzeta1 * b1  + dN6_dzeta2 * b2  + dN6_dzeta3 * b3  + dN6_dzeta4 * b4)  / Jdet ;
+    shp[1][6] = (dN7_dzeta1 * b1  + dN7_dzeta2 * b2  + dN7_dzeta3 * b3  + dN7_dzeta4 * b4)  / Jdet ;
+    shp[1][7] = (dN8_dzeta1 * b1  + dN8_dzeta2 * b2  + dN8_dzeta3 * b3  + dN8_dzeta4 * b4)  / Jdet ;
+    shp[1][8] = (dN9_dzeta1 * b1  + dN9_dzeta2 * b2  + dN9_dzeta3 * b3  + dN9_dzeta4 * b4)  / Jdet ;
+    shp[1][9] = (dN10_dzeta1 * b1 + dN10_dzeta2 * b2 + dN10_dzeta3 * b3 + dN10_dzeta4 * b4) / Jdet ;
 
-	// qz1 - qz10 (17.24)
-	shp[2][0] = ( 1 / Jdet ) * (dN1_dzeta1*c1  + dN1_dzeta2*c2  + dN1_dzeta3*c3  + dN1_dzeta4*c4) ;
-	shp[2][1] = ( 1 / Jdet ) * (dN2_dzeta1*c1  + dN2_dzeta2*c2  + dN2_dzeta3*c3  + dN2_dzeta4*c4) ;
-	shp[2][2] = ( 1 / Jdet ) * (dN3_dzeta1*c1  + dN3_dzeta2*c2  + dN3_dzeta3*c3  + dN3_dzeta4*c4) ;
-	shp[2][3] = ( 1 / Jdet ) * (dN4_dzeta1*c1  + dN4_dzeta2*c2  + dN4_dzeta3*c3  + dN4_dzeta4*c4) ;
-	shp[2][4] = ( 1 / Jdet ) * (dN5_dzeta1*c1  + dN5_dzeta2*c2  + dN5_dzeta3*c3  + dN5_dzeta4*c4) ;
-	shp[2][5] = ( 1 / Jdet ) * (dN6_dzeta1*c1  + dN6_dzeta2*c2  + dN6_dzeta3*c3  + dN6_dzeta4*c4) ;
-	shp[2][6] = ( 1 / Jdet ) * (dN7_dzeta1*c1  + dN7_dzeta2*c2  + dN7_dzeta3*c3  + dN7_dzeta4*c4) ;
-	shp[2][7] = ( 1 / Jdet ) * (dN8_dzeta1*c1  + dN8_dzeta2*c2  + dN8_dzeta3*c3  + dN8_dzeta4*c4) ;
-	shp[2][8] = ( 1 / Jdet ) * (dN9_dzeta1*c1  + dN9_dzeta2*c2  + dN9_dzeta3*c3  + dN9_dzeta4*c4) ;
-	shp[2][9] = ( 1 / Jdet ) * (dN10_dzeta1*c1 + dN10_dzeta2*c2 + dN10_dzeta3*c3 + dN10_dzeta4*c4) ;
+    // qz1 - qz10 (17.24)
+    shp[2][0] = (dN1_dzeta1 * c1  + dN1_dzeta2 * c2  + dN1_dzeta3 * c3  + dN1_dzeta4 * c4)  / Jdet ;
+    shp[2][1] = (dN2_dzeta1 * c1  + dN2_dzeta2 * c2  + dN2_dzeta3 * c3  + dN2_dzeta4 * c4)  / Jdet ;
+    shp[2][2] = (dN3_dzeta1 * c1  + dN3_dzeta2 * c2  + dN3_dzeta3 * c3  + dN3_dzeta4 * c4)  / Jdet ;
+    shp[2][3] = (dN4_dzeta1 * c1  + dN4_dzeta2 * c2  + dN4_dzeta3 * c3  + dN4_dzeta4 * c4)  / Jdet ;
+    shp[2][4] = (dN5_dzeta1 * c1  + dN5_dzeta2 * c2  + dN5_dzeta3 * c3  + dN5_dzeta4 * c4)  / Jdet ;
+    shp[2][5] = (dN6_dzeta1 * c1  + dN6_dzeta2 * c2  + dN6_dzeta3 * c3  + dN6_dzeta4 * c4)  / Jdet ;
+    shp[2][6] = (dN7_dzeta1 * c1  + dN7_dzeta2 * c2  + dN7_dzeta3 * c3  + dN7_dzeta4 * c4)  / Jdet ;
+    shp[2][7] = (dN8_dzeta1 * c1  + dN8_dzeta2 * c2  + dN8_dzeta3 * c3  + dN8_dzeta4 * c4)  / Jdet ;
+    shp[2][8] = (dN9_dzeta1 * c1  + dN9_dzeta2 * c2  + dN9_dzeta3 * c3  + dN9_dzeta4 * c4)  / Jdet ;
+    shp[2][9] = (dN10_dzeta1 * c1 + dN10_dzeta2 * c2 + dN10_dzeta3 * c3 + dN10_dzeta4 * c4) / Jdet ;
 
-	// N1 - N10 (notice N9 and N10 are switched up)
-	shp[3][0] = zeta1*(2*zeta1-1) ;
-	shp[3][1] = zeta2*(2*zeta2-1) ;
-	shp[3][2] = zeta3*(2*zeta3-1) ;
-	shp[3][3] = zeta4*(2*zeta4-1) ;
-	shp[3][4] = 4*zeta1*zeta2 ;
-	shp[3][5] = 4*zeta2*zeta3 ;
-	shp[3][6] = 4*zeta3*zeta1 ;
-	shp[3][7] = 4*zeta1*zeta4 ;
-	shp[3][9] = 4*zeta2*zeta4 ;
-	shp[3][8] = 4*zeta3*zeta4 ;
+    // N1 - N10 (notice N9 and N10 are switched up)
+    shp[3][0] = zeta1 * (2.0 * zeta1 - 1.0) ;
+    shp[3][1] = zeta2 * (2.0 * zeta2 - 1.0) ;
+    shp[3][2] = zeta3 * (2.0 * zeta3 - 1.0) ;
+    shp[3][3] = zeta4 * (2.0 * zeta4 - 1.0) ;
+    shp[3][4] = 4.0 * zeta1 * zeta2         ;
+    shp[3][5] = 4.0 * zeta2 * zeta3         ;
+    shp[3][6] = 4.0 * zeta3 * zeta1         ;
+    shp[3][7] = 4.0 * zeta1 * zeta4         ;
+    shp[3][9] = 4.0 * zeta2 * zeta4         ;
+    shp[3][8] = 4.0 * zeta3 * zeta4         ;
 
 	return ;
 }

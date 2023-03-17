@@ -71,6 +71,10 @@ class IncrementalElasticIsotropicThreeDimensional : public ElasticIsotropicMater
     int recvSelf(int commitTag, Channel &theChannel, 
 		 FEM_ObjectBroker &theBroker);    
     
+    // parameters and responses
+    int setParameter(const char** argv, int argc, Parameter& param);
+    int updateParameter(int parameterID, Information& info);
+    
     Response *setResponse (const char **argv, int argc, OPS_Stream &output);
     int getResponse (int responseID, Information &matInformation);
 
@@ -89,6 +93,8 @@ class IncrementalElasticIsotropicThreeDimensional : public ElasticIsotropicMater
     Vector sigma_n;   // Committed stress
 
     static bool printnow;
+    
+    Vector depsilon_initial = Vector(6);
 };
 
 #endif

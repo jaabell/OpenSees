@@ -457,7 +457,7 @@ const Vector&  SixNodeBoundryCondition::getResistingForce( )
 //get residual with inertia terms
 const Vector&  SixNodeBoundryCondition::getResistingForceIncInertia( )
 {
-    static Vector res(10); res.Zero();
+    static Vector res(6); res.Zero();
 
     int tang_flag = 1 ; // get the tangent
     resid.Zero();
@@ -564,6 +564,7 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
+            resid( jj  ) -= dvol[i] * ( inp_info[2] * (inp_info[0] / inp_info[1]) ) * shp[2][j] ;
             temp = shp[stiffIndex][j] * dvol[i] * (inp_info[0] / inp_info[1]) * inp_info[3] ;
 
             if ( tangFlag == 1 )
@@ -875,7 +876,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
 int
 SixNodeBoundryCondition::getResponse(int responseID, Information &eleInfo)
 {
-    static Vector stresses(3*10);
+    static Vector stresses(3*6);
 
     if (responseID == 1)
         return eleInfo.setVector(this->getResistingForce());
@@ -946,10 +947,7 @@ void
 SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3][NumNodes], const double xl[3][NumNodes]   )
 {
     // Mathematica formulation by Carlos Felippa.
-    // shp3d
-    double zeta1 = zeta[0] ;
-    double zeta2 = zeta[1] ;
-    double zeta3 = 1.0 - zeta1 - zeta2 ;
+    double zeta1 = zeta[0] ; double zeta2 = zeta[1] ; double zeta3 = 1.0 - zeta1 - zeta2 ;
 
     double x1 = xl[0][0] ; double y1 = xl[1][0] ; double z1 = xl[2][0] ;
     double x2 = xl[0][1] ; double y2 = xl[1][1] ; double z2 = xl[2][1] ;
@@ -988,40 +986,40 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     double dy5 = y5 - (y2 + y3) / 2.0 ;
     double dy6 = y6 - (y3 + y1) / 2.0 ;
 
-    double Jx21 = (x2 - x1) + 4 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
-    double Jx32 = (x3 - x2) + 4 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
-    double Jx13 = (x1 - x3) + 4 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
+    double Jx21 = (x2 - x1) + 4.0 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
+    double Jx32 = (x3 - x2) + 4.0 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
+    double Jx13 = (x1 - x3) + 4.0 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
 
-    double Jy12 = (y1 - y2) + 4 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
-    double Jy23 = (y2 - y3) + 4 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
-    double Jy31 = (y3 - y1) + 4 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
+    double Jy12 = (y1 - y2) + 4.0 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
+    double Jy23 = (y2 - y3) + 4.0 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
+    double Jy31 = (y3 - y1) + 4.0 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
 
     double Jdet = ( Jx21 * Jy31 - Jy12 * Jx13 ) ;
 
     // Saving the Jacobians Determinant
     xsj = Jdet / 2.0 ;
 
-    shp[0][0] = (4 * zeta1 - 1) * Jy23 / Jdet ;
-    shp[0][1] = (4 * zeta2 - 1) * Jy31 / Jdet ;
-    shp[0][2] = (4 * zeta3 - 1) * Jy12 / Jdet ;
-    shp[0][3] = 4 * (zeta2 * Jy23 + zeta1 * Jy31) / Jdet ;
-    shp[0][4] = 4 * (zeta3 * Jy31 + zeta2 * Jy12) / Jdet ;
-    shp[0][5] = 4 * (zeta1 * Jy12 + zeta3 * Jy23) / Jdet ;
+    shp[0][0] = (4.0 * zeta1 - 1.0) * Jy23 / Jdet ;
+    shp[0][1] = (4.0 * zeta2 - 1.0) * Jy31 / Jdet ;
+    shp[0][2] = (4.0 * zeta3 - 1.0) * Jy12 / Jdet ;
+    shp[0][3] = 4.0 * (zeta2 * Jy23 + zeta1 * Jy31) / Jdet ;
+    shp[0][4] = 4.0 * (zeta3 * Jy31 + zeta2 * Jy12) / Jdet ;
+    shp[0][5] = 4.0 * (zeta1 * Jy12 + zeta3 * Jy23) / Jdet ;
 
-    shp[1][0] = (4 * zeta1 - 1) * Jx32 / Jdet ;
-    shp[1][1] = (4 * zeta2 - 1) * Jx13 / Jdet ;
-    shp[1][2] = (4 * zeta3 - 1) * Jx21 / Jdet ;
-    shp[1][3] = 4 * (zeta2 * Jx32 + zeta1 * Jx13) / Jdet ;
-    shp[1][4] = 4 * (zeta3 * Jx13 + zeta2 * Jx21) / Jdet ;
-    shp[1][5] = 4 * (zeta1 * Jx21 + zeta3 * Jx32) / Jdet ;
+    shp[1][0] = (4.0 * zeta1 - 1.0) * Jx32 / Jdet ;
+    shp[1][1] = (4.0 * zeta2 - 1.0) * Jx13 / Jdet ;
+    shp[1][2] = (4.0 * zeta3 - 1.0) * Jx21 / Jdet ;
+    shp[1][3] = 4.0 * (zeta2 * Jx32 + zeta1 * Jx13) / Jdet ;
+    shp[1][4] = 4.0 * (zeta3 * Jx13 + zeta2 * Jx21) / Jdet ;
+    shp[1][5] = 4.0 * (zeta1 * Jx21 + zeta3 * Jx32) / Jdet ;
 
     // N1 - N6
-    shp[2][0] = zeta1 * (2 * zeta1 - 1) ;
-    shp[2][1] = zeta2 * (2 * zeta2 - 1) ;
-    shp[2][2] = zeta3 * (2 * zeta3 - 1) ;
-    shp[2][3] = 4 * zeta1 * zeta2 ;
-    shp[2][4] = 4 * zeta2 * zeta3 ;
-    shp[2][5] = 4 * zeta3 * zeta1 ;
+    shp[2][0] = zeta1 * (2.0 * zeta1 - 1.0) ;
+    shp[2][1] = zeta2 * (2.0 * zeta2 - 1.0) ;
+    shp[2][2] = zeta3 * (2.0 * zeta3 - 1.0) ;
+    shp[2][3] = 4.0 * zeta1 * zeta2 ;
+    shp[2][4] = 4.0 * zeta2 * zeta3 ;
+    shp[2][5] = 4.0 * zeta3 * zeta1 ;
 
     return ;
 }
