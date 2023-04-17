@@ -114,7 +114,8 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal( )
     inp_info[2] = 0.0;
     inp_info[3] = 0.0;
     inp_info[4] = 0.0;
-    inp_info[5] = 0.0;
+
+    b[0] = 0.0;
 
     for (int i = 0; i < NumNodes; i++ ) {
         nodePointers[i] = 0;
@@ -165,7 +166,8 @@ TenNodeTetrahedronThermal::TenNodeTetrahedronThermal(int tag,
     inp_info[2] = kzz;
     inp_info[3] = rho;
     inp_info[4] = cp;
-    inp_info[5] = Q;
+
+    b[0] = Q;
 }
 
 //******************************************************************
@@ -480,7 +482,8 @@ void  TenNodeTetrahedronThermal::zeroLoad( )
         load->Zero();
 
     applyLoad = 0 ;
-    appliedQ = 0 ;
+
+    appliedB[0] = 0.0;
 
     return ;
 }
@@ -493,12 +496,12 @@ TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
 
     if (type == LOAD_TAG_BrickSelfWeight) {
         applyLoad = 1;
-        appliedQ += loadFactor * inp_info[5];
+        appliedB[0] += loadFactor * b[0];
         return 0;
     } else if (type == LOAD_TAG_SelfWeight) {
         // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
         applyLoad = 1;
-        appliedQ += loadFactor * data(5) * inp_info[5];
+        appliedB[0] += loadFactor * data(5) * b[0];
         return 0;
     } else {
         opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
@@ -797,6 +800,13 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
                 }
             }//end for p
 
+            //residual
+            resid( jj ) += residJ(0) ;
+            if (applyLoad == 0)
+                resid( jj ) -= dvol[i] * b[0] * shp[3][j] ;
+            else
+                resid( jj ) -= dvol[i] * appliedB[0] * shp[3][j] ;
+
             if ( tang_flag == 1 )
             {
                 BJtranD.addMatrixProduct(0.0,  BJtran, dd, 1.0) ;
@@ -917,7 +927,7 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
     dData(6) = inp_info[2];
     dData(7) = inp_info[3];
     dData(8) = inp_info[4];
-    dData(9) = inp_info[5];
+    dData(9) = b[0];
 
     if (theChannel.sendVector(dataTag, commitTag, dData) < 0) {
         opserr << "TenNodeTetrahedronThermal::sendSelf() - failed to send double data\n";
@@ -959,7 +969,7 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
     inp_info[2] = dData(6);
     inp_info[3] = dData(7);
     inp_info[4] = dData(8);
-    inp_info[5] = dData(9);
+    b[0] = dData(9);
 
     connectedExternalNodes(0) = idData(20);
     connectedExternalNodes(1) = idData(21);

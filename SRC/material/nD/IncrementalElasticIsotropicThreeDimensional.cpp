@@ -375,7 +375,7 @@ int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID
   {
     double initNormalStrain = info.theDouble;
     depsilon_internal.Zero();
-    depsilon_internal(0) = depsilon_internal(1) = depsilon_internal(2) = initNormalStrain;
+    depsilon_internal(0) = initNormalStrain;
     return 0;
   }
 

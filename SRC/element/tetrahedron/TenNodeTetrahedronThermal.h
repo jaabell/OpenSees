@@ -165,8 +165,10 @@ private :
     ID connectedExternalNodes ;  //four node numbers
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
-    double inp_info[6] ;
-    double appliedQ = 0.0 ;
+    double inp_info[5] ;
+    double b[1] ;        // Body forces
+    double appliedB[1] ;     // Body forces applied with load
+    
     int applyLoad ;
 
 
