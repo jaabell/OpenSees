@@ -593,6 +593,7 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
     int jj, kk ;
 
     double temp, dampingJK ;
+    // static Vector testingVal(ndf) ;
 
     damping.Zero( ) ;
 
@@ -638,11 +639,21 @@ void   TenNodeTetrahedronThermal::formDampingTerms( int tangFlag )
             }
         } // end for p
 
+
+        // for ( j = 0; j < numberNodes; j++ )
+        // {
+            // testingVal.addVector( 1.0, nodePointers[j]->getTrialVel(), shp[dampingIndex][j] ) ;
+        // }
+
+        // testingVal *= inp_info[3] * inp_info[4] ;
+
         //residual and tangent calculations node loops
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
             temp = shp[dampingIndex][j] * dvol[i] ;
+
+            // resid( jj ) += ( temp * testingVal(0) )  ;
 
             if ( tangFlag == 1 )
             {
@@ -736,6 +747,8 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
 
     //-------------------------------------------------------
 
+    double temp = 0.0 ;
+
     //zero stiffness and residual
     stiff.Zero( ) ;
     resid.Zero( ) ;
@@ -801,11 +814,12 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
             }//end for p
 
             //residual
-            resid( jj ) += residJ(0) ;
+            temp = dvol[i] * shp[3][j] ;
+            // resid( jj ) += residJ(0) ;
             if (applyLoad == 0)
-                resid( jj ) -= dvol[i] * b[0] * shp[3][j] ;
+                resid( jj ) -= temp * b[0] ;
             else
-                resid( jj ) -= dvol[i] * appliedB[0] * shp[3][j] ;
+                resid( jj ) -= temp * appliedB[0] ;
 
             if ( tang_flag == 1 )
             {
