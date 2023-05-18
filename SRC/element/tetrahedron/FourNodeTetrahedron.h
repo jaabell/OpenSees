@@ -51,11 +51,11 @@
 
 
 //Number of Gauss-points
-#define NumGaussPoints 1
-#define NumNodes 4
-#define NumDOFsPerNode 3
-#define NumStressComponents 6
-#define NumDOFsTotal NumNodes*NumDOFsPerNode
+// #define NumGaussPoints 1
+// #define NumNodes 4
+// #define NumDOFsPerNode 3
+// #define NumStressComponents 6
+// #define NumDOFsTotal NumNodes*NumDOFsPerNode
 
 class FourNodeTetrahedron : public Element {
 
@@ -138,8 +138,13 @@ class FourNodeTetrahedron : public Element {
     void onActivate();
     void onDeactivate();
 
-  private : 
+    enum {NumGaussPoints=1} ;
+    enum {NumNodes=4} ;
+    enum {NumDOFsPerNode=3} ;
+    enum {NumStressComponents=6} ;
+    enum {NumDOFsTotal=NumNodes*NumDOFsPerNode} ;
 
+  private : 
     void shp3d( const double ss[4], double &xsj, double shp[4][4], const double xl[3][4]   );
 
     //
