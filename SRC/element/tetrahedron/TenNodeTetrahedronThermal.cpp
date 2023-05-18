@@ -817,7 +817,7 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
             temp = dvol[i] * shp[3][j] ;
             // resid( jj ) += residJ(0) ;
             if (applyLoad == 0)
-                resid( jj ) -= temp * b[0] ;
+                resid( jj ) -= temp * b[0] ; 
             else
                 resid( jj ) -= temp * appliedB[0] ;
 
@@ -844,16 +844,15 @@ void  TenNodeTetrahedronThermal::formResidAndTangent( int tang_flag )
             jj += ndf ;
         } // end for j loop
     } //end for i gauss loop
-
     Vector nodeTemp(NumNodes);
 
     for (int i = 0; i < NumNodes; ++i)
     {
         const Vector &temperature_node_i = nodePointers[i]->getTrialDisp( ) ;
-        nodeTemp(i) = temperature_node_i(0);
+        nodeTemp(i) = temperature_node_i(0) ;
     }
 
-    resid.addMatrixVector(0.0, stiff, nodeTemp, 1.0);
+    resid.addMatrixVector(1.0, stiff, nodeTemp, 1.0);
 
     return ;
 }
@@ -1137,6 +1136,43 @@ TenNodeTetrahedronThermal::setResponse(const char **argv, int argc, OPS_Stream &
         }
         theResponse =  new ElementResponse(this, 1, Vector(4));
     }
+
+    // else if (strcmp(argv[0], "tempGradient") == 0)
+    // {
+    //     theResponse =  new ElementResponse(this, 1, Vector(24));
+
+    //     for (int i = 0; i < 4; i++)
+    //     {
+    //         opserr << "" ;
+            
+    //         output.tag("ElementOutput");
+    //         output.attr("eleType", "TenNodeTetrahedronThermal");
+    //         output.attr("eleTag", this->getTag());
+
+    //         for (int i = 0; i < 6; ++i)
+    //         {
+    //             sprintf(outputData, "node%d", i);
+    //             output.attr(outputData, nodePointers[i-1]->getTag());
+    //         }
+
+    //         if (strcmp(argv[0], "force") == 0 || strcmp(argv[0], "forces") == 0)
+    //         {
+    //             for (int i = 0; i < 6; ++i)
+    //             {
+    //                 sprintf(outputData, "", i);
+    //                 output.tag("ResponseType", outputData);
+    //                 sprintf(outputData, "", i);
+    //                 output.tag("ResponseType", outputData);
+    //                 sprintf(outputData, "", i);
+    //                 output.tag("ResponseType", outputData);
+    //             }
+    //         }
+
+    //         output.endTag(); // GaussPoint
+    //     }
+
+
+    // }
 
     output.endTag(); // ElementOutput
 

@@ -1779,6 +1779,12 @@ TenNodeTetrahedron::getResponse(int responseID, Information &eleInfo)
 int
 TenNodeTetrahedron::setParameter(const char **argv, int argc, Parameter &param)
 {
+	for (int i = 0; i < argc; ++i)
+	{
+		opserr << "i = " << i << " " << argv[i] ;
+	}
+	opserr << endln ;
+
 	if (argc < 1)
 		return -1;
 
@@ -1794,6 +1800,7 @@ TenNodeTetrahedron::setParameter(const char **argv, int argc, Parameter &param)
 		int pointNum = atoi(argv[1]);
 		if (pointNum > 0 && pointNum <= 4)
 		{
+			opserr << argv[2] << endln ;
 			return materialPointers[pointNum - 1]->setParameter(&argv[2], argc - 2, param);
 		}
 		else

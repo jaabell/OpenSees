@@ -22,7 +22,7 @@
 // 2023 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
-// Implements a 6-node triangle element that accounts for boundry conditions
+// Implements a 6-node triangle element that accounts for boundary conditions
 // for a thermal analysis.
 //
 // This element has 3 Gauss points of integration.

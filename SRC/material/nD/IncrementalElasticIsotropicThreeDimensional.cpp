@@ -350,6 +350,7 @@ int IncrementalElasticIsotropicThreeDimensional::setParameter(const char** argv,
   if (strcmp(argv[0], "initNormalStrain") == 0) {
     double initNormalStrain = depsilon_internal(0) ;
     param.setValue(initNormalStrain);
+    // opserr << "InitStrain = " << initNormalStrain << endln ;
     return param.addObject(4001, this);
   }
 
@@ -376,6 +377,7 @@ int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID
     double initNormalStrain = info.theDouble;
     depsilon_internal.Zero();
     depsilon_internal(0) = initNormalStrain;
+    opserr << "InitStrain = " << initNormalStrain << endln ;
     return 0;
   }
 

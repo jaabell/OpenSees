@@ -867,7 +867,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
         }
         theResponse =  new ElementResponse(this, 5, Vector(6*10));
     }
-
+    
     output.endTag(); // ElementOutput
 
     return theResponse;
