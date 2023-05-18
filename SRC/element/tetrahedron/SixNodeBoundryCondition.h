@@ -22,14 +22,15 @@
 // 2023 By Jose Abell and Jose Larenas @ Universidad de los Andes, Chile
 // www.joseabell.com | https://github.com/jaabell | jaabell@miuandes.cl
 // ============================================================================
-// Implements a standard 10-node thermal tetrahedron element.
+// Implements a 6-node triangle element that accounts for boundary conditions
+// for a thermal analysis.
 //
-// This element has 4 Gauss points of integration.
+// This element has 3 Gauss points of integration.
 // ============================================================================
 
 
-#ifndef TenNodeTetrahedronThermal_H
-#define TenNodeTetrahedronThermal_H
+#ifndef SixNodeBoundryCondition_H
+#define SixNodeBoundryCondition_H
 
 
 #include <stdio.h>
@@ -43,37 +44,30 @@
 #include <Node.h>
 #include <NDMaterial.h>
 
-
-class TenNodeTetrahedronThermal : public Element {
+class SixNodeBoundryCondition : public Element {
 
 public :
 
     //null constructor
-    TenNodeTetrahedronThermal();
+    SixNodeBoundryCondition();
 
     //full constructor
-    TenNodeTetrahedronThermal(int tag,
+    SixNodeBoundryCondition(int tag,
                        int node1,
                        int node2,
                        int node3,
                        int node4,
                        int node5,
                        int node6,
-                       int node7,
-                       int node8,
-                       int node9,
-                       int node10,
-                       double kxx = 0.0,
-                       double kyy = 0.0,
-                       double kzz = 0.0,
-                       double rho = 0.0,
-                       double cp  = 0.0,
-                       double Q   = 0.0);
+                       double beta = 0.0,
+                       double k    = 0.0,
+                       double tamb = 0.0,
+                       double th   = 1.0);
 
     //destructor
-    virtual ~TenNodeTetrahedronThermal( ) ;
+    virtual ~SixNodeBoundryCondition( ) ;
 
-    const char *getClassType(void) const {return "TenNodeTetrahedronThermal";};
+    const char *getClassType(void) const {return "SixNodeBoundryCondition";};
 
     //set domain
     void setDomain( Domain *theDomain ) ;
@@ -107,7 +101,6 @@ public :
     const Matrix &getTangentStiff();
     const Matrix &getInitialStiff();
     const Matrix &getMass();
-    const Matrix &getDamp();
 
     void zeroLoad( ) ;
     int addLoad(ElementalLoad *theLoad, double loadFactor);
@@ -127,7 +120,6 @@ public :
     Response *setResponse(const char **argv, int argc, OPS_Stream &s);
     int getResponse(int responseID, Information &eleInformation);
 
-    Vector getGaussTemperature( );
 
     int setParameter(const char **argv, int argc, Parameter &param);
     int updateParameter(int parameterID, Information &info);
@@ -140,8 +132,8 @@ public :
 private :
 
     //Number of Gauss-points
-    enum {NumGaussPoints=4} ;
-    enum {NumNodes=10} ;
+    enum {NumGaussPoints=3} ;
+    enum {NumNodes=6} ;
     enum {NumDOFsPerNode=1} ;
     enum {NumStressComponents=3} ;
     enum {NumDOFsTotal=NumNodes*NumDOFsPerNode} ;
@@ -153,9 +145,9 @@ private :
     //   shp[2][n] --> dN_n / d z
     //   shp[3][n] --> N_n, shape function n value at the z values 
     void shp3d( 
-        const double zeta[4],  // Tetrahedral coordinates  (input)
+        const double zeta[3],  // Tetrahedral coordinates  (input)
         double &xsj,         // Jacobian determinant (output)
-        double shp[4][NumNodes], // Shape function and derivatives values at the tetrahedral coordinates (output) 
+        double shp[3][NumNodes], // Shape function and derivatives values at the tetrahedral coordinates (output) 
         const double xl[3][NumNodes]   ); // Node coordinates (input)
 
     //
@@ -165,12 +157,9 @@ private :
     ID connectedExternalNodes ;  //four node numbers
     Node *nodePointers[NumNodes] ;      //pointers to eight nodes
 
-    double inp_info[5] ;
-    double b[1] ;        // Body forces
-    double appliedB[1] ;     // Body forces applied with load
-    
+    double inp_info[4];
+    double appliedQ = 0.0;
     int applyLoad ;
-
 
     Vector *load;
     Matrix *Ki;
@@ -182,14 +171,13 @@ private :
     static Matrix stiff ;
     static Vector resid ;
     static Matrix mass ; 
-    static Matrix damping ;
 
     static Matrix B ;
 
     //quadrature data
     static const double alpha ;
     static const double beta ;
-    static const double sg[4] ;
+    static const double sg[3] ;
     static const double wg[1] ;
 
     //local nodal coordinates, three coordinates for each of four nodes
@@ -210,7 +198,7 @@ private :
     void computeBasis( ) ;
 
     //compute B matrix
-    const Matrix& computeB( int node, const double shp[4][NumNodes] ) ;
+    const Matrix& computeB( int node, const double shp[3][NumNodes] ) ;
 } ;
 
 #endif

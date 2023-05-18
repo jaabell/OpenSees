@@ -301,6 +301,46 @@ namespace {
 		pjj(5, 5) = 2.0 * A1 * A3;
 	}
 
+	/**
+	global parameters storage
+	*/
+	class GlobalParameters {
+	private:
+		double max_error = 0.0;
+		double avg_error = 0.0;
+		int avg_counter = 0;
+	private:
+		GlobalParameters() = default;
+		GlobalParameters(const GlobalParameters&) = delete;
+		GlobalParameters& operator = (const GlobalParameters&) = delete;
+	public:
+		static GlobalParameters& instance() {
+			static GlobalParameters _instance;
+			return _instance;
+		}
+		inline double getMaxError() const { 
+			return max_error; 
+		}
+		inline void setMaxError(double x) { 
+			max_error = x; 
+		}
+		inline double getAverageError() {
+			if (avg_counter > 0) {
+				avg_error /= static_cast<double>(avg_counter);
+				avg_counter = 0;
+			}
+			return avg_error;
+		}
+		inline void accumulateAverageError(double x) {
+			avg_error += x; 
+			++avg_counter; 
+		}
+		inline void setAverageError(double x) { 
+			avg_error = x; 
+			avg_counter = 0; 
+		}
+	};
+
 }
 
 void *OPS_ASDConcrete3DMaterial(void)
@@ -322,7 +362,7 @@ void *OPS_ASDConcrete3DMaterial(void)
 			"<-rho $rho> "
 			"<-implex> <-implexControl $implexErrorTolerance $implexTimeReductionLimit> <-implexAlpha $alpha>"
 			"<-crackPlanes $nct $ncc $smoothingAngle>"
-			"<-eta $eta> <-tangent> <-autoRegularization>\n";
+			"<-eta $eta> <-tangent> <-autoRegularization $lch_ref>\n";
 		return nullptr;
 	}
 
@@ -342,6 +382,7 @@ void *OPS_ASDConcrete3DMaterial(void)
 	double eta = 0.0;
 	bool tangent = false;
 	bool auto_regularization = false;
+	double lch_ref = 1.0;
 	std::vector<double> Te, Ts, Td, Ce, Cs, Cd;
 	int nct = 0;
 	int ncc = 0;
@@ -454,6 +495,12 @@ void *OPS_ASDConcrete3DMaterial(void)
 		}
 		else if (strcmp(value, "-autoRegularization") == 0) {
 			auto_regularization = true;
+			if (OPS_GetNumRemainingInputArgs() < 1) {
+				opserr << "nDMaterial ASDConcrete3D Error: '-autoRegularization' given without the next 1 argument $lch_ref.\n";
+				return nullptr;
+			}
+			if (!lam_optional_double("lch_ref", lch_ref))
+				return nullptr;
 		}
 		else if (strcmp(value, "-Te") == 0) {
 			if (!lam_optional_list("Te", Te))
@@ -550,7 +597,7 @@ void *OPS_ASDConcrete3DMaterial(void)
 		tag, 
 		E, v, rho, eta, 
 		implex, implex_control, implex_error_tolerance, implex_time_redution_limit, implex_alpha,
-		tangent, auto_regularization,
+		tangent, auto_regularization, lch_ref,
 		HT, HC,
 		nct, ncc, smoothing_angle);
 	if (instance == nullptr) {
@@ -713,20 +760,21 @@ ASDConcrete3DMaterial::HardeningLaw::HardeningLaw(
 	HardeningLawStorage::instance().store(*this);
 }
 
-void ASDConcrete3DMaterial::HardeningLaw::regularize(double lch)
+void ASDConcrete3DMaterial::HardeningLaw::regularize(double lch, double lch_ref)
 {
 	// quick return if not valid
 	if (!m_valid)
 		return;
 	// quick return if un-bounded (inf fracture energy), or invalid lch
-	if (!m_fracture_energy_is_bounded || lch <= 0.0 || lch == 1.0) 
+	double lch_scale = lch > 0.0 ? lch_ref / lch : 0.0;
+	if (!m_fracture_energy_is_bounded || lch_scale <= 0.0 || lch_scale == 1.0)
 		return;
 	// back to original
 	deRegularize();
 	// the initial fracture energy has been computed in the full constructor, and we
 	// are back to it after deRegularize...
 	// compute the required specific fracture energy
-	double gnew = m_fracture_energy / lch;
+	double gnew = m_fracture_energy * lch_scale;
 	// compute the minimum fracture energy (in case lch is too large)
 	const auto& peak = m_points[m_softening_begin];
 	double gmin = (peak.y * peak.x / 2.0) * 1.01; // make it 1% larger to ensure a monotonically increasing abscissa
@@ -1192,6 +1240,67 @@ std::size_t ASDConcrete3DMaterial::CrackPlanes::getClosestNormal(const Vector3& 
 	return loc;
 }
 
+std::vector<int> ASDConcrete3DMaterial::CrackPlanes::getMax3Normals(double smooth_angle) const
+{
+	std::vector<int> out;
+	if (m_normals) {
+		const auto& normals = *m_normals;
+		double tol = smooth_angle;
+		// find 1
+		std::size_t p1 = 0;
+		double v1 = 0.0;
+		for (std::size_t i = 0; i < normals.size(); ++i) {
+			double vtrial = m_equivalent_strain[i];
+			if (vtrial > v1) {
+				v1 = vtrial;
+				p1 = i;
+			}
+		}
+		if (v1 > 0.0) {
+			out.push_back(p1);
+			const Vector3& N1 = normals[p1];
+
+			// find 2
+			std::size_t p2 = 0;
+			double v2 = 0.0;
+			for (std::size_t i = 0; i < normals.size(); ++i) {
+				double vtrial = m_equivalent_strain[i];
+				const Vector3& Ntrial = normals[i];
+				double A1 = std::acos(std::abs(Ntrial.dot(N1)));
+				if (A1 < tol) continue;
+				if (vtrial > v2) {
+					v2 = vtrial;
+					p2 = i;
+				}
+			}
+			if (v2 > 0.0) {
+				out.push_back(p2);
+				const Vector3& N2 = normals[p2];
+
+				// find 3
+				std::size_t p3 = 0;
+				double v3 = 0.0;
+				for (std::size_t i = 0; i < normals.size(); ++i) {
+					double vtrial = m_equivalent_strain[i];
+					const Vector3& Ntrial = normals[i];
+					double A1 = std::acos(std::abs(Ntrial.dot(N1)));
+					if (A1 < tol) continue;
+					double A2 = std::acos(std::abs(Ntrial.dot(N2)));
+					if (A2 < tol) continue;
+					if (vtrial > v3) {
+						v3 = vtrial;
+						p3 = i;
+					}
+				}
+				if (v3 > 0.0) {
+					out.push_back(v3);
+				}
+			}
+		}
+	}
+	return out;
+}
+
 int ASDConcrete3DMaterial::CrackPlanes::serializationDataSize() const
 {
 	return 6 + static_cast<int>(m_equivalent_strain.size());
@@ -1235,6 +1344,7 @@ ASDConcrete3DMaterial::ASDConcrete3DMaterial(
 	double _implex_alpha,
 	bool _tangent,
 	bool _auto_regularize,
+	double _lch_ref,
 	const HardeningLaw& _ht,
 	const HardeningLaw& _hc,
 	int _nct,
@@ -1252,6 +1362,7 @@ ASDConcrete3DMaterial::ASDConcrete3DMaterial(
 	, implex_alpha(_implex_alpha)
 	, tangent(_tangent)
 	, auto_regularize(_auto_regularize)
+	, lch_ref(_lch_ref)
 	, ht(_ht)
 	, hc(_hc)
 	, nct(std::max(0, _nct))
@@ -1297,8 +1408,8 @@ int ASDConcrete3DMaterial::setTrialStrain(const Vector& v)
 			lch = ops_TheActiveElement->getCharacteristicLength();
 		regularization_done = true;
 		if (auto_regularize) {
-			ht.regularize(lch);
-			hc.regularize(lch);
+			ht.regularize(lch, lch_ref);
+			hc.regularize(lch, lch_ref);
 		}
 	}
 
@@ -1321,6 +1432,7 @@ int ASDConcrete3DMaterial::setTrialStrain(const Vector& v)
 		// compute the forward perturbed solution and store in Cnum columns
 		for (int j = 0; j < 6; ++j) {
 			strain = v;
+			strain += m_init_strain;
 			strain(j) += PERT;
 			retval = compute(true, false);
 			if (retval < 0) return retval;
@@ -1329,6 +1441,7 @@ int ASDConcrete3DMaterial::setTrialStrain(const Vector& v)
 		}
 		// compute unperturbed solution
 		strain = v;
+		strain += m_init_strain;
 		retval = compute(true, false);
 		if (retval < 0) return retval;
 		for (int j = 0; j < 6; ++j) {
@@ -1340,6 +1453,7 @@ int ASDConcrete3DMaterial::setTrialStrain(const Vector& v)
 	}
 	else {
 		strain = v;
+		strain += m_init_strain;
 		if (implex) {
 			if (implex_control) {
 				// implicit solution
@@ -1437,6 +1551,8 @@ int ASDConcrete3DMaterial::commitState(void)
 		double dt_implicit = dt_bar;
 		double dc_implicit = dc_bar;
 		implex_error = std::max(std::abs(dt - dt_implicit), std::abs(dc - dc_implicit));
+		GlobalParameters::instance().setMaxError(std::max(implex_error, GlobalParameters::instance().getMaxError()));
+		GlobalParameters::instance().accumulateAverageError(implex_error);
 	}
 	// store the previously committed variables for next move from n to n - 1
 	svt_commit_old = svt_commit;
@@ -1548,7 +1664,7 @@ int ASDConcrete3DMaterial::sendSelf(int commitTag, Channel &theChannel)
 	int counter;
 
 	// variable DBL data size
-	int nv_dbl = 127 +
+	int nv_dbl = 128 +
 		ht.serializationDataSize() +
 		hc.serializationDataSize() +
 		svt.serializationDataSize() +
@@ -1588,6 +1704,7 @@ int ASDConcrete3DMaterial::sendSelf(int commitTag, Channel &theChannel)
 	ddata(counter++) = implex_time_redution_limit;
 	ddata(counter++) = implex_alpha;
 	ddata(counter++) = lch;
+	ddata(counter++) = lch_ref;
 	ddata(counter++) = smoothing_angle;
 	ddata(counter++) = dtime_n;
 	ddata(counter++) = dtime_n_commit;
@@ -1668,6 +1785,7 @@ int ASDConcrete3DMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_Obj
 	implex_time_redution_limit = ddata(counter++);
 	implex_alpha = ddata(counter++);
 	lch = ddata(counter++);
+	lch_ref = ddata(counter++);
 	smoothing_angle = ddata(counter++);
 	dtime_n = ddata(counter++);
 	dtime_n_commit = ddata(counter++);
@@ -1735,6 +1853,23 @@ int ASDConcrete3DMaterial::setParameter(const char** argv, int argc, Parameter& 
 		return param.addObject(2002, this);
 	}
 	
+	// 3000 - globals
+	if (strcmp(argv[0], "implexError") == 0 || strcmp(argv[0], "ImplexError") == 0) {
+		param.setValue(GlobalParameters::instance().getMaxError());
+		return param.addObject(3000, this);
+	}
+	if (strcmp(argv[0], "avgImplexError") == 0 || strcmp(argv[0], "AvgImplexError") == 0) {
+		param.setValue(GlobalParameters::instance().getAverageError());
+		return param.addObject(3001, this);
+	}
+
+	// 4000 - init strain
+	if (strcmp(argv[0], "initStrainVol") == 0) {
+		double vol0 = (m_init_strain(0) + m_init_strain(1) + m_init_strain(2)) / 3.0;
+		param.setValue(vol0);
+		return param.addObject(4001, this);
+	}
+
 	// default
 	return -1;
 }
@@ -1767,6 +1902,21 @@ int ASDConcrete3DMaterial::updateParameter(int parameterID, Information& info)
 		dtime_is_user_defined = true;
 		return 0;
 
+	case 3000:
+		GlobalParameters::instance().setMaxError(info.theDouble);
+		return 0;
+	case 3001:
+		GlobalParameters::instance().setAverageError(info.theDouble);
+		return 0;
+
+	case 4001:
+	{
+		double vol0 = info.theDouble;
+		m_init_strain.Zero();
+		m_init_strain(0) = m_init_strain(1) = m_init_strain(2) = vol0;
+		return 0;
+	}
+
 		// default
 	default:
 		return -1;
@@ -1794,7 +1944,7 @@ Response* ASDConcrete3DMaterial::setResponse(const char** argv, int argc, OPS_St
 	static std::vector<std::string> lb_eqpl_strain = { "PLE+", "PLE-" };
 	static std::vector<std::string> lb_tot_strain = { "TE+", "TE-" };
 	static std::vector<std::string> lb_cw = { "cw" };
-	static std::vector<std::string> lb_crackpattern = { "Cx", "Cy", "Cz" };
+	static std::vector<std::string> lb_crackpattern = { "C1x", "C1y", "C1z",   "C2x", "C2y", "C2z",   "C3x", "C3y", "C3z" };
 	static std::vector<std::string> lb_implex_error = { "Error" };
 	static std::vector<std::string> lb_time = { "dTime", "dTimeCommit", "dTimeInitial" };
 	static Vector Cinfo(2);
@@ -2240,28 +2390,60 @@ const Vector& ASDConcrete3DMaterial::getAvgCrackWidth() const
 
 const Vector& ASDConcrete3DMaterial::getCrackPattern() const
 {
-	static Vector d(3);
+	static Vector d(9);
 	d.Zero();
 	if (ht.hasStrainSoftening()) {
 		double e0 = ht.strainAtOnsetOfCrack();
-		double crstrain = std::max(xt_max - e0, 0.0);
-		d(0) = iso_crack_normal(0) * crstrain;
-		d(1) = iso_crack_normal(1) * crstrain;
-		d(2) = iso_crack_normal(2) * crstrain;
+		if (svt.count() > 1) {
+			std::vector<int> normals = svt.getMax3Normals(smoothing_angle);
+			int pos = 0;
+			for (int nid : normals) {
+				double crstrain = std::max(svt.getEquivalentStrainAtNormal(static_cast<std::size_t>(nid)) - e0, 0.0);
+				double crdisp = crstrain * lch;
+				const Vector3& N = svt.getNormal(static_cast<std::size_t>(nid));
+				d(pos + 0) = N.x * crdisp;
+				d(pos + 1) = N.y * crdisp;
+				d(pos + 2) = N.z * crdisp;
+				pos += 3;
+			}
+		}
+		else {
+			double crstrain = std::max(xt_max - e0, 0.0);
+			double crdisp = crstrain * lch;
+			d(0) = iso_crack_normal(0) * crdisp;
+			d(1) = iso_crack_normal(1) * crdisp;
+			d(2) = iso_crack_normal(2) * crdisp;
+		}
 	}
 	return d;
 }
 
 const Vector& ASDConcrete3DMaterial::getCrushPattern() const
 {
-	static Vector d(3);
+	static Vector d(9);
 	d.Zero();
 	if (hc.hasStrainSoftening()) {
 		double e0 = hc.strainAtOnsetOfCrack();
-		double crstrain = std::max(xc_max - e0, 0.0);
-		d(0) = iso_crush_normal(0) * crstrain;
-		d(1) = iso_crush_normal(1) * crstrain;
-		d(2) = iso_crush_normal(2) * crstrain;
+		if (svc.count() > 1) {
+			std::vector<int> normals = svc.getMax3Normals(smoothing_angle);
+			int pos = 0;
+			for (int nid : normals) {
+				double crstrain = std::max(svc.getEquivalentStrainAtNormal(static_cast<std::size_t>(nid)) - e0, 0.0);
+				double crdisp = crstrain * lch;
+				const Vector3& N = svc.getNormal(static_cast<std::size_t>(nid));
+				d(pos + 0) = N.x * crdisp;
+				d(pos + 1) = N.y * crdisp;
+				d(pos + 2) = N.z * crdisp;
+				pos += 3;
+			}
+		}
+		else {
+			double crstrain = std::max(xc_max - e0, 0.0);
+			double crdisp = crstrain * lch;
+			d(0) = iso_crush_normal(0) * crdisp;
+			d(1) = iso_crush_normal(1) * crdisp;
+			d(2) = iso_crush_normal(2) * crdisp;
+		}
 	}
 	return d;
 }
