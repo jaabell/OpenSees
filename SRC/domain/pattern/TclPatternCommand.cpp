@@ -597,7 +597,11 @@ else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0)
           return TCL_ERROR;
       }
 
-      double alpha=1.0;
+      double alpha = 1.0;
+      double c1 = 1.0;
+      double c2 = 1.0;
+      double K = 1.0;
+
       if(argc > 4)
       {
         if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK) 
@@ -613,7 +617,7 @@ else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0)
 
       
 
-      thePattern = new ThermalVolumetricLoadingPattern(tag, alpha, elements_filename, gausstemps_filename);
+      thePattern = new ThermalVolumetricLoadingPattern(tag, alpha, c1, c2, K, elements_filename, gausstemps_filename);
 
 
       theDomain->addLoadPattern(thePattern);
