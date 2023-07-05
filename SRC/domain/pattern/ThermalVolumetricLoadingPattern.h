@@ -33,6 +33,12 @@
 
 #include <LoadPattern.h>
 #include <string>
+#include <vector>
+#include <fstream>
+#include <iterator>
+#include <iostream>
+
+
 
 class GroundMotion;
 class Vector;
@@ -40,8 +46,10 @@ class Vector;
 class ThermalVolumetricLoadingPattern : public LoadPattern
 {
   public:
-    ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_);
+    ThermalVolumetricLoadingPattern(int tag, double alpha_, double c1_, double c2_, double K_, std::string elements_filename_, std::string gausstemps_filename_);
     virtual ~ThermalVolumetricLoadingPattern();
+
+    void setDomain(Domain *theDomain);
 
     virtual void applyLoad(double time);
     virtual bool addSP_Constraint(SP_Constraint *);
@@ -68,9 +76,12 @@ class ThermalVolumetricLoadingPattern : public LoadPattern
 
   private:
     double alpha;
+    double c1, c2, K;
     std::string elements_filename; 
     std::string gausstemps_filename;
     double currentTime;
+
+    std::vector<int> elementTags ;
 
 // AddingSensitivity:BEGIN //////////////////////////////////////////
     int parameterID;
