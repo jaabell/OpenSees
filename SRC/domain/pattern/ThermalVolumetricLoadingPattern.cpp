@@ -49,6 +49,9 @@
 ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, double c1_, double c2_, double K_, std::string elements_filename_, std::string gausstemps_filename_)
   :LoadPattern(tag, PATTERN_TAG_ThermalVolumetricLoadingPattern),  
   alpha(alpha_),
+  c1(c1_),
+  c2(c2_),
+  K(K_),
   elements_filename(elements_filename_),
   gausstemps_filename(gausstemps_filename_),
   currentTime(0.0), parameterID(0)
@@ -56,6 +59,9 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
 
   opserr << "Creating ThermalVolumetricLoadingPattern" << endln;
   opserr << " alpha               = " << alpha << endln;
+  opserr << " c1                  = " << c1 << endln;
+  opserr << " c2                  = " << c2 << endln;
+  opserr << " K                   = " << K << endln;
   opserr << " elements_filename   = " << elements_filename.c_str() << endln;
   opserr << " gausstemps_filename = " << gausstemps_filename.c_str() << endln;
 
@@ -75,10 +81,6 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
 
   elementTags = elementTags_ ;
 
-  c1 = c1_ ; 
-  c2 = c2_ ; 
-  K = K_ ; 
-
   // for (int eleTag : elementTags) {
   //     std::cout << eleTag << ' ';
   // }
@@ -97,120 +99,88 @@ ThermalVolumetricLoadingPattern::setDomain(Domain *theDomain)
   this->LoadPattern::setDomain(theDomain);
 }
 
-void 
+void
 ThermalVolumetricLoadingPattern::applyLoad(double time)
 {
-    // buscar la linea que cooresponde al time en gausstemps_filename
-
-    // para cada elemento en elements_filename, aplicarle los cambios de temperatura
-    // que vienen en gausstemps_filename
-
-    // iterar los puntos de gauss de cada elemento y llamar setParameter con la opcion initNormalStrain
-
-    // ------------------------------------------------------
-
-    // para completar la funcion:
-    // hacerlo para c/ punto de gauss
-    // interpolar para distintos steps
-    // modificar E y poisson (casi listo)
-
-    double E  = c1 * log(time) + c2 ;
-    double nu = (3 * K - E) / (6 * K) ;
+    double E = c1 * log(time) + c2;
+    double nu = (3 * K - E) / (6 * K);
 
     std::ifstream gausstemps_file(gausstemps_filename);
     std::string line;
 
-    bool found_time = false;
+    std::vector<double> gaussDataEarlier, gaussDataLater;
+    double earlierTime = 0, laterTime = 0;
+    bool found_interval = false;
 
-    // Buscar la línea que corresponde al time en gausstemps_filename
     while (getline(gausstemps_file, line)) {
-        double file_time;
         std::stringstream ss(line);
+        double file_time;
         ss >> file_time;
 
-        if (abs(file_time - time) < 1e-3) {
-            opserr << file_time ;
-            found_time = true ;
+        if (file_time >= time) {
+            laterTime = file_time;
+            double value;
+            while (ss >> value) {
+                gaussDataLater.push_back(value);
+            }
+            found_interval = true;
             break;
         }
+
+        earlierTime = file_time;
+        gaussDataEarlier.clear();
+        double value;
+        while (ss >> value) {
+            gaussDataEarlier.push_back(value);
+        }
     }
 
-    if (found_time)
-      opserr << "Found time" ;
-    else
-      opserr << "Not found time" ;
+    gausstemps_file.close();
 
-    gausstemps_file.close() ;
+    if (!found_interval) {
+        opserr << "Time interval not found." << endln;
+        return;
+    }
 
-    double tempChange = 1. ;
-    double deltaEpsilon = 0. ;
+    double deltaEpsilon = 0.;
 
+    int elementIndex = 0;
     for (int eleTag : elementTags) {
-      // std::cout << eleTag << ' ';
+        Element* theElement = this->getDomain()->getElement(eleTag);
 
-      Element *theElement = this->getDomain()->getElement(eleTag) ;
+        for (int gp = 1; gp <= 4; gp++) {
+            int dataIndex = 4 * elementIndex + gp;
+            if (dataIndex < gaussDataEarlier.size() && dataIndex < gaussDataLater.size()) {
+                double t = (time - earlierTime) / (laterTime - earlierTime);
+                double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex];
 
+                deltaEpsilon = - alpha * tempChange;
 
-      for (int gp = 1; gp <= 4; gp++)
-      {
-        deltaEpsilon = alpha * tempChange ; // agarrar el tempchange de cada punto de gauss de cada elemento (restar la temp inicial con este)
-        // siempre c/r al inicial no al anterior.
-        // interpolar para distintos incrementos de tiempo (siempre sera la misma cantidad de tiempo, alcantidad de pasos no necesariamente)
-        {
-          const char *argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
-          int argc = 3;
-  
-          Parameter param(0, theElement, argv, argc);
-          param.update(deltaEpsilon);
+                const char* argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
+                int argc = 3;
+
+                Parameter param(0, theElement, argv, argc);
+                param.update(deltaEpsilon);
+            }
+
+            {
+                const char* argv[3] = {"material", std::to_string(gp).c_str(), "E"};
+                int argc = 3;
+                Parameter param(0, theElement, argv, argc);
+                param.update(E);
+            }
+
+            {
+                const char* argv[3] = {"material", std::to_string(gp).c_str(), "v"};
+                int argc = 3;
+                Parameter param(0, theElement, argv, argc);
+                param.update(nu);
+            }
         }
-
-        {
-          const char *argv[3] = {"material", std::to_string(gp).c_str(), "E"};
-          int argc = 3;
-          Parameter param(0, theElement, argv, argc);
-          param.update(E);
-        }
-
-        {
-          const char *argv[3] = {"material", std::to_string(gp).c_str(), "v"};
-          int argc = 3;
-          Parameter param(0, theElement, argv, argc);
-          param.update(nu);
-        }
-      }
+        elementIndex++;
     }
-
-
-    // // Para cada elemento en elements_filename, aplicarle los cambios de temperatura
-    // // que vienen en gausstemps_filename
-    // std::ifstream elements_file(elements_filename);
-    // while (getline(elements_file, line)) {
-    //     // Aquí necesitas alguna forma de obtener el elemento correspondiente a esta línea
-    //     // Por ejemplo, si la línea es un ID de elemento, necesitarías una función para obtener el elemento a partir de su ID
-    //     Element* element = get_element_from_line(line);
-
-    //     // Aquí necesitas alguna forma de obtener la temperatura correspondiente a este elemento a partir de la línea de gausstemps_filename
-    //     // Por ejemplo, si la temperatura está en la línea después del tiempo, podrías utilizar una función para obtener esa temperatura
-    //     double temperature = get_temperature_from_gausstemps_line(line);
-
-    //     element->setTemperature(temperature);
-    // }
-
-    // elements_file.close();
-
-    // // Iterar los puntos de Gauss de cada elemento y llamar setParameter con la opción initNormalStrain
-    // // Aquí estás suponiendo que tienes una lista de todos los elementos y que cada elemento tiene una lista de puntos de Gauss
-    // for (Element* element : elements) {
-    //     for (GaussPoint* gauss_point : element->getGaussPoints()) {
-    //         const char* argv[] = {"initNormalStrain"};
-    //         int argc = 1;
-    //         Parameter param;
-
-    //         gauss_point->setParameter(argv, argc, param);
-    //     }
-    // }
-
 }
+
     
 void 
 ThermalVolumetricLoadingPattern::applyLoadSensitivity(double time)
