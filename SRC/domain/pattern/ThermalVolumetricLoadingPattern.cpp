@@ -46,6 +46,19 @@
 #include <stdlib.h>
 #include <sstream>
 
+
+/**
+ * ThermalVolumetricLoadingPattern constructor.
+ * Initializes member variables and reads the element tags from a file.
+ *
+ * @param tag Integer that represents the object tag
+ * @param alpha_ Double, thermal expansion coefficient
+ * @param c1_ Double, first coefficient for logarithmic function
+ * @param c2_ Double, second coefficient for logarithmic function
+ * @param K_ Double, bulk modulus
+ * @param elements_filename_ String, name of the file containing element tags
+ * @param gausstemps_filename_ String, name of the file containing Gauss temperature data
+ */
 ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, double c1_, double c2_, double K_, std::string elements_filename_, std::string gausstemps_filename_)
   :LoadPattern(tag, PATTERN_TAG_ThermalVolumetricLoadingPattern),  
   alpha(alpha_),
@@ -65,11 +78,6 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
   opserr << " elements_filename   = " << elements_filename.c_str() << endln;
   opserr << " gausstemps_filename = " << gausstemps_filename.c_str() << endln;
 
-
-  // DEJAR BONITO (NOMBRES, STD::) 
-  // Pasarselo a ChatGPT para que lo deje bien bonito y comentado
-
-
   std::ifstream file(elements_filename);
   if (!file) {
       std::cerr << "Could not open: " << elements_filename.c_str() << endln;
@@ -80,11 +88,6 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
                std::istream_iterator<int>());
 
   elementTags = elementTags_ ;
-
-  // for (int eleTag : elementTags) {
-  //     std::cout << eleTag << ' ';
-  // }
-
 }
 
 
@@ -99,12 +102,19 @@ ThermalVolumetricLoadingPattern::setDomain(Domain *theDomain)
   this->LoadPattern::setDomain(theDomain);
 }
 
+/**
+ * Applies the load at a given time by updating strain and material properties.
+ *
+ * @param time Double, the time at which the load should be applied
+ */
 void
 ThermalVolumetricLoadingPattern::applyLoad(double time)
 {
+    // Calculate Young's modulus and Poisson's ratio at the given time
     double E = c1 * log(time) + c2;
     double nu = (3 * K - E) / (6 * K);
 
+    // Open the file containing Gauss temperature data
     std::ifstream gausstemps_file(gausstemps_filename);
     std::string line;
 
@@ -112,11 +122,13 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
     double earlierTime = 0, laterTime = 0;
     bool found_interval = false;
 
+    // Read the file to find the temperature data for the time interval
     while (getline(gausstemps_file, line)) {
         std::stringstream ss(line);
         double file_time;
         ss >> file_time;
 
+        // Find the appropriate time interval in the file
         if (file_time >= time) {
             laterTime = file_time;
             double value;
@@ -135,35 +147,42 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
         }
     }
 
+    // Close the file after reading
     gausstemps_file.close();
 
+    // If time interval is not found, log the error and return
     if (!found_interval) {
         opserr << "Time interval not found." << endln;
         return;
     }
 
     double deltaEpsilon = 0.;
-
     int elementIndex = 0;
+
+    // Loop through the element tags
     for (int eleTag : elementTags) {
         Element* theElement = this->getDomain()->getElement(eleTag);
 
+        // Loop through the Gauss points (assumed 4 in this case)
         for (int gp = 1; gp <= 4; gp++) {
             int dataIndex = 4 * elementIndex + gp;
             if (dataIndex < gaussDataEarlier.size() && dataIndex < gaussDataLater.size()) {
+                // Interpolate the temperature change
                 double t = (time - earlierTime) / (laterTime - earlierTime);
                 double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex];
 
+                // Calculate the strain
                 deltaEpsilon = - alpha * tempChange;
 
+                // Update the initial normal strain
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
                 int argc = 3;
-
                 Parameter param(0, theElement, argv, argc);
                 param.update(deltaEpsilon);
             }
 
             {
+                // Update Young's modulus
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "E"};
                 int argc = 3;
                 Parameter param(0, theElement, argv, argc);
@@ -171,6 +190,7 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
             }
 
             {
+                // Update Poisson's ratio
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "v"};
                 int argc = 3;
                 Parameter param(0, theElement, argv, argc);
