@@ -170,6 +170,7 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
                 // Interpolate the temperature change
                 double t = (time - earlierTime) / (laterTime - earlierTime);
                 double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex];
+                // double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex] - gaussData[0];
 
                 // Calculate the strain
                 deltaEpsilon = - alpha * tempChange;
