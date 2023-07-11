@@ -224,11 +224,14 @@ const Vector&
 IncrementalElasticIsotropicThreeDimensional::getStress (void)
 {	
   static Vector depsilon(6);
+  static Vector depsilon_internal(6);
   depsilon.Zero();
+  depsilon_internal.Zero();
   
   sigma = sigma_n;
 
   depsilon = epsilon - epsilon_n;
+  depsilon_internal = epsilon_internal - epsilon_internal_n;
 
   double mu2 = E/(1.0+v);
   double lam = v*mu2/(1.0-2.0*v);
@@ -272,6 +275,7 @@ int
 IncrementalElasticIsotropicThreeDimensional::commitState (void)
 {
   epsilon_n=epsilon;
+  epsilon_internal_n=epsilon_internal;
   sigma_n=sigma;
   // printnow = true;
   return 0;
@@ -350,7 +354,7 @@ int IncrementalElasticIsotropicThreeDimensional::setParameter(const char** argv,
 
   // 4000 - init strain
   if (strcmp(argv[0], "initNormalStrain") == 0) {
-    double initNormalStrain = depsilon_internal(0) ;
+    double initNormalStrain = epsilon_internal(0) ;
     param.setValue(initNormalStrain);
     // opserr << "InitStrain (setParameter)= " << initNormalStrain << endln ;
     return param.addObject(4001, this);
@@ -377,8 +381,8 @@ int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID
   case 4001:
   {
     double initNormalStrain = info.theDouble;
-    depsilon_internal.Zero();
-    depsilon_internal(0) = initNormalStrain;
+    epsilon_internal.Zero();
+    epsilon_internal(0) = initNormalStrain;
     // opserr << "InitStrain (updateParameter) = " << initNormalStrain << endln ;
     return 0;
   }
@@ -389,7 +393,7 @@ int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID
   }
 }
 
-// ***********************************************************
+// ************************************************* **********
 
 int 
 IncrementalElasticIsotropicThreeDimensional::sendSelf(int commitTag, Channel &theChannel)
