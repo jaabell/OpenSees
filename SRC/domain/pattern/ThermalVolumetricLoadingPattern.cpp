@@ -110,8 +110,16 @@ ThermalVolumetricLoadingPattern::setDomain(Domain *theDomain)
 void
 ThermalVolumetricLoadingPattern::applyLoad(double time)
 {
+    // LOADPATTERN IS CURRENTLY CONTROLLING MATERIAL PROPERTIES
+    // KINDA WEIRD MAYBE MAKE THE MATERIAL CHANGE THESE PROPERTIES
+
+
     // Calculate Young's modulus and Poisson's ratio at the given time
-    double E = c1 * log(time) + c2;
+    double E = c2;
+
+    if (time >= 1)
+      double E = c1 * log(time) + c2;
+
     double nu = (3 * K - E) / (6 * K);
 
     // Open the file containing Gauss temperature data
