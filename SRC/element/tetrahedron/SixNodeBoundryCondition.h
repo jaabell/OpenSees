@@ -39,7 +39,7 @@
 
 #include <ID.h>
 #include <Vector.h>
-#include <Matrix.h>
+#include <Matrix.h> 
 #include <Element.h>
 #include <Node.h>
 #include <NDMaterial.h>
@@ -59,10 +59,10 @@ public :
                        int node4,
                        int node5,
                        int node6,
-                       double beta = 0.0,
-                       double k    = 0.0,
-                       double tamb = 0.0,
-                       double th   = 1.0);
+                       double betaS = 0.0,
+                       double R     = 0.0,
+                       double tamb  = 0.0,
+                       double th    = 1.0);
 
     //destructor
     virtual ~SixNodeBoundryCondition( ) ;

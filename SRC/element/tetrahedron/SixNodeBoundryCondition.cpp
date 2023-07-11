@@ -126,8 +126,8 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
         int node4,
         int node5,
         int node6,
-        double beta,
-        double k,
+        double betaS,
+        double R,
         double tamb,
         double th)
     : Element(tag, ELE_TAG_SixNodeBoundryCondition),
@@ -145,8 +145,8 @@ SixNodeBoundryCondition::SixNodeBoundryCondition(int tag,
         nodePointers[i] = 0;
     }
 
-    inp_info[0] = beta ;
-    inp_info[1] = k ;
+    inp_info[0] = betaS ;
+    inp_info[1] = R ;
     inp_info[2] = tamb ;
     inp_info[3] = th ;
 }
@@ -367,7 +367,7 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
-            temp = shp[stiffIndex][j] * dvol[i] * (inp_info[0] / inp_info[1]) * inp_info[3] ;
+            temp = shp[stiffIndex][j] * dvol[i] * inp_info[0] * inp_info[3] ;
 
             //node-node mass
             kk = 0 ;
@@ -419,12 +419,12 @@ SixNodeBoundryCondition::addLoad(ElementalLoad *theLoad, double loadFactor)
 
     if (type == LOAD_TAG_BrickSelfWeight) {
         applyLoad = 1;
-        appliedQ += loadFactor * inp_info[2] * (inp_info[0] / inp_info[1]);
+        appliedQ += loadFactor * (inp_info[0] * inp_info[2] + inp_info[1]) ;
         return 0;
     } else if (type == LOAD_TAG_SelfWeight) {
         // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
         applyLoad = 1;
-        appliedQ += loadFactor * data(2) * inp_info[2] * (inp_info[0] / inp_info[1]);
+        appliedQ += loadFactor * data(2) * (inp_info[0] * inp_info[2] + inp_info[1]) ;
         return 0;
     } else {
         opserr << "SixNodeBoundryCondition::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
@@ -515,9 +515,12 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
     int i, j, k, p, q ;
     int jj, kk ;
 
+    static Vector residJ(ndf) ; //nodeJ residual
+
     double temp, stiffJK ;
 
     stiff.Zero( ) ;
+    resid.Zero( ) ;
 
     //compute basis vectors and local nodal coordinates
     computeBasis( ) ;
@@ -564,8 +567,18 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
-            resid( jj  ) -= dvol[i] * ( inp_info[2] * (inp_info[0] / inp_info[1]) ) * shp[2][j] ;
-            temp = shp[stiffIndex][j] * dvol[i] * (inp_info[0] / inp_info[1]) * inp_info[3] ;
+            // resid( jj  ) -= dvol[i] * ( (inp_info[0] * inp_info[2] + inp_info[1]) ) * shp[2][j] ;
+            // temp = shp[stiffIndex][j] * dvol[i] * inp_info[0] * inp_info[3] ;
+            temp = shp[stiffIndex][j] * dvol[i] * inp_info[3] ;
+            // inp_info[0] = Beta S
+            // inp_info[1] = R
+            // inp_info[2] = Tinf
+            // inp_info[3] = th (espesor)
+
+            if (applyLoad == 0)
+                resid( jj ) -= temp * (inp_info[0] * inp_info[2] + inp_info[1]) ;
+            else
+                resid( jj ) -= temp * appliedQ ;
 
             if ( tangFlag == 1 )
             {
@@ -594,7 +607,7 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
         nodeTemp_dot(i) = temp_dot_node_i(0);
     }
 
-    resid.addMatrixVector(0.0, stiff, nodeTemp_dot,  1.0);
+    resid.addMatrixVector(1.0, stiff, nodeTemp_dot,  1.0);
 }
 
 //*********************************************************************
@@ -673,7 +686,7 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
         return res;
     }
 
-    static Vector dData(7);
+    static Vector dData(8);
     dData(0) = alphaM;
     dData(1) = betaK;
     dData(2) = betaK0;
@@ -681,6 +694,7 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
     dData(4) = inp_info[0];
     dData(5) = inp_info[1];
     dData(6) = inp_info[2];
+    dData(7) = inp_info[3];
 
     if (theChannel.sendVector(dataTag, commitTag, dData) < 0) {
         opserr << "SixNodeBoundryCondition::sendSelf() - failed to send double data\n";
@@ -707,7 +721,7 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
 
     this->setTag(idData(26));
 
-    static Vector dData(7);
+    static Vector dData(8);
     if (theChannel.recvVector(dataTag, commitTag, dData) < 0) {
         opserr << "DispBeamColumn2d::sendSelf() - failed to recv double data\n";
         return -1;
@@ -720,6 +734,7 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
     inp_info[0] = dData(4);
     inp_info[1] = dData(5);
     inp_info[2] = dData(6);
+    inp_info[3] = dData(7);
 
     connectedExternalNodes(0) = idData(20);
     connectedExternalNodes(1) = idData(21);
@@ -956,6 +971,28 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     double x5 = xl[0][4] ; double y5 = xl[1][4] ; double z5 = xl[2][4] ;
     double x6 = xl[0][5] ; double y6 = xl[1][5] ; double z6 = xl[2][5] ;
 
+    // Check if x, y, or z-coordinates are the same
+    bool x_same = (x1 == x2) && (x2 == x3) && (x3 == x4) && (x4 == x5) && (x5 == x6);
+    bool y_same = (y1 == y2) && (y2 == y3) && (y3 == y4) && (y4 == y5) && (y5 == y6);
+    bool z_same = (z1 == z2) && (z2 == z3) && (z3 == z4) && (z4 == z5) && (z5 == z6);
+
+    double a1, a2, a3, a4, a5, a6;
+    double b1, b2, b3, b4, b5, b6;
+
+    if (x_same) {
+        a1 = y1; a2 = y2; a3 = y3; a4 = y4; a5 = y5; a6 = y6;
+        b1 = z1; b2 = z2; b3 = z3; b4 = z4; b5 = z5; b6 = z6;
+    } else if (y_same) {
+        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
+        b1 = z1; b2 = z2; b3 = z3; b4 = z4; b5 = z5; b6 = z6;
+    } else if (z_same) {
+        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
+        b1 = y1; b2 = y2; b3 = y3; b4 = y4; b5 = y5; b6 = y6;
+    } else {
+        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
+        b1 = y1; b2 = y2; b3 = y3; b4 = y4; b5 = y5; b6 = y6;
+    }
+
     // dNi/dzeta0
     double dN0_dzeta0  = 4.0 * zeta1 - 1.0 ; double dN1_dzeta0 = 0.0               ;
     double dN2_dzeta0  = 0.0               ; double dN3_dzeta0 = 4.0 * zeta2       ;
@@ -978,21 +1015,21 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     //                       | Jy1    Jy2    Jy3 |
     //
 
-    double dx4 = x4 - (x1 + x2) / 2.0 ;
-    double dx5 = x5 - (x2 + x3) / 2.0 ;
-    double dx6 = x6 - (x3 + x1) / 2.0 ;
+    double dx4 = a4 - (a1 + a2) / 2.0 ;
+    double dx5 = a5 - (a2 + a3) / 2.0 ;
+    double dx6 = a6 - (a3 + a1) / 2.0 ;
 
-    double dy4 = y4 - (y1 + y2) / 2.0 ;
-    double dy5 = y5 - (y2 + y3) / 2.0 ;
-    double dy6 = y6 - (y3 + y1) / 2.0 ;
+    double dy4 = b4 - (b1 + b2) / 2.0 ;
+    double dy5 = b5 - (b2 + b3) / 2.0 ;
+    double dy6 = b6 - (b3 + b1) / 2.0 ;
 
-    double Jx21 = (x2 - x1) + 4.0 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
-    double Jx32 = (x3 - x2) + 4.0 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
-    double Jx13 = (x1 - x3) + 4.0 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
+    double Jx21 = (a2 - a1) + 4.0 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
+    double Jx32 = (a3 - a2) + 4.0 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
+    double Jx13 = (a1 - a3) + 4.0 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
 
-    double Jy12 = (y1 - y2) + 4.0 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
-    double Jy23 = (y2 - y3) + 4.0 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
-    double Jy31 = (y3 - y1) + 4.0 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
+    double Jy12 = (b1 - b2) + 4.0 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
+    double Jy23 = (b2 - b3) + 4.0 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
+    double Jy31 = (b3 - b1) + 4.0 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
 
     double Jdet = ( Jx21 * Jy31 - Jy12 * Jx13 ) ;
 
