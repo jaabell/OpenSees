@@ -963,7 +963,6 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
 {
     // Mathematica formulation by Carlos Felippa.
     double zeta1 = zeta[0] ; double zeta2 = zeta[1] ; double zeta3 = 1.0 - zeta1 - zeta2 ;
-
     double x1 = xl[0][0] ; double y1 = xl[1][0] ; double z1 = xl[2][0] ;
     double x2 = xl[0][1] ; double y2 = xl[1][1] ; double z2 = xl[2][1] ;
     double x3 = xl[0][2] ; double y3 = xl[1][2] ; double z3 = xl[2][2] ;
@@ -971,92 +970,68 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     double x5 = xl[0][4] ; double y5 = xl[1][4] ; double z5 = xl[2][4] ;
     double x6 = xl[0][5] ; double y6 = xl[1][5] ; double z6 = xl[2][5] ;
 
-    // Check if x, y, or z-coordinates are the same
-    bool x_same = (x1 == x2) && (x2 == x3) && (x3 == x4) && (x4 == x5) && (x5 == x6);
-    bool y_same = (y1 == y2) && (y2 == y3) && (y3 == y4) && (y4 == y5) && (y5 == y6);
-    bool z_same = (z1 == z2) && (z2 == z3) && (z3 == z4) && (z4 == z5) && (z5 == z6);
-
-    double a1, a2, a3, a4, a5, a6;
-    double b1, b2, b3, b4, b5, b6;
-
-    if (x_same) {
-        a1 = y1; a2 = y2; a3 = y3; a4 = y4; a5 = y5; a6 = y6;
-        b1 = z1; b2 = z2; b3 = z3; b4 = z4; b5 = z5; b6 = z6;
-    } else if (y_same) {
-        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
-        b1 = z1; b2 = z2; b3 = z3; b4 = z4; b5 = z5; b6 = z6;
-    } else if (z_same) {
-        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
-        b1 = y1; b2 = y2; b3 = y3; b4 = y4; b5 = y5; b6 = y6;
-    } else {
-        a1 = x1; a2 = x2; a3 = x3; a4 = x4; a5 = x5; a6 = x6;
-        b1 = y1; b2 = y2; b3 = y3; b4 = y4; b5 = y5; b6 = y6;
-    }
-
-    // dNi/dzeta0
-    double dN0_dzeta0  = 4.0 * zeta1 - 1.0 ; double dN1_dzeta0 = 0.0               ;
-    double dN2_dzeta0  = 0.0               ; double dN3_dzeta0 = 4.0 * zeta2       ;
-    double dN4_dzeta0  = 0.0               ; double dN5_dzeta0 = 4.0 * zeta3       ;
+    // N1 - N6
+    double N1 = zeta1 * (2.0 * zeta1 - 1.0) ;
+    double N2 = zeta2 * (2.0 * zeta2 - 1.0) ;
+    double N3 = zeta3 * (2.0 * zeta3 - 1.0) ;
+    double N4 = 4.0 * zeta1 * zeta2 ;
+    double N5 = 4.0 * zeta2 * zeta3 ;
+    double N6 = 4.0 * zeta3 * zeta1 ;
 
     // dNi/dzeta1
-    double dN0_dzeta1  = 0.0               ; double dN1_dzeta1 = 4.0 * zeta2 - 1.0 ;
-    double dN2_dzeta1  = 0.0               ; double dN3_dzeta1 = 4.0 * zeta1       ;
-    double dN4_dzeta1  = 4.0 * zeta3       ; double dN5_dzeta1 = 0.0               ;
+    double dN1_dzeta1  = 4.0 * zeta1 - 1.0                ; double dN2_dzeta1 = 0.0                              ;
+    double dN3_dzeta1  = 4.0 * zeta1 + 4.0 * zeta2 - 3.0  ; double dN4_dzeta1 = 4.0 * zeta2                      ;
+    double dN5_dzeta1  = -4.0 * zeta2                     ; double dN6_dzeta1 = -8.0 * zeta1 - 4.0 * zeta2 + 4.0 ;
 
-    // dNi/dzeta3
-    double dN0_dzeta3  = 0.0               ; double dN1_dzeta3 = 0.0               ;
-    double dN2_dzeta3  = 4.0 * zeta3 - 1.0 ; double dN3_dzeta3 = 0.0               ;
-    double dN4_dzeta3  = 4.0 * zeta2       ; double dN5_dzeta3 = 4.0 * zeta1       ;
+    // dNi/dzeta2
+    double dN1_dzeta2  = 0.0                              ; double dN2_dzeta2 = 4.0 * zeta2 - 1.0                ;
+    double dN3_dzeta2  = 4.0 * zeta1 + 4.0 * zeta2 - 3.0  ; double dN4_dzeta2 = 4.0 * zeta1                      ;
+    double dN5_dzeta2  = -4.0 * zeta1 - 8.0 * zeta2 + 4.0 ; double dN6_dzeta2 = -4.0 * zeta1                     ;
 
-    // IFEM.Ch24 (Eq. 24.7)
-    // 
-    //                       |  1      1      1  |
-    // Jdet = (1 / 2) * det( | Jx1    Jx2    Jx3 | )
-    //                       | Jy1    Jy2    Jy3 |
-    //
+    // Jacobian
+    double Jx1 = x1 * dN1_dzeta1 + x2 * dN2_dzeta1 + x3 * dN3_dzeta1 + x4 * dN4_dzeta1 + x5 * dN5_dzeta1 + x6 * dN6_dzeta1 ;
+    double Jy1 = y1 * dN1_dzeta1 + y2 * dN2_dzeta1 + y3 * dN3_dzeta1 + y4 * dN4_dzeta1 + y5 * dN5_dzeta1 + y6 * dN6_dzeta1 ;
+    double Jz1 = z1 * dN1_dzeta1 + z2 * dN2_dzeta1 + z3 * dN3_dzeta1 + z4 * dN4_dzeta1 + z5 * dN5_dzeta1 + z6 * dN6_dzeta1 ;
 
-    double dx4 = a4 - (a1 + a2) / 2.0 ;
-    double dx5 = a5 - (a2 + a3) / 2.0 ;
-    double dx6 = a6 - (a3 + a1) / 2.0 ;
-
-    double dy4 = b4 - (b1 + b2) / 2.0 ;
-    double dy5 = b5 - (b2 + b3) / 2.0 ;
-    double dy6 = b6 - (b3 + b1) / 2.0 ;
-
-    double Jx21 = (a2 - a1) + 4.0 * (dx4 * (zeta1 - zeta2) + (dx5 - dx6) * zeta3) ;
-    double Jx32 = (a3 - a2) + 4.0 * (dx5 * (zeta2 - zeta3) + (dx6 - dx4) * zeta1) ;
-    double Jx13 = (a1 - a3) + 4.0 * (dx6 * (zeta3 - zeta1) + (dx4 - dx5) * zeta2) ;
-
-    double Jy12 = (b1 - b2) + 4.0 * (dy4 * (zeta2 - zeta1) + (dy6 - dy5) * zeta3) ;
-    double Jy23 = (b2 - b3) + 4.0 * (dy5 * (zeta3 - zeta2) + (dy4 - dy6) * zeta1) ;
-    double Jy31 = (b3 - b1) + 4.0 * (dy6 * (zeta1 - zeta3) + (dy5 - dy4) * zeta2) ;
-
-    double Jdet = ( Jx21 * Jy31 - Jy12 * Jx13 ) ;
+    double Jx2 = x1 * dN1_dzeta2 + x2 * dN2_dzeta2 + x3 * dN3_dzeta2 + x4 * dN4_dzeta2 + x5 * dN5_dzeta2 + x6 * dN6_dzeta2 ;
+    double Jy2 = y1 * dN1_dzeta2 + y2 * dN2_dzeta2 + y3 * dN3_dzeta2 + y4 * dN4_dzeta2 + y5 * dN5_dzeta2 + y6 * dN6_dzeta2 ;
+    double Jz2 = z1 * dN1_dzeta2 + z2 * dN2_dzeta2 + z3 * dN3_dzeta2 + z4 * dN4_dzeta2 + z5 * dN5_dzeta2 + z6 * dN6_dzeta2 ;
 
     // Saving the Jacobians Determinant
-    xsj = Jdet / 2.0 ;
+    // J = | Jy1 - Jx1 , Jz1 - Jx1 |
+    //     | Jy2 - Jx2 , Jz2 - Jx2 |
 
-    shp[0][0] = (4.0 * zeta1 - 1.0) * Jy23 / Jdet ;
-    shp[0][1] = (4.0 * zeta2 - 1.0) * Jy31 / Jdet ;
-    shp[0][2] = (4.0 * zeta3 - 1.0) * Jy12 / Jdet ;
-    shp[0][3] = 4.0 * (zeta2 * Jy23 + zeta1 * Jy31) / Jdet ;
-    shp[0][4] = 4.0 * (zeta3 * Jy31 + zeta2 * Jy12) / Jdet ;
-    shp[0][5] = 4.0 * (zeta1 * Jy12 + zeta3 * Jy23) / Jdet ;
+    // double Jdet = sqrt(pow((Jy1 * Jz2 - Jz1 * Jy2), 2) + pow((Jz1 * Jx2 - Jx1 * Jz2), 2) + pow((Jx1 * Jy2 - Jy1 * Jx2), 2)) / 2.0 ;
+    double Jdet = ( (Jy1 - Jx1) * (Jz2 - Jx2) - (Jz1 - Jx1) * (Jy2 - Jx2) ) / 2.0 ;
+    xsj = Jdet ;
 
-    shp[1][0] = (4.0 * zeta1 - 1.0) * Jx32 / Jdet ;
-    shp[1][1] = (4.0 * zeta2 - 1.0) * Jx13 / Jdet ;
-    shp[1][2] = (4.0 * zeta3 - 1.0) * Jx21 / Jdet ;
-    shp[1][3] = 4.0 * (zeta2 * Jx32 + zeta1 * Jx13) / Jdet ;
-    shp[1][4] = 4.0 * (zeta3 * Jx13 + zeta2 * Jx21) / Jdet ;
-    shp[1][5] = 4.0 * (zeta1 * Jx21 + zeta3 * Jx32) / Jdet ;
+    // invJ = (1 / detJ) * [  Jz2 - Jx2 , - Jz1 + Jx1]
+    //                     [- Jy2 + Jx2 ,   Jy1 - Jx1]
+
+    // dNi_dx = dNi/dzeta1 * invJ[0][0] + dNi/dzeta2 * invJ[0][1] + dNi/dzeta3 * invJ[0][2]
+    // dNi_dy = dNi/dzeta1 * invJ[1][0] + dNi/dzeta2 * invJ[1][1] + dNi/dzeta3 * invJ[1][2]
+
+    shp[0][0] = dN1_dzeta1 * (Jz2 - Jx2) / Jdet + dN1_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+    shp[0][1] = dN2_dzeta1 * (Jz2 - Jx2) / Jdet + dN2_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+    shp[0][2] = dN3_dzeta1 * (Jz2 - Jx2) / Jdet + dN3_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+    shp[0][3] = dN4_dzeta1 * (Jz2 - Jx2) / Jdet + dN4_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+    shp[0][4] = dN5_dzeta1 * (Jz2 - Jx2) / Jdet + dN5_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+    shp[0][5] = dN6_dzeta1 * (Jz2 - Jx2) / Jdet + dN6_dzeta2 * (-Jz1 + Jx1) / Jdet ;
+
+    shp[1][0] = dN1_dzeta1 * (-Jy2 + Jx2) / Jdet + dN1_dzeta2 * (Jy1 - Jx1) / Jdet  ;
+    shp[1][1] = dN2_dzeta1 * (-Jy2 + Jx2) / Jdet + dN2_dzeta2 * (Jy1 - Jx1) / Jdet  ;
+    shp[1][2] = dN3_dzeta1 * (-Jy2 + Jx2) / Jdet + dN3_dzeta2 * (Jy1 - Jx1) / Jdet  ;
+    shp[1][3] = dN4_dzeta1 * (-Jy2 + Jx2) / Jdet + dN4_dzeta2 * (Jy1 - Jx1) / Jdet  ;
+    shp[1][4] = dN5_dzeta1 * (-Jy2 + Jx2) / Jdet + dN5_dzeta2 * (Jy1 - Jx1) / Jdet  ;
+    shp[1][5] = dN6_dzeta1 * (-Jy2 + Jx2) / Jdet + dN6_dzeta2 * (Jy1 - Jx1) / Jdet  ;
 
     // N1 - N6
-    shp[2][0] = zeta1 * (2.0 * zeta1 - 1.0) ;
-    shp[2][1] = zeta2 * (2.0 * zeta2 - 1.0) ;
-    shp[2][2] = zeta3 * (2.0 * zeta3 - 1.0) ;
-    shp[2][3] = 4.0 * zeta1 * zeta2 ;
-    shp[2][4] = 4.0 * zeta2 * zeta3 ;
-    shp[2][5] = 4.0 * zeta3 * zeta1 ;
+    shp[2][0] = N1 ;
+    shp[2][1] = N2 ;
+    shp[2][2] = N3 ;
+    shp[2][3] = N4 ;
+    shp[2][4] = N5 ;
+    shp[2][5] = N6 ;
 
     return ;
 }
