@@ -27,6 +27,7 @@ target_sources(OPS_Element
     EmbeddedBeamInterfaceP.cpp
     EmbeddedEPBeamInterface.cpp
     Tcl_generateInterfacePoints.cpp
+    UnsaturatedSSPquadUP.cpp
     PUBLIC
     SimpleContact2D.h
     SimpleContact3D.h
@@ -48,6 +49,7 @@ target_sources(OPS_Element
     EmbeddedBeamInterfaceP.h
     EmbeddedEPBeamInterface.h
     Tcl_generateInterfacePoints.h
+    UnsaturatedSSPquadUP.h
 )
 
 target_include_directories(OPS_Element PUBLIC ${CMAKE_CURRENT_LIST_DIR})

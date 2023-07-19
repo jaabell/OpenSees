@@ -62,8 +62,8 @@ class SSPquadUP : public Element
     SSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &theMat,
                        double thick, double Kf, double Rf, double k1, double k2,
                        double eVoid, double alpha, double b1 = 0.0, double b2 = 0.0,
-					   double Pup = 0.0, double Plow = 0.0, double Pleft = 0.0, double Pright = 0.0);
-    SSPquadUP();
+					   double Pup = 0.0, double Plow = 0.0, double Pleft = 0.0, double Pright = 0.0, int class_tag=ELE_TAG_SSPquadUP);
+    SSPquadUP(int classTag=ELE_TAG_SSPquadUP);
     ~SSPquadUP();
 
     const char* getClassType()  const { return "SSPquadUP"; };
@@ -113,18 +113,16 @@ class SSPquadUP : public Element
     friend class QzLiq1; // Sumeet
 
   protected:
-
-  private:
-
-    // member functions
     Matrix DyadicProd(Vector v1, Vector v2);   // dyadic product for two 2x1 vectors
     void GetStab(void);                        // compute stabilization stiffness matrix
     void GetSolidStiffness(void);              // compute solid phase stiffness matrix
     void GetSolidMass(void);                   // compute solid phase mass matrix
     void GetPermeabilityMatrix(void);          // compute permeability matrix
-    // LM change        
 	void setPressureLoadAtNodes(void);
-    // LM change
+
+  // private:
+    // member functions
+
 		
     // objects
     NDMaterial *theMaterial;                   // pointer to NDMaterial object

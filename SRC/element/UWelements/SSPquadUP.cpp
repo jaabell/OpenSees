@@ -142,8 +142,8 @@ OPS_SSPquadUP(void)
 SSPquadUP::SSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &theMat, 
                               double thick, double Kf, double Rf, double k1, double k2,
                               double eVoid, double alpha, double b1, double b2,
-							  double Pup, double Plow, double Pleft, double Pright)
-  :Element(tag,ELE_TAG_SSPquadUP),
+							  double Pup, double Plow, double Pleft, double Pright, int classTag)
+  :Element(tag,classTag),
     theMaterial(0),
     mExternalNodes(SQUP_NUM_NODE),
     mTangentStiffness(SQUP_NUM_DOF,SQUP_NUM_DOF),
@@ -216,8 +216,8 @@ SSPquadUP::SSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &th
 }
 
 // null constructor
-SSPquadUP::SSPquadUP()
-  :Element(0,ELE_TAG_SSPquadUP),
+SSPquadUP::SSPquadUP(int classTag)
+  :Element(0,classTag),
     theMaterial(0),
     mExternalNodes(SQUP_NUM_NODE),
     mTangentStiffness(SQUP_NUM_DOF,SQUP_NUM_DOF),
