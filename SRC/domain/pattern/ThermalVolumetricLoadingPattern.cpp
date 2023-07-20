@@ -110,15 +110,12 @@ ThermalVolumetricLoadingPattern::setDomain(Domain *theDomain)
 void
 ThermalVolumetricLoadingPattern::applyLoad(double time)
 {
-    // LOADPATTERN IS CURRENTLY CONTROLLING MATERIAL PROPERTIES
-    // KINDA WEIRD MAYBE MAKE THE MATERIAL CHANGE THESE PROPERTIES
-
-
     // Calculate Young's modulus and Poisson's ratio at the given time
     double E = c2;
+    std::vector<double> initTemp;
 
     if (time >= 1)
-      double E = c1 * log(time) + c2;
+        E = c1 * log(time) + c2;
 
     double nu = (3 * K - E) / (6 * K);
 
@@ -129,7 +126,21 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
     std::vector<double> gaussDataEarlier, gaussDataLater;
     double earlierTime = 0, laterTime = 0;
     bool found_interval = false;
-
+    
+    // If the file is open and there's a line to read
+    if (gausstemps_file && getline(gausstemps_file, line)) {
+        std::stringstream ss(line);
+        double file_time;
+        ss >> file_time;
+        earlierTime = file_time;
+        
+        // Now we read the first temperature data into initTemp
+        double value;
+        while (ss >> value) {
+            initTemp.push_back(value);
+        }
+    }
+    
     // Read the file to find the temperature data for the time interval
     while (getline(gausstemps_file, line)) {
         std::stringstream ss(line);
@@ -177,11 +188,10 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
             if (dataIndex < gaussDataEarlier.size() && dataIndex < gaussDataLater.size()) {
                 // Interpolate the temperature change
                 double t = (time - earlierTime) / (laterTime - earlierTime);
-                double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex];
-                // double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex] - gaussData[0];
+                double tempChange = (1 - t) * gaussDataEarlier[dataIndex] + t * gaussDataLater[dataIndex] - initTemp[dataIndex];
 
                 // Calculate the strain
-                deltaEpsilon = - alpha * tempChange;
+                deltaEpsilon = alpha * tempChange;
 
                 // Update the initial normal strain
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
