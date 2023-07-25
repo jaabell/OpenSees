@@ -590,8 +590,9 @@
 #define LOAD_TAG_ShellThermalAction       14 // L.Jiang [ SIF ]
 #define LOAD_TAG_NodalThermalAction       15 //L.Jiang [ SIF ]
 #define LOAD_TAG_ThermalActionWrapper     16 //L.Jiang [ SIF ]
-#define LOAD_TAG_LysmerVelocityLoader      17  //Jose Abell (UANDES)
-#define LOAD_TAG_IGAFollowerLoad      18  //Jose Abell (UANDES)
+#define LOAD_TAG_LysmerVelocityLoader     17 // Jose Abell (UANDES)
+#define LOAD_TAG_IGAFollowerLoad          18 // Jose Abell (UANDES)
+#define LOAD_TAG_ThermalHeatSource        19 // Jose Abell (UANDES)
 
 
 #define MAT_TAG_IsotropicLinElastic         1001

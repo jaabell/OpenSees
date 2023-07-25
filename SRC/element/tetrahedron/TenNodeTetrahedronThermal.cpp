@@ -494,14 +494,10 @@ TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
     int type;
     const Vector &data = theLoad->getData(type, loadFactor);
 
-    if (type == LOAD_TAG_BrickSelfWeight) {
+    if (type == LOAD_TAG_ThermalHeatSource) {
+        opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " applying q =  " << data(0) << "\n";
         applyLoad = 1;
-        appliedB[0] += loadFactor * b[0];
-        return 0;
-    } else if (type == LOAD_TAG_SelfWeight) {
-        // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
-        applyLoad = 1;
-        appliedB[0] += loadFactor * data(5) * b[0];
+        appliedB[0] = data(0);
         return 0;
     } else {
         opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";

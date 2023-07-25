@@ -35,7 +35,8 @@ OBJS       = $(RELIABILITY_OBJS) \
 	TriangleSeries.o \
 	TclSeriesIntegratorCommand.o \
 	PeerMotion.o \
-	PeerNGAMotion.o
+	PeerNGAMotion.o \
+	ThermalVolumetricLoadingPattern.o
 
 # Compilation control
 
