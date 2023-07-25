@@ -76,6 +76,9 @@
 #include <BrickSelfWeight.h>
 #include <SurfaceLoader.h>
 #include <SelfWeight.h>
+#include <ThermalHeatSource.h>
+
+
 #include <LoadPattern.h>
 
 
@@ -3266,6 +3269,37 @@ TclCommand_addElementalLoad(ClientData clientData, Tcl_Interp *interp, int argc,
       return TCL_ERROR;
     }  
   }
+  // Added by José A. Abell  - UANDES
+  else if (strcmp(argv[count], "-ThermalHeatSource") == 0) {
+  	count++;
+  	double q;
+  	// One thermal heat source
+  	if (argc - count == 1) {
+  		if (Tcl_GetDouble(interp, argv[count], &q) != TCL_OK) {
+  			opserr << "WARNING eleLoad - invalid Ttop1 " << argv[count] << " for -beamTemp\n";
+  			return TCL_ERROR;
+  		}
+  		for (int i = 0; i < theEleTags.Size(); i++) {
+  			theLoad = new ThermalHeatSource(eleLoadTag, theEleTags(i), q);
+  			if (theLoad == 0) {
+  				opserr << "WARNING eleLoad - out of memory creating load of type " << argv[count] ;
+  				return TCL_ERROR;
+  			}
+  			// get the current pattern tag if no tag given in i/p
+  			int loadPatternTag = theTclLoadPattern->getTag();
+  			// add the load to the domain
+  			if (theTclDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+  				opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+  				opserr << theLoad;
+  				delete theLoad;
+  				return TCL_ERROR;
+  			}
+  			eleLoadTag++;
+  		}
+  		return 0;
+  	}
+  }
+
 
   // if get here we have successfully created the load and added it to the domain
   return TCL_OK;
