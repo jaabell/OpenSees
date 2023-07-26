@@ -236,7 +236,7 @@ LinearElasticSpring::LinearElasticSpring(int tag, int dim,
         theNodes[i] = 0;
     
     // check the number of directions
-    if (numDIR < 1 || numDIR > 6)  {
+    if (numDIR < 1) {
         opserr << "LinearElasticSpring::LinearElasticSpring() - element: "
             << this->getTag() << " wrong number of directions\n";
         exit(-1);
@@ -257,24 +257,32 @@ LinearElasticSpring::LinearElasticSpring(int tag, int dim,
     
     // check p-delta moment distribution ratios
     if (Mratio.Size() == 4) {
-        if (Mratio(0) < 0.0 || Mratio(1) < 0.0 ||
-            Mratio(2) < 0.0 || Mratio(3) < 0.0) {
-            opserr << "LinearElasticSpring::LinearElasticSpring() - "
-                << "p-delta moment ratios can not be negative\n";
-            exit(-1);
-        }
-        if (Mratio(0) + Mratio(1) > 1.0) {
-            opserr << "LinearElasticSpring::LinearElasticSpring() - "
-                << "incorrect p-delta moment ratios:\nrMy1 + rMy2 = "
-                << Mratio(0) + Mratio(1) << " > 1.0\n";
-            exit(-1);
-        }
-        if (Mratio(2) + Mratio(3) > 1.0) {
-            opserr << "LinearElasticSpring::LinearElasticSpring() - "
-                << "incorrect p-delta moment ratios:\nrMz1 + rMz2 = "
-                << Mratio(2) + Mratio(3) << " > 1.0\n";
-            exit(-1);
-        }
+      for (int i = 0; i < 4; i++) {
+	if (Mratio(i) < 0.0) {
+	  opserr << "LinearElasticSpring::LinearElasticSpring() - "
+		 << "P-Delta moment ratio " << i+1 << " is negative\n";
+	  Mratio(i) = -Mratio(i);
+	  opserr << "Making the value positive " << Mratio(i) << endln;
+	}
+      }
+      double sumRatio = Mratio(0)+Mratio(1);
+      if (sumRatio > 1.0)  {
+	opserr << "LinearElasticSpring::LinearElasticSpring() - "
+	       << "incorrect P-Delta moment ratios:\nrMy1 + rMy2 = "
+	       << sumRatio << " > 1.0\n";
+	Mratio(0) = Mratio(0)/sumRatio;
+	Mratio(1) = Mratio(1)/sumRatio;
+	opserr << "Scaling ratios down to " << Mratio(0) << " and " << Mratio(1) << endln;
+      }
+      sumRatio = Mratio(2)+Mratio(3);
+      if (sumRatio > 1.0)  {
+	opserr << "LinearElasticSpring::LinearElasticSpring() - "
+	       << "incorrect P-Delta moment ratios:\nrMz1 + rMz2 = "
+	       << sumRatio << " > 1.0\n";
+	Mratio(2) = Mratio(2)/sumRatio;
+	Mratio(3) = Mratio(3)/sumRatio;
+	opserr << "Scaling ratios down to " << Mratio(2) << " and " << Mratio(3) << endln;	    
+      }
     }
     
     // initialize optional damping matrix
@@ -878,7 +886,7 @@ Response* LinearElasticSpring::setResponse(const char **argv, int argc,
     output.attr("node1",connectedExternalNodes[0]);
     output.attr("node2",connectedExternalNodes[1]);
     
-    char outputData[10];
+    char outputData[80];
     
     // global forces
     if (strcmp(argv[0],"force") == 0 || strcmp(argv[0],"forces") == 0 ||
@@ -944,6 +952,16 @@ Response* LinearElasticSpring::setResponse(const char **argv, int argc,
         }
         theResponse = new ElementResponse(this, 6, Vector(numDIR*2));
     }
+
+    if (strcmp(argv[0],"xaxis") == 0) {
+      theResponse = new ElementResponse(this, 20, Vector(3));
+    }
+    if (strcmp(argv[0],"yaxis") == 0) {
+      theResponse = new ElementResponse(this, 21, Vector(3));
+    }
+    if (strcmp(argv[0],"zaxis") == 0) {
+      theResponse = new ElementResponse(this, 22, Vector(3));
+    }
     
     output.endTag(); // ElementOutput
     
@@ -954,6 +972,7 @@ Response* LinearElasticSpring::setResponse(const char **argv, int argc,
 int LinearElasticSpring::getResponse(int responseID, Information &eleInfo)
 {
     Vector defoAndForce(numDIR*2);
+    Vector &theVec = *(eleInfo.theVector);
     
     switch (responseID)  {
     case 1:  // global forces
@@ -984,9 +1003,25 @@ int LinearElasticSpring::getResponse(int responseID, Information &eleInfo)
         defoAndForce.Assemble(qb,numDIR);
         
         return eleInfo.setVector(defoAndForce);
-        
+
+    case 20:
+      theVec(0) = trans(0,0);
+      theVec(1) = trans(0,1);
+      theVec(2) = trans(0,2);
+      return 0;
+    case 21:
+      theVec(0) = trans(1,0);
+      theVec(1) = trans(1,1);
+      theVec(2) = trans(1,2);
+      return 0;
+    case 22:
+      theVec(0) = trans(2,0);
+      theVec(1) = trans(2,1);
+      theVec(2) = trans(2,2);
+      return 0;
+      
     default:
-        return 0;
+        return -1;
     }
 }
 

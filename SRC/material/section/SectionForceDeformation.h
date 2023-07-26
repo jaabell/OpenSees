@@ -47,6 +47,8 @@ class Response;
 
 #define MAX_SECTION_RESPONSE_ID 10000
 
+#define SECTION_RESPONSE_NONE   -1
+
 #define SECTION_RESPONSE_MZ		1
 #define SECTION_RESPONSE_P		2
 #define SECTION_RESPONSE_VY		3
@@ -76,8 +78,7 @@ class SectionForceDeformation : public Material
   SectionForceDeformation ();
   virtual ~SectionForceDeformation ();
   
-  //virtual int setTrialSectionDeformation (const Vector&) = 0;
-  virtual int setTrialSectionDeformation (const Vector&) ; //the default valuoe 0 is removeed byJZ ,UoE 
+  virtual int setTrialSectionDeformation (const Vector&) = 0;
   virtual const Vector &getSectionDeformation (void) = 0;
   
   virtual const Vector &getStressResultant (void) = 0;

@@ -18,9 +18,6 @@
     <Filter Include="zeroLength">
       <UniqueIdentifier>{c2413ced-fd89-47ec-a53c-7c50d9fbeda0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="beamWithHinges">
-      <UniqueIdentifier>{95c7eb42-420e-4ebb-9712-0482c73a001b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="crdTransf">
       <UniqueIdentifier>{db97fed4-cb21-4af2-a581-225349957f04}</UniqueIdentifier>
     </Filter>
@@ -138,6 +135,12 @@
     <Filter Include="CEqElement">
       <UniqueIdentifier>{44a1f5d6-7e75-44f5-a5a5-b79b65801b24}</UniqueIdentifier>
     </Filter>
+    <Filter Include="IGA">
+      <UniqueIdentifier>{3849edad-2941-4fc1-bec5-ebe8e05b7ba1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="damping">
+      <UniqueIdentifier>{d9c89d0b-b0ee-498a-bc11-9303c8b7338b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\SRC\element\Element.cpp">
@@ -220,9 +223,6 @@
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\element\zeroLength\ZeroLengthSection.cpp">
       <Filter>zeroLength</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\..\SRC\element\beamWithHinges\TclBeamWithHingesBuilder.cpp">
-      <Filter>beamWithHinges</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\coordTransformation\CorotCrdTransf2d.cpp">
       <Filter>crdTransf</Filter>
@@ -821,6 +821,9 @@
     <ClCompile Include="..\..\..\SRC\element\tetrahedron\FourNodeTetrahedron.cpp">
       <Filter>tetrahedron</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedron.cpp">
+      <Filter>tetrahedron</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\element\UWelements\EmbeddedBeamInterfaceL.cpp">
       <Filter>UWelements</Filter>
     </ClCompile>
@@ -985,6 +988,60 @@
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\element\truss\InertiaTruss.cpp">
       <Filter>truss</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\IGA\IGAKLShell.cpp">
+      <Filter>IGA</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\IGA\IGAKLShell_BendingStrip.cpp">
+      <Filter>IGA</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\dispBeamColumn\TimoshenkoBeamColumn3d.cpp">
+      <Filter>dispBeamColumn</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\Damping.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\SecStifDamping.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\TclDampingCommand.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\UniformDamping.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\URDDamping.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\damping\URDDampingbeta.cpp">
+      <Filter>damping</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\PFEMElement\BeamBrick.cpp">
+      <Filter>pfem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\PFEMElement\Flume.cpp">
+      <Filter>pfem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\PFEMElement\PFEMContact3D.cpp">
+      <Filter>pfem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\componentElement\ComponentElement3d.cpp">
+      <Filter>componentElement</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\forceBeamColumn\ConcentratedPlasticityBeamIntegration.cpp">
+      <Filter>forceBeamColumn\beamIntegration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\forceBeamColumn\ConcentratedCurvatureBeamIntegration.cpp">
+      <Filter>forceBeamColumn\beamIntegration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\PFEMElement\BeamDisk.cpp">
+      <Filter>pfem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\mvlem\E_SFI.cpp">
+      <Filter>mvlem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\element\frictionBearing\TripleFrictionPendulumX.cpp">
+      <Filter>frictionBearing</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1597,6 +1654,9 @@
     <ClInclude Include="..\..\..\SRC\element\tetrahedron\FourNodeTetrahedron.h">
       <Filter>tetrahedron</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\tetrahedron\TenNodeTetrahedron.h">
+      <Filter>tetrahedron</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\SRC\element\UWelements\EmbeddedBeamInterfaceL.h">
       <Filter>UWelements</Filter>
     </ClInclude>
@@ -1749,6 +1809,24 @@
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\element\masonry\MasonPan12.h">
       <Filter>masonry</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\IGA\IGAKLShell.h">
+      <Filter>IGA</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\IGA\IGAKLShell_BendingStrip.h">
+      <Filter>IGA</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\dispBeamColumn\TimoshenkoBeamColumn3d.h">
+      <Filter>dispBeamColumn</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\forceBeamColumn\ConcentratedPlasticityBeamIntegration.h">
+      <Filter>forceBeamColumn\beamIntegration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\forceBeamColumn\ConcentratedCurvatureBeamIntegration.h">
+      <Filter>forceBeamColumn\beamIntegration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\element\mvlem\E_SFI.h">
+      <Filter>mvlem</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

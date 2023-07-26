@@ -30,12 +30,13 @@
 #ifndef BackgroundDef_h
 #define BackgroundDef_h
 
-#include <vector>
-#include <set>
-#include <map>
 #include <Vector.h>
 #include <math.h>
+
 #include <iostream>
+#include <map>
+#include <set>
+#include <vector>
 
 class Particle;
 class ParticleGroup;
@@ -70,10 +71,16 @@ void toVector(const VDouble& v, Vector& res);
 double normVDouble(const VDouble& v);
 double dotVDouble(const VDouble& v1, const VDouble& v2);
 void crossVDouble(const VDouble& v1, const VDouble& v2, VDouble& res);
+double distanceVDouble(const VDouble& v1, const VDouble& v2);
 
+// BACKGROUND_FLUID - a grid fluid node
+// BACKGROUND_STRUCTURE - a structural node
+// BACKGROUND_FLUID_STRUCTURE - a structural node for SSI and a fluid node for FSI
+// BACKGROUND_FIXED - a temporary node, used to mark grids around structure
 enum BackgroundType {
     BACKGROUND_FLUID,
     BACKGROUND_STRUCTURE,
+    BACKGROUND_FLUID_STRUCTURE,
     BACKGROUND_FIXED
 };
 

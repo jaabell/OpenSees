@@ -40,6 +40,7 @@
 #include <FEM_ObjectBroker.h>
 
 #include <CrdTransf.h>
+#include <Damping.h>
 #include <SectionForceDeformation.h>
 #include <Information.h>
 #include <Parameter.h>
@@ -70,6 +71,8 @@ void *OPS_ElasticBeam2d(const ID &info) {
     double data[3];
     int transfTag;
     double mass = 0.0, alpha = 0.0, depth = 0.0;
+    int dampingTag = 0;
+    Damping *theDamping = 0;
     int cMass = 0;
     int release = 0;
     int numData = 0;
@@ -81,12 +84,86 @@ void *OPS_ElasticBeam2d(const ID &info) {
         return 0;
     }
 
+    // Read optional arguments first
+    int numOptionalArgs = 0;
+    int numArgs = OPS_GetNumRemainingInputArgs();
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+      std::string type = OPS_GetString();
+      if (type == "-alpha") {
+	numOptionalArgs++;
+	if (OPS_GetNumRemainingInputArgs() > 0) {
+	  numData = 1;	  
+	  if (OPS_GetDoubleInput(&numData, &alpha) < 0) {
+	    opserr << "WARNING: failed to get alpha" << endln;
+	    return 0;
+	  }
+	  numOptionalArgs++;
+	}
+      }
+      else if (type == "-depth") {
+	numOptionalArgs++;	
+	if (OPS_GetNumRemainingInputArgs() > 0) {
+	  numData = 1;
+	  if (OPS_GetDoubleInput(&numData, &depth) < 0) {
+	    opserr << "WARNING: failed to get depth" << endln;
+	    return 0;
+	  }
+	  numOptionalArgs++;	  
+	}
+      }
+      else if (type == "-release" || type == "-releasez") {
+	numOptionalArgs++;	
+	if (OPS_GetNumRemainingInputArgs() > 0) {
+	  numData = 1;	  
+	  if (OPS_GetIntInput(&numData, &release) < 0) {
+	    opserr << "WARNING: failed to get release" << endln;
+	    return 0;
+	  }
+	  numOptionalArgs++;	  
+	}
+      }
+      else if (type == "-mass") {
+	numOptionalArgs++;	
+	if (OPS_GetNumRemainingInputArgs() > 0) {
+	  numData = 1;	  
+	  if (OPS_GetDoubleInput(&numData, &mass) < 0) {
+	    opserr << "WARNING: failed to get mass" << endln;
+	    return 0;
+	  }
+	  numOptionalArgs++;	  	  
+	}
+      }
+      else if (type == "-cMass") {
+	numOptionalArgs++;	
+	cMass = 1;
+      }
+      else if (type == "-damp") {
+	numOptionalArgs++;	
+	if(OPS_GetNumRemainingInputArgs() > 0) {
+	  numData = 1;	  
+	  if (OPS_GetIntInput(&numData,&dampingTag) < 0)
+	    return 0;
+	  numOptionalArgs++;	  
+	  theDamping = OPS_getDamping(dampingTag);
+	  if(theDamping == 0) {
+	    opserr << "ElasticBeam2d - damping not found" << endln;
+	    return 0;
+	  }
+	}
+      }      
+    }
+
+    if (numArgs > 0) {
+      OPS_ResetCurrentInputArg(-numArgs);
+    }
+    numArgs = numArgs - numOptionalArgs;
+
     /*!
 2. for regular elements, which are not in a mesh,
 to get element tag and node tags
     */
     if (info.Size() == 0) {
-        if (OPS_GetNumRemainingInputArgs() < 5) {
+        if (numArgs < 5) {
             opserr << "insufficient "
                       "arguments:eleTag,iNode,jNode,<A,E,Iz>or<"
                       "sectionTag>,transfTag\n";
@@ -99,14 +176,14 @@ to get element tag and node tags
             opserr << "WARNING failed to read integers\n";
             return 0;
         }
+	numArgs -= numData;
     }
-
     /*!
 3. for regular elements and those in a mesh
 to get element data
     */
     if (info.Size() == 0 || info(0) == 1) {
-        if (OPS_GetNumRemainingInputArgs() > 3) {
+        if (numArgs > 3) {
             // Read A, E, Iz
             numData = 3;
             if (OPS_GetDoubleInput(&numData, &data[0]) < 0) {
@@ -122,50 +199,16 @@ to get element data
             }
             section = true;
         }
-        if (OPS_GetNumRemainingInputArgs() < 1) {
+
+	numArgs -= numData;
+	
+        if (numArgs < 1) {
           opserr << "WARNING: transfTag is needed\n";
         }
         numData = 1;
         if (OPS_GetIntInput(&numData, &transfTag) < 0) {
             opserr << "WARNING transfTag is not integer\n";
             return 0;
-        }
-
-        // options
-        while (OPS_GetNumRemainingInputArgs() > 0) {
-            std::string type = OPS_GetString();
-            if (type == "-alpha") {
-                if (OPS_GetNumRemainingInputArgs() > 0) {
-                    if (OPS_GetDoubleInput(&numData, &alpha) < 0) {
-                        opserr << "WARNING: failed to get alpha";
-                        return 0;
-                    }
-                }
-            } else if (type == "-depth") {
-                if (OPS_GetNumRemainingInputArgs() > 0) {
-                    if (OPS_GetDoubleInput(&numData, &depth) < 0) {
-                        opserr << "WARNING: failed to get depth";
-                        return 0;
-                    }
-                }
-            } else if (type == "-release") {
-                if (OPS_GetNumRemainingInputArgs() > 0) {
-                    if (OPS_GetIntInput(&numData, &release) < 0) {
-                        opserr << "WARNING: failed to get release";
-                        return 0;
-                    }
-                }
-
-            } else if (type == "-mass") {
-                if (OPS_GetNumRemainingInputArgs() > 0) {
-                    if (OPS_GetDoubleInput(&numData, &mass) < 0) {
-                        opserr << "WARNING: failed to get mass";
-                        return 0;
-                    }
-                }
-            } else if (type == "-cMass") {
-                cMass = 1;
-            }
         }
     }
 
@@ -238,11 +281,11 @@ to get element data
         }
         return new ElasticBeam2d(iData[0], iData[1], iData[2],
                                  *theSection, *theTransf, alpha,
-                                 depth, mass, cMass, release);
+                                 depth, mass, cMass, release, theDamping);
     } else {
         return new ElasticBeam2d(iData[0], data[0], data[1], data[2],
                                  iData[1], iData[2], *theTransf,
-                                 alpha, depth, mass, cMass, release);
+                                 alpha, depth, mass, cMass, release, theDamping);
     }
 }
 
@@ -264,6 +307,8 @@ int OPS_ElasticBeam2d(Domain& theDomain, const ID& elenodes, ID& eletags)
     
     // options
     double mass = 0.0, alpha=0.0, depth=0.0;
+    int dampingTag = 0;
+    Damping *theDamping = 0;
     int cMass = 0;
     int release = 0;
     while(OPS_GetNumRemainingInputArgs() > 0) {
@@ -276,7 +321,7 @@ int OPS_ElasticBeam2d(Domain& theDomain, const ID& elenodes, ID& eletags)
 	    if(OPS_GetNumRemainingInputArgs() > 0) {
 		if(OPS_GetDoubleInput(&numData,&depth) < 0) return -1;
 	    }
-	} else if(type == "-release") {
+	} else if(type == "-release" || type == "-releasez") {
 	    if(OPS_GetNumRemainingInputArgs() > 0) {
 		if(OPS_GetIntInput(&numData,&release) < 0) return -1;
 	    }	    
@@ -287,7 +332,16 @@ int OPS_ElasticBeam2d(Domain& theDomain, const ID& elenodes, ID& eletags)
 	    }
 	} else if(type == "-cMass") {
 	    cMass = 1;
-	}
+	} else if(type == "-damp"){
+	    if(OPS_GetNumRemainingInputArgs() > 0) {
+        if(OPS_GetIntInput(&numData,&dampingTag) < 0) return 0;
+		    theDamping = OPS_getDamping(dampingTag);
+        if(theDamping == 0) {
+	        opserr<<"damping not found\n";
+	        return 0;
+        }
+	    }
+	  }
     }
 
     // check transf
@@ -307,7 +361,7 @@ int OPS_ElasticBeam2d(Domain& theDomain, const ID& elenodes, ID& eletags)
     eletags.resize(elenodes.Size()/2);
     for (int i=0; i<elenodes.Size()/2; i++) {
 	theEle = new ElasticBeam2d(--currTag,data[0],data[1],data[2],elenodes(2*i),elenodes(2*i+1),
-				   *theTransf,alpha,depth,mass,cMass,release);
+				   *theTransf,alpha,depth,mass,cMass,release,theDamping);
 	if (theEle == 0) {
 	    opserr<<"WARNING: run out of memory for creating element\n";
 	    return -1;
@@ -326,7 +380,8 @@ int OPS_ElasticBeam2d(Domain& theDomain, const ID& elenodes, ID& eletags)
 ElasticBeam2d::ElasticBeam2d()
   :Element(0,ELE_TAG_ElasticBeam2d), 
    A(0.0), E(0.0), I(0.0), alpha(0.0), d(0.0), rho(0.0), cMass(0), release(0),
-  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0)
+  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0),
+  theDamping(0)
 {
   // does nothing
   q0[0] = 0.0;
@@ -345,10 +400,11 @@ ElasticBeam2d::ElasticBeam2d()
 ElasticBeam2d::ElasticBeam2d(int tag, double a, double e, double i, 
 			     int Nd1, int Nd2, CrdTransf &coordTransf,
 			     double Alpha, double depth, double r, int cm,
-			     int rel)
+			     int rel, Damping *damping)
   :Element(tag,ELE_TAG_ElasticBeam2d), 
    A(a), E(e), I(i), alpha(Alpha), d(depth), rho(r), cMass(cm), release(rel),
-  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0)
+  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0),
+  theDamping(0)
 {
   connectedExternalNodes(0) = Nd1;
   connectedExternalNodes(1) = Nd2;
@@ -364,6 +420,17 @@ ElasticBeam2d::ElasticBeam2d(int tag, double a, double e, double i,
   if (release < 0 || release > 3)
     release = 0;
   
+  if (damping)
+  {
+    theDamping =(*damping).getCopy();
+    
+    if (!theDamping) {
+      opserr << "ElasticBeam2d::ElasticBeam2d -- failed to get copy of damping\n";
+      //exit(-1); // this is not a fatal error...
+      theDamping = 0;
+    }
+  }
+
   q0[0] = 0.0;
   q0[1] = 0.0;
   q0[2] = 0.0;
@@ -378,24 +445,36 @@ ElasticBeam2d::ElasticBeam2d(int tag, double a, double e, double i,
 }
 
 ElasticBeam2d::ElasticBeam2d(int tag, int Nd1, int Nd2, SectionForceDeformation &section,  
-			     CrdTransf &coordTransf, double Alpha, double depth, double r, int cm, int rel)
-  :Element(tag,ELE_TAG_ElasticBeam2d), alpha(Alpha), d(depth), rho(r), cMass(cm), release(rel),
-  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0)
+			     CrdTransf &coordTransf, double Alpha, double depth, double r, int cm, int rel,
+                 Damping *damping)
+  :Element(tag,ELE_TAG_ElasticBeam2d), A(0.0), E(1.0), I(0.0),
+   alpha(Alpha), d(depth), rho(r), cMass(cm), release(rel),
+  Q(6), q(3), connectedExternalNodes(2), theCoordTransf(0),
+  theDamping(0)
 {
-  E = 1.0;
-  rho = r;
-  cMass = cm;
+  // Try to find E in the section
+  const char *argv[1] = {"E"};
+  int argc = 1;
+  Parameter param;
+  int ok = section.setParameter(argv, argc, param);
+  if (ok >= 0)
+    E = param.getValue();
 
+  if (E == 0.0) {
+    opserr << "ElasticBeam2d::ElasticBeam2d - E from section is zero, using E = 1" << endln;
+    E = 1.0;
+  }
+  
   const Matrix &sectTangent = section.getInitialTangent();
   const ID &sectCode = section.getType();
   for (int i=0; i<sectCode.Size(); i++) {
     int code = sectCode(i);
     switch(code) {
     case SECTION_RESPONSE_P:
-      A = sectTangent(i,i);
+      A = sectTangent(i,i)/E;
       break;
     case SECTION_RESPONSE_MZ:
-      I = sectTangent(i,i);
+      I = sectTangent(i,i)/E;
       break;
     default:
       break;
@@ -416,6 +495,17 @@ ElasticBeam2d::ElasticBeam2d(int tag, int Nd1, int Nd2, SectionForceDeformation 
   if (release < 0 || release > 3)
     release = 0;
   
+  if (damping)
+  {
+    theDamping =(*damping).getCopy();
+    
+    if (!theDamping) {
+      opserr << "ElasticBeam2d::ElasticBeam2d -- failed to get copy of damping\n";
+      //exit(-1); // Not a fatal error...
+      theDamping = 0;
+    }
+  }
+
   q0[0] = 0.0;
   q0[1] = 0.0;
   q0[2] = 0.0;
@@ -431,8 +521,8 @@ ElasticBeam2d::ElasticBeam2d(int tag, int Nd1, int Nd2, SectionForceDeformation 
 
 ElasticBeam2d::~ElasticBeam2d()
 {
-    if (theCoordTransf)
-	delete theCoordTransf;
+  if (theCoordTransf) delete theCoordTransf;
+  if (theDamping) delete theDamping;
 }
 
 int
@@ -502,12 +592,39 @@ ElasticBeam2d::setDomain(Domain *theDomain)
 	exit(-1);
     }
     
+    if (theDamping && theDamping->setDomain(theDomain, 3)) {
+	opserr << "ElasticBeam2d::setDomain -- Error initializing damping\n";
+	exit(-1);
+    }
+
     double L = theCoordTransf->getInitialLength();
 
     if (L == 0.0) {
       opserr << "ElasticBeam2d::setDomain -- Element has zero length\n";
       exit(-1);
     }
+}
+
+int
+ElasticBeam2d::setDamping(Domain *theDomain, Damping *damping)
+{
+  if (theDomain && damping)
+  {
+    if (theDamping) delete theDamping;
+
+    theDamping =(*damping).getCopy();
+    
+    if (!theDamping) {
+      opserr << "ElasticBeam2d::setDamping -- failed to get copy of damping\n";
+      return -1;
+    }
+    if (theDamping->setDomain(theDomain, 3)) {
+      opserr << "ElasticBeam2d::setDamping -- Error initializing damping\n";
+      return -2;
+    }
+  }
+  
+  return 0;
 }
 
 int
@@ -519,19 +636,26 @@ ElasticBeam2d::commitState()
     opserr << "ElasticBeam2d::commitState () - failed in base class";
   }    
   retVal += theCoordTransf->commitState();
+  if (theDamping) retVal += theDamping->commitState();
   return retVal;
 }
 
 int
 ElasticBeam2d::revertToLastCommit()
 {
-    return theCoordTransf->revertToLastCommit();
+  int retVal = 0;
+  retVal += theCoordTransf->revertToLastCommit();
+  if (theDamping) retVal += theDamping->revertToLastCommit();
+  return retVal;
 }
 
 int
 ElasticBeam2d::revertToStart()
 {
-    return theCoordTransf->revertToStart();
+  int retVal = 0;
+  retVal += theCoordTransf->revertToStart();
+  if (theDamping) retVal += theDamping->revertToStart();
+  return retVal;
 }
 
 int
@@ -582,6 +706,8 @@ ElasticBeam2d::getTangentStiff(void)
   q(1) += q0[1];
   q(2) += q0[2];
   
+  if(theDamping) kb *= theDamping->getStiffnessMultiplier();  
+
   return theCoordTransf->getGlobalStiffMatrix(kb, q);
 }
 
@@ -608,6 +734,8 @@ ElasticBeam2d::getInitialStiff(void)
     kb(1,1) = 3.0*I*EoverL;
   }
   
+  if(theDamping) kb *= theDamping->getStiffnessMultiplier();  
+
   return theCoordTransf->getInitialGlobalStiffMatrix(kb);
 }
 
@@ -860,6 +988,8 @@ ElasticBeam2d::getResistingForceIncInertia()
 {	
   P = this->getResistingForce();
   
+  if (theDamping) P += this->getDampingForce();
+  
   // subtract external load P = P - Q
   P.addVector(1.0, Q, -1.0);
   
@@ -934,6 +1064,8 @@ ElasticBeam2d::getResistingForce()
   q(1) += q0[1];
   q(2) += q0[2];
   
+  if (theDamping) theDamping->update(q);
+
   // Vector for reactions in basic system
   Vector p0Vec(p0, 3);
   
@@ -942,12 +1074,20 @@ ElasticBeam2d::getResistingForce()
   return P;
 }
 
+const Vector &
+ElasticBeam2d::getDampingForce()
+{
+  theCoordTransf->update();
+  
+  return theCoordTransf->getGlobalResistingForce(theDamping->getDampingForce(), Vector(3));
+}
+
 int
 ElasticBeam2d::sendSelf(int cTag, Channel &theChannel)
 {
   int res = 0;
 
-    static Vector data(17);
+    static Vector data(19);
     
     data(0) = A;
     data(1) = E; 
@@ -977,6 +1117,19 @@ ElasticBeam2d::sendSelf(int cTag, Channel &theChannel)
     data(15) = betaKc;
     data(16) = release;
     
+    data(17) = 0;
+    data(18) = 0;
+    if (theDamping) {
+      data(17) = theDamping->getClassTag();
+      int dbTag = theDamping->getDbTag();
+      if (dbTag == 0) {
+        dbTag = theChannel.getDbTag();
+        if (dbTag != 0)
+	        theDamping->setDbTag(dbTag);
+	    }
+      data(18) = dbTag;
+    }
+
     // Send the data vector
     res += theChannel.sendVector(this->getDbTag(), cTag, data);
     if (res < 0) {
@@ -991,6 +1144,15 @@ ElasticBeam2d::sendSelf(int cTag, Channel &theChannel)
       return res;
     }
     
+    // Ask the Damping to send itself
+    if (theDamping) {
+      res += theDamping->sendSelf(cTag, theChannel);
+      if (res < 0) {
+        opserr << "ElasticBeam2d::sendSelf -- could not send Damping\n";
+        return res;
+      }
+    }
+
     return res;
 }
 
@@ -999,7 +1161,7 @@ ElasticBeam2d::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &theBrok
 {
     int res = 0;
 	
-    static Vector data(17);
+    static Vector data(19);
 
     res += theChannel.recvVector(this->getDbTag(), cTag, data);
     if (res < 0) {
@@ -1052,6 +1214,43 @@ ElasticBeam2d::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &theBrok
     if (res < 0) {
       opserr << "ElasticBeam2d::recvSelf -- could not receive CoordTransf\n";
       return res;
+    }
+
+    // Check if the Damping is null; if so, get a new one
+    int dmpTag = (int)data(17);
+    if (dmpTag) {
+      if (theDamping == 0) {
+        theDamping = theBroker.getNewDamping(dmpTag);
+        if (theDamping == 0) {
+          opserr << "ElasticBeam2d::recvSelf -- could not get a Damping\n";
+          exit(-1);
+        }
+      }
+    
+      // Check that the Damping is of the right type; if not, delete
+      // the current one and get a new one of the right type
+      if (theDamping->getClassTag() != dmpTag) {
+        delete theDamping;
+        theDamping = theBroker.getNewDamping(dmpTag);
+        if (theDamping == 0) {
+          opserr << "ElasticBeam2d::recvSelf -- could not get a Damping\n";
+          exit(-1);
+        }
+      }
+    
+      // Now, receive the Damping
+      theDamping->setDbTag((int)data(18));
+      res += theDamping->recvSelf(cTag, theChannel, theBroker);
+      if (res < 0) {
+        opserr << "ElasticBeam2d::recvSelf -- could not receive Damping\n";
+        return res;
+      }
+    }
+    else {
+      if (theDamping) {
+        delete theDamping;
+        theDamping = 0;
+      }
     }
     
     return res;
@@ -1235,6 +1434,51 @@ ElasticBeam2d::setResponse(const char **argv, int argc, OPS_Stream &output)
     
     theResponse = new ElementResponse(this, 4, Vector(3));
 
+  // global damping forces
+  }    else if (theDamping && (strcmp(argv[0],"globalDampingForce") == 0 || strcmp(argv[0],"globalDampingForces") == 0)) {
+
+    output.tag("ResponseType","Px_1");
+    output.tag("ResponseType","Py_1");
+    output.tag("ResponseType","Mz_1");
+    output.tag("ResponseType","Px_2");
+    output.tag("ResponseType","Py_2");
+    output.tag("ResponseType","Mz_2");
+    
+    theResponse = new ElementResponse(this, 21, P);
+
+  // basic damping forces
+  }    else if (theDamping && (strcmp(argv[0],"localDampingForce") == 0 || strcmp(argv[0],"localDampingForces") == 0)) {
+
+    output.tag("ResponseType","N_1");
+    output.tag("ResponseType","V_1");
+    output.tag("ResponseType","M_1");
+    output.tag("ResponseType","N_2");
+    output.tag("ResponseType","V_2");
+    output.tag("ResponseType","M_2");
+    
+    theResponse = new ElementResponse(this, 22, P);
+
+  // basic damping forces
+  }    else if (theDamping && (strcmp(argv[0],"basicDampingForce") == 0 || strcmp(argv[0],"basicDampingForces") == 0)) {
+
+    output.tag("ResponseType","N");
+    output.tag("ResponseType","M_1");
+    output.tag("ResponseType","M_2");
+    
+    theResponse = new ElementResponse(this, 23, Vector(3));
+
+  // rayleigh damping forces
+  }    else if (strcmp(argv[0],"RayleighForces") == 0 || strcmp(argv[0],"rayleighForces") == 0) {
+
+    output.tag("ResponseType","Px_1");
+    output.tag("ResponseType","Py_1");
+    output.tag("ResponseType","Mz_1");
+    output.tag("ResponseType","Px_2");
+    output.tag("ResponseType","Py_2");
+    output.tag("ResponseType","Mz_2");
+
+    theResponse =  new ElementResponse(this, 6, P);
+
     // deformations
   }  else if (strcmp(argv[0],"deformatons") == 0 || 
 	      strcmp(argv[0],"basicDeformations") == 0 ||
@@ -1267,6 +1511,8 @@ ElasticBeam2d::getResponse (int responseID, Information &eleInfo)
 {
   double N, M1, M2, V;
   double L = theCoordTransf->getInitialLength();
+  Vector Sd(3);
+
   this->getResistingForce();
 
   switch (responseID) {
@@ -1297,6 +1543,35 @@ ElasticBeam2d::getResponse (int responseID, Information &eleInfo)
 
   case 5:
     return eleInfo.setVector(theCoordTransf->getBasicTrialDisp());
+
+  case 6: // global rayleigh damping forces
+    return eleInfo.setVector(this->getRayleighDampingForces());
+
+  case 21: // global damping forces
+    return eleInfo.setVector(this->getDampingForce());
+
+  case 22: // local damping forces
+    
+    Sd = theDamping->getDampingForce();
+
+    // Axial
+    N = Sd(0);
+    P(3) =  N;
+    P(0) = -N;
+    // Moment
+    M1 = Sd(1);
+    M2 = Sd(2);
+    P(2) = M1;
+    P(5) = M2;
+    // Shear
+    V = (M1+M2)/L;
+    P(1) =  V;
+    P(4) = -V;
+    return eleInfo.setVector(P);
+
+  case 23: // basic damping forces
+    
+    return eleInfo.setVector(theDamping->getDampingForce());
 
   default:
     return -1;

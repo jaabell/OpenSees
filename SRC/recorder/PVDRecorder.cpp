@@ -300,6 +300,8 @@ PVDRecorder::vtu()
     }
     if (nodendf < 3) {
 	nodendf = 3;
+    } else if (nodendf > 3) {
+        nodendf = 3;
     }
 
     // get parts
@@ -1949,6 +1951,7 @@ PVDRecorder::setVTKType()
     vtktypes[ELE_TAG_TFP_Bearing] = VTK_LINE;
     vtktypes[ELE_TAG_TFP_Bearing2d] = VTK_LINE;
     vtktypes[ELE_TAG_TripleFrictionPendulum] = VTK_LINE;
+    vtktypes[ELE_TAG_TripleFrictionPendulumX] = VTK_LINE;
     vtktypes[ELE_TAG_PFEMElement2D] = VTK_TRIANGLE;
     vtktypes[ELE_TAG_FourNodeQuad02] = VTK_QUAD;
     vtktypes[ELE_TAG_cont2d01] = VTK_POLY_VERTEX;
@@ -1982,6 +1985,7 @@ PVDRecorder::setVTKType()
     vtktypes[ELE_TAG_SFI_MVLEM] = VTK_POLY_VERTEX;
     vtktypes[ELE_TAG_MVLEM_3D] = VTK_POLY_VERTEX;
     vtktypes[ELE_TAG_SFI_MVLEM_3D] = VTK_POLY_VERTEX;
+	vtktypes[ELE_TAG_E_SFI] = VTK_POLY_VERTEX;
     vtktypes[ELE_TAG_PFEMElement2DFIC] = VTK_TRIANGLE;
     vtktypes[ELE_TAG_TaylorHood2D] = VTK_QUADRATIC_TRIANGLE;
     vtktypes[ELE_TAG_PFEMElement2DQuasi] = VTK_TRIANGLE;
@@ -1994,6 +1998,7 @@ PVDRecorder::setVTKType()
     vtktypes[ELE_TAG_ShellDKGT] = VTK_TRIANGLE;
     vtktypes[ELE_TAG_ShellNLDKGT] = VTK_TRIANGLE;
     vtktypes[ELE_TAG_PFEMContact2D] = VTK_TRIANGLE;
+    vtktypes[ELE_TAG_PFEMContact3D] = VTK_HEXAHEDRON;
     vtktypes[ELE_TAG_InertiaTruss] = VTK_LINE;
     vtktypes[ELE_TAG_ASDAbsorbingBoundary2D] = VTK_QUAD;
     vtktypes[ELE_TAG_ASDAbsorbingBoundary3D] = VTK_HEXAHEDRON;
@@ -2029,4 +2034,11 @@ PVDRecorder::getfilename(const char* name)
     // more slash
     pathname = fname.substr(0,found+1);
     basename = fname.substr(found+1);
+}
+
+int PVDRecorder::flush(void) {
+  if (theFile.is_open() && theFile.good()) {
+    theFile.flush();
+  }
+  return 0;
 }

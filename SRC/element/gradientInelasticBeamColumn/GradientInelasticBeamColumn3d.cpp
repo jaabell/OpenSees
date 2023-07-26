@@ -61,9 +61,9 @@
 void* OPS_GradientInelasticBeamColumn3d()
 {
 	// Necessary Arguments
-	if (OPS_GetNumRemainingInputArgs() < 8) {
+	if (OPS_GetNumRemainingInputArgs() < 6) {
 		opserr << "WARNING! gradientInelasticBeamColumn3d - insufficient arguments\n" <<
-			"         Want: eleTag? iNode? jNode? transfTag? integrationTag? lambda1? lambda2? lc?\n" <<
+			"         Want: eleTag? iNode? jNode? transfTag? integrationTag? lc?\n" <<
 			"         <-constH> <-iter maxIter? minTol? maxTol?> <-corControl maxEpsInc? maxPhiInc?>\n";
 		return 0;
 	}
@@ -89,15 +89,14 @@ void* OPS_GradientInelasticBeamColumn3d()
 	int transfTag = iData[3];
 	int integrTag = iData[4];
 
-	double ddata[3];
-	numData = 3;
-	if (OPS_GetDoubleInput(&numData, ddata) < 0) {
-		opserr << "WARNING! gradientInelasticBeamColumn3d - invalid lc\n";
+	double lc;
+	numData = 1;
+	if (OPS_GetDoubleInput(&numData, &lc) < 0) {
+		opserr << "WARNING! gradientInelasticBeamColumn2d - invalid double input\n";
 		return 0;
 	}
-	double lam1 = ddata[0];
-	double lam2 = ddata[1];
-	double lc = ddata[2];
+	
+	double lam1 = 0.1, lam2 = 0.1;	// would not affect the results
 	
 	// Optional Arguments
 	int maxIter = 50;
@@ -175,7 +174,7 @@ void* OPS_GradientInelasticBeamColumn3d()
 	const ID& secTags = theRule->getSectionTags();
 	int numIntegrPoints = secTags.Size();
 
-	for (int i = 2; i < numIntegrPoints; i++) {
+	for (int i = 2; i < numIntegrPoints - 1; i++) {
 		if (secTags(i) != secTags(i - 1)) {
 			opserr << "WARNING! gradientInelasticBeamColumn3d - internal integration points should have identical tags\n"
 				<< "continued using section tag of integration point 2 for all internal integration points\n";
@@ -201,7 +200,7 @@ void* OPS_GradientInelasticBeamColumn3d()
 		return 0;
 	}
 
-	Element* theEle = new GradientInelasticBeamColumn3d(eleTag, nodeTagI, nodeTagJ, numIntegrPoints, &endSection1, &intSection, &endSection2,
+	Element* theEle = new GradientInelasticBeamColumn3d(eleTag, nodeTagI, nodeTagJ, numIntegrPoints, *endSection1, *intSection, *endSection2,
 		lam1, lam2, *beamIntegr, *theTransf, lc, minTol, maxTol, maxIter, constH, correctionControl, maxEpsInc, maxPhiInc);
 
 	return theEle;
@@ -213,7 +212,7 @@ Vector GradientInelasticBeamColumn3d::theVector(12);
 
 // Constructor 1 (for normal processing)
 GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d(int tag, int nodeI, int nodeJ,
-	int numSec, SectionForceDeformation **endSec1, SectionForceDeformation **sec, SectionForceDeformation **endSec2, double R1, double R2,
+	int numSec, SectionForceDeformation &endSec1, SectionForceDeformation &sec, SectionForceDeformation &endSec2, double R1, double R2,
 	BeamIntegration &BI, CrdTransf &CT, double LC,
 	double minTolerance, double maxTolerance, int maxNumIters,
 	bool constH,
@@ -255,22 +254,6 @@ GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d(int tag, int nodeI,
 		exit(-1);
 	}
 
-	// Get Copy of Sections
-	if (!endSec1) {
-		opserr << "ERROR! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - invalid first section pointer\n";
-		exit(-1);
-	}
-
-	if (!sec) {
-		opserr << "ERROR! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - invalid intermediate section pointer\n";
-		exit(-1);
-	}
-
-	if (!endSec2) {
-		opserr << "ERROR! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - invalid last section pointer\n";
-		exit(-1);
-	}
-
 	sections = new SectionForceDeformation *[numSections];
 	if (!sections) {
 		opserr << "WARNING! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - could not allocate section pointers\n";
@@ -282,11 +265,11 @@ GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d(int tag, int nodeI,
 
 	for (int i = 0; i < numSections; i++) {
 		if (secX[i] >= 1.0 - secLR2)
-			sections[i] = endSec2[0]->getCopy();
+			sections[i] = endSec2.getCopy();
 		else if (secX[i] > secLR1)
-			sections[i] = sec[0]->getCopy();
+			sections[i] = sec.getCopy();
 		else
-			sections[i] = endSec1[0]->getCopy();
+			sections[i] = endSec1.getCopy();
 
 		if (!sections[i]) {
 			opserr << "WARNING! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - could not create copy of section " << i + 1 << endln;
@@ -298,10 +281,10 @@ GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d(int tag, int nodeI,
 		delete[] secX;
 
 	// Check Sections Order
-	secOrder = sec[0]->getOrder();
+	secOrder = sec.getOrder();
 
 	if (secOrder < 4) {
-		opserr << "ERROR! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - section order must be larger than 4" << endln;
+		opserr << "ERROR! GradientInelasticBeamColumn3d::GradientInelasticBeamColumn3d() - element: " << this->getTag() << " - section order must be at least 4" << endln;
 		exit(-1);
 	}
 

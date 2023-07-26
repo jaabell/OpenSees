@@ -38,7 +38,7 @@ void* OPS_RCSection2d()
 {
   if (OPS_GetNumRemainingInputArgs() < 13) {
     opserr << "WARNING insufficient arguments\n";
-    opserr << "Want: section RCSection2d tag? coreTag? coverTag? steelTag? d? b? cover? Atop? Abottom? Aside? nfcore? nfcover? nfs?" << endln;
+    opserr << "Want: section RCSection2d tag? coreTag? coverTag? steelTag? h? b? cover? Atop? Abottom? Aside? nfcore? nfcover? nfs?" << endln;
     return 0;
   }
   
@@ -112,7 +112,7 @@ void* OPS_RCSection2d()
   RCSectionIntegration rcsect(d, b, Atop, Abottom, Aside, cover, nfcore, nfcover, nfs);
   
   int numFibers = rcsect.getNumFibers();
-  
+
   UniaxialMaterial **theMats = new UniaxialMaterial *[numFibers];
   
   rcsect.arrangeFibers(theMats, theCore, theCover, theSteel);
@@ -150,7 +150,7 @@ RCSectionIntegration::RCSectionIntegration(double D,
 RCSectionIntegration::RCSectionIntegration():
   SectionIntegration(SECTION_INTEGRATION_TAG_RC),
   d(0.0), b(0.0), Atop(0.0), Abottom(0.0), Aside(0.0), cover(0.0),
-  Nfcore(1), Nfcover(1), Nfs(2), parameterID(0)
+  Nfcore(0), Nfcover(0), Nfs(0), parameterID(0)
 {
   
 }
@@ -278,13 +278,13 @@ RCSectionIntegration::setParameter(const char **argv, int argc,
   if (argc < 1)
     return -1;
 
-  if (strcmp(argv[0],"d") == 0) {
+  if (strcmp(argv[0],"d") == 0 || strcmp(argv[0],"h") == 0) {
     param.setValue(d);
     return param.addObject(1, this);
   }
   if (strcmp(argv[0],"b") == 0) {
-    return param.addObject(2, this);
     param.setValue(b);
+    return param.addObject(2, this);
   }
   if (strcmp(argv[0],"Atop") == 0) {
     param.setValue(Atop);
@@ -299,7 +299,7 @@ RCSectionIntegration::setParameter(const char **argv, int argc,
     return param.addObject(4, this);
   }
   if (strcmp(argv[0],"As") == 0) {
-    param.setValue(Atop);
+    param.setValue(Abottom);
     return param.addObject(5, this);
   }
   if (strcmp(argv[0],"cover") == 0) {
@@ -477,7 +477,7 @@ void
 RCSectionIntegration::Print(OPS_Stream &s, int flag)
 {
   s << "RC" << endln;
-  s << " d = "  << d;
+  s << " h = "  << d;
   s << " b = " << b; 
   s << " Atop = " << Atop;
   s << " Abottom = " << Abottom;

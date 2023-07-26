@@ -49,6 +49,7 @@
 #include <Parameter.h>
 #include <ElementResponse.h>
 #include <ElementalLoad.h>
+#include <SectionForceDeformation.h>
 #include <elementAPI.h>
 
 #include <math.h>
@@ -77,11 +78,12 @@ void *OPS_ElasticTimoshenkoBeam2d()
     }
     
     int numData;
-    int iData[5];     // tag, iNode, jNode, transTag, cMass
+    int iData[6];     // tag, iNode, jNode, transTag, cMass, geomNL
     double dData[6];  // E, G, A, Iz, Avy, mass
     
     iData[4] = 0;     // cMass
     dData[5] = 0.0;   // mass per unit length
+    iData[5] = 0;     // Geometric linear
     
     numData = 3;
     if (OPS_GetIntInput(&numData, iData) != 0)  {
@@ -125,22 +127,25 @@ void *OPS_ElasticTimoshenkoBeam2d()
         if ((strcmp(argvLoc, "-cMass") == 0) || (strcmp(argvLoc, "cMass") == 0))  {
             iData[4] = 1;  // consistent mass matrix
         }
+        if ((strcmp(argvLoc, "-geomNonlinear") == 0) || (strcmp(argvLoc, "geomNonlinear") == 0))  {
+            iData[5] = 1;  // geometric nonlinearity within the element
+        }	
         numRemainingArgs = OPS_GetNumRemainingInputArgs();      
     }
     
     theElement = new ElasticTimoshenkoBeam2d(iData[0], iData[1], iData[2],
-        dData[0], dData[1], dData[2], dData[3], dData[4], *theTrans, dData[5], iData[4]);
+					     dData[0], dData[1], dData[2], dData[3], dData[4], *theTrans, dData[5], iData[4], iData[5]);
     
     return theElement;
 }
 
 
 ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d(int tag, int Nd1, int Nd2, 
-    double e, double g, double a, double iz, double avy, CrdTransf &coordTransf,
-    double r, int cm)
+						 double e, double g, double a, double iz, double avy, CrdTransf &coordTransf,
+						 double r, int cm, int gnl)
     : Element(tag, ELE_TAG_ElasticTimoshenkoBeam2d),
     connectedExternalNodes(2), theCoordTransf(0), E(e), G(g), A(a), Iz(iz),
-    Avy(avy), rho(r), cMass(cm), nlGeo(0), phi(0.0), L(0.0), ul(6), ql(6),
+    Avy(avy), rho(r), cMass(cm), nlGeo(gnl), phi(0.0), L(0.0), ul(6), ql(6),
     ql0(6), kl(6,6), klgeo(6,6), Tgl(6,6), Ki(6,6), M(6,6), theLoad(6)
 {
     // ensure the connectedExternalNode ID is of correct size & set values
@@ -164,7 +169,10 @@ ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d(int tag, int Nd1, int Nd2,
             << "failed to get copy of coordinate transformation.\n";
         exit(-1);
     }
-    
+
+    // Now reading geometric nonlinear flag from user input
+    //
+    /*
     // get coordinate transformation type and save flag
     if (strncmp(theCoordTransf->getClassType(),"Linear",6) == 0)  {
         nlGeo = 0;
@@ -177,9 +185,92 @@ ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d(int tag, int Nd1, int Nd2,
             << "Unsupported Corotational transformation assigned.\n"
             << "Using PDelta transformation instead.\n";
     }
+    */
     
     // zero fixed end forces vector
     ql0.Zero();
+}
+
+ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d(int tag, int Nd1, int Nd2, 
+						 SectionForceDeformation &section,
+						 CrdTransf &coordTransf,
+						 double r, int cm, int gnl)
+    : Element(tag, ELE_TAG_ElasticTimoshenkoBeam2d),
+    connectedExternalNodes(2), theCoordTransf(0),
+      E(1.0), G(1.0), A(0.0), Iz(0.0), Avy(0.0),
+    rho(r), cMass(cm), nlGeo(gnl), phi(0.0), L(0.0), ul(6), ql(6),
+    ql0(6), kl(6,6), klgeo(6,6), Tgl(6,6), Ki(6,6), M(6,6), theLoad(6)
+{
+  // Try to find E in the section
+  const char *argv[1] = {"E"};
+  int argc = 1;
+  Parameter param;
+  int ok = section.setParameter(argv, argc, param);
+  if (ok >= 0)
+    E = param.getValue();
+
+  if (E == 0.0) {
+    opserr << "ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d - E from section is zero, using E = 1" << endln;
+    E = 1.0;
+  }
+
+  // Try to find G in the section
+  argv[0] = {"G"};
+  ok = section.setParameter(argv, argc, param);
+  if (ok >= 0)
+    G = param.getValue();
+
+  if (G == 0.0) {
+    opserr << "ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d - G from section is zero, using G = 1" << endln;
+    G = 1.0;
+  }  
+
+  const Matrix &sectTangent = section.getInitialTangent();
+  const ID &sectCode = section.getType();
+  for (int i=0; i<sectCode.Size(); i++) {
+    int code = sectCode(i);
+    switch(code) {
+    case SECTION_RESPONSE_P:
+      A = sectTangent(i,i)/E;
+      break;
+    case SECTION_RESPONSE_MZ:
+      Iz = sectTangent(i,i)/E;
+      break;
+    case SECTION_RESPONSE_VY:
+      Avy = sectTangent(i,i)/G;
+      break;      
+    default:
+      break;
+    }
+  }
+
+  if (Avy == 0.0)
+    Avy = A;
+    
+  // ensure the connectedExternalNode ID is of correct size & set values
+  if (connectedExternalNodes.Size() != 2)  {
+    opserr << "ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d() - element: "
+	   << this->getTag() << " - failed to create an ID of size 2.\n";
+    exit(-1);
+  }
+  
+  connectedExternalNodes(0) = Nd1;
+  connectedExternalNodes(1) = Nd2;
+  
+  // set node pointers to NULL
+  for (int i=0; i<2; i++)
+    theNodes[i] = 0;
+  
+  // get a copy of the coordinate transformation
+  theCoordTransf = coordTransf.getCopy2d();
+  if (!theCoordTransf)  {
+    opserr << "ElasticTimoshenkoBeam2d::ElasticTimoshenkoBeam2d() - "
+	   << "failed to get copy of coordinate transformation.\n";
+    exit(-1);
+  }
+  
+  // zero fixed end forces vector
+  ql0.Zero();
 }
 
 
@@ -719,7 +810,10 @@ Response* ElasticTimoshenkoBeam2d::setResponse(const char **argv, int argc,
     }
     
     output.endTag(); // ElementOutput
-    
+
+    if (theResponse == 0)
+      theResponse = theCoordTransf->setResponse(argv, argc, output);
+      
     return theResponse;
 }
 
@@ -731,6 +825,7 @@ int ElasticTimoshenkoBeam2d::getResponse (int responseID, Information &eleInfo)
         return eleInfo.setVector(this->getResistingForce());
     
     case 2: // local forces
+	    this->getResistingForce();
         theVector.Zero();
         // determine resisting forces in local system
         theVector = ql;
@@ -749,24 +844,34 @@ int ElasticTimoshenkoBeam2d::setParameter(const char **argv,
         return -1;
     
     // E of the beam
-    if (strcmp(argv[0],"E") == 0)
-        return param.addObject(1, this);
+    if (strcmp(argv[0],"E") == 0) {
+      param.setValue(E);
+      return param.addObject(1, this);
+    }
     
     // G of the beam
-    if (strcmp(argv[0],"G") == 0)
-        return param.addObject(2, this);
+    if (strcmp(argv[0],"G") == 0) {
+      param.setValue(G);
+      return param.addObject(2, this);
+    }
     
     // A of the beam
-    if (strcmp(argv[0],"A") == 0)
-        return param.addObject(3, this);
+    if (strcmp(argv[0],"A") == 0) {
+      param.setValue(A);
+      return param.addObject(3, this);
+    }
     
     // Iz of the beam
-    if (strcmp(argv[0],"Iz") == 0)
-        return param.addObject(4, this);
+    if (strcmp(argv[0],"Iz") == 0) {
+      param.setValue(Iz);
+      return param.addObject(4, this);
+    }
     
     // Avy of the beam
-    if (strcmp(argv[0],"Avy") == 0)
-        return param.addObject(5, this);
+    if (strcmp(argv[0],"Avy") == 0) {
+      param.setValue(Avy);
+      return param.addObject(5, this);
+    }
     
     return -1;
 }
@@ -780,22 +885,27 @@ int ElasticTimoshenkoBeam2d::updateParameter (int parameterID,
         return -1;
     case 1:
         E = info.theDouble;
-        return 0;
+        break;
     case 2:
         G = info.theDouble;
-        return 0;
+	break;
     case 3:
         A = info.theDouble;
-        return 0;
+	break;
     case 4:
         Iz = info.theDouble;
-        return 0;
+	break;
     case 5:
         Avy = info.theDouble;
-        return 0;
+	break;
     default:
         return -1;
     }
+
+    // Re-calculate matrices
+    this->setUp();
+
+    return 0;
 }
 
 

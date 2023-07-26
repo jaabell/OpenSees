@@ -235,7 +235,7 @@ TwoNodeLink::TwoNodeLink(int tag, int dim, int Nd1, int Nd2,
         theNodes[i] = 0;
     
     // check the number of directions
-    if (numDIR < 1 || numDIR > 6)  {
+    if (numDIR < 1) {
         opserr << "TwoNodeLink::TwoNodeLink() - element: "
             << this->getTag() << " wrong number of directions\n";
         exit(-1);
@@ -295,40 +295,61 @@ TwoNodeLink::TwoNodeLink(int tag, int dim, int Nd1, int Nd2,
     
     // check p-delta moment distribution ratios
     if (Mratio.Size() == 4)  {
-        if (Mratio(0) < 0.0 || Mratio(1) < 0.0 ||
-            Mratio(2) < 0.0 || Mratio(3) < 0.0) {
-            opserr << "TwoNodeLink::TwoNodeLink() - "
-                << "p-delta moment ratios can not be negative\n";
-            exit(-1);
-        }
-        if (Mratio(0)+Mratio(1) > 1.0)  {
-            opserr << "TwoNodeLink::TwoNodeLink() - "
-                << "incorrect p-delta moment ratios:\nrMy1 + rMy2 = "
-                << Mratio(0)+Mratio(1) << " > 1.0\n";
-            exit(-1);
-        }
-        if (Mratio(2)+Mratio(3) > 1.0)  {
-            opserr << "TwoNodeLink::TwoNodeLink() - "
-                << "incorrect p-delta moment ratios:\nrMz1 + rMz2 = "
-                << Mratio(2)+Mratio(3) << " > 1.0\n";
-            exit(-1);
-        }
+      for (int i = 0; i < 4; i++) {
+	if (Mratio(i) < 0.0) {
+	  opserr << "TwoNodeLink::TwoNodeLink() - "
+		 << "P-Delta moment ratio " << i+1 << " is negative\n";
+	  Mratio(i) = -Mratio(i);
+	  opserr << "Making the value positive " << Mratio(i) << endln;
+	}
+      }
+      double sumRatio = Mratio(0)+Mratio(1);
+      if (sumRatio > 1.0)  {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "incorrect P-Delta moment ratios:\nrMy1 + rMy2 = "
+	       << sumRatio << " > 1.0\n";
+	Mratio(0) = Mratio(0)/sumRatio;
+	Mratio(1) = Mratio(1)/sumRatio;	    
+	opserr << "Scaling ratios down to " << Mratio(0) << " and " << Mratio(1) << endln;
+      }
+      sumRatio = Mratio(2) + Mratio(3);
+      if (sumRatio > 1.0)  {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "incorrect P-Delta moment ratios:\nrMz1 + rMz2 = "
+	       << sumRatio << " > 1.0\n";
+	Mratio(2) = Mratio(2)/sumRatio;
+	Mratio(3) = Mratio(3)/sumRatio;	    
+	opserr << "Scaling ratios down to " << Mratio(2) << " and " << Mratio(3) << endln;	    
+      }
     }
     
     // check or initialize shear distance ratios
     if (shearDistI.Size() == 2)  {
-        if (shearDistI(0) < 0.0 || shearDistI(0) > 1.0)  {
-            opserr << "TwoNodeLink::TwoNodeLink() - "
-                << "incorrect shear distance ratio:\n shearDistIy = "
-                << shearDistI(0) << " < 0.0 or > 1.0\n";
-            exit(-1);
-        }
-        if (shearDistI(1) < 0.0 || shearDistI(1) > 1.0)  {
-            opserr << "TwoNodeLink::TwoNodeLink() - "
-                << "incorrect shear distance ratio:\n shearDistIz = "
-                << shearDistI(1) << " < 0.0 or > 1.0\n";
-            exit(-1);
-        }
+      if (shearDistI(0) < 0.0) {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "Shear distance ratio shearDistIy is negative\n";
+	shearDistI(0) = -shearDistI(0);
+	opserr << "Making the value positive " << shearDistI(0) << endln;
+      }
+      if (shearDistI(0) > 1.0) {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "Shear distance ratio shearDistIy is greater than 1\n";
+	shearDistI(0) = 1.0;
+	opserr << "Making the value 1.0" << endln;
+      }
+      if (shearDistI(1) < 0.0) {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "Shear distance ratio shearDistIz is negative\n";
+	shearDistI(1) = -shearDistI(1);
+	opserr << "Making the value positive " << shearDistI(1) << endln;
+      }
+      if (shearDistI(1) > 1.0) {
+	opserr << "TwoNodeLink::TwoNodeLink() - "
+	       << "Shear distance ratio shearDistIz is greater than 1\n";
+	shearDistI(1) = 1.0;
+	opserr << "Making the value 1.0" << endln;
+      }		
+
     } else  {
         shearDistI.resize(2);
         shearDistI(0) = 0.5;
@@ -1086,7 +1107,7 @@ Response* TwoNodeLink::setResponse(const char **argv, int argc,
     output.attr("node1",connectedExternalNodes[0]);
     output.attr("node2",connectedExternalNodes[1]);
     
-    char outputData[10];
+    char outputData[80];
     
     // global forces
     if (strcmp(argv[0],"force") == 0 || strcmp(argv[0],"forces") == 0 ||
@@ -1160,6 +1181,23 @@ Response* TwoNodeLink::setResponse(const char **argv, int argc,
                 theResponse =  theMaterials[matNum-1]->setResponse(&argv[2], argc-2, output);
         }
     }
+
+    if (strcmp(argv[0],"xaxis") == 0) {
+      theResponse = new ElementResponse(this, 20, Vector(3));
+    }
+    if (strcmp(argv[0],"yaxis") == 0) {
+      theResponse = new ElementResponse(this, 21, Vector(3));
+    }
+    if (strcmp(argv[0],"zaxis") == 0) {
+      theResponse = new ElementResponse(this, 22, Vector(3));
+    }
+
+    if (strcmp(argv[0],"materials") == 0) {
+      theResponse = new ElementResponse(this, 23, ID(numDIR));
+    }
+    if (strcmp(argv[0],"directions") == 0) {
+      theResponse = new ElementResponse(this, 24, ID(numDIR));
+    }
     
     output.endTag(); // ElementOutput
     
@@ -1170,7 +1208,9 @@ Response* TwoNodeLink::setResponse(const char **argv, int argc,
 int TwoNodeLink::getResponse(int responseID, Information &eleInfo)
 {
     Vector defoAndForce(numDIR*2);
-    
+    Vector &theVec = *(eleInfo.theVector);
+    ID &theID = *(eleInfo.theID);    
+	
     switch (responseID)  {
     case 1:  // global forces
         return eleInfo.setVector(this->getResistingForce());
@@ -1200,9 +1240,34 @@ int TwoNodeLink::getResponse(int responseID, Information &eleInfo)
         defoAndForce.Assemble(qb,numDIR);
         
         return eleInfo.setVector(defoAndForce);
-        
+
+    case 20:
+      theVec(0) = trans(0,0);
+      theVec(1) = trans(0,1);
+      theVec(2) = trans(0,2);
+      return 0;
+    case 21:
+      theVec(0) = trans(1,0);
+      theVec(1) = trans(1,1);
+      theVec(2) = trans(1,2);
+      return 0;
+    case 22:
+      theVec(0) = trans(2,0);
+      theVec(1) = trans(2,1);
+      theVec(2) = trans(2,2);
+      return 0;
+
+    case 23:
+      for (int i = 0; i < numDIR; i++)
+	theID(i) = theMaterials[i]->getTag();
+      return 0;
+    case 24:
+      for (int i = 0; i < numDIR; i++)
+	theID(i) = (*dir)(i) + 1; // Add one to match user input
+      return 0;
+      
     default:
-        return 0;
+        return -1;
     }
 }
 
@@ -1234,7 +1299,10 @@ void TwoNodeLink::setUp()
         if (y.Size() == 0)  {
             y.resize(3);
             y.Zero();
-            y(0) = -xp(1);
+	    if (xp.Size() == 1) // Make a 1D model work
+	      y(1) = 1.0;
+	    else
+	      y(0) = -xp(1);
             if (xp.Size() > 1)
                 y(1) = xp(0);
             if (xp.Size() > 2)
@@ -1272,7 +1340,7 @@ void TwoNodeLink::setUp()
     y(0) = z(1)*x(2) - z(2)*x(1);
     y(1) = z(2)*x(0) - z(0)*x(2);
     y(2) = z(0)*x(1) - z(1)*x(0);
-    
+
     // compute length(norm) of vectors
     double xn = x.Norm();
     double yn = y.Norm();

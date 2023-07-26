@@ -42,8 +42,8 @@ OPS_ArctangentBackbone(void)
 {
   HystereticBackbone *theBackbone = 0;
 
-  if (OPS_GetNumRemainingInputArgs() < 4) {
-    opserr << "Invalid number of args, want: hystereticBackbone Arctangent tag? K1? gamma? alpha?" << endln;
+  if (OPS_GetNumRemainingInputArgs() < 3) {
+    opserr << "Invalid number of args, want: hystereticBackbone Arctangent tag? K1? gamma? alpha? -or- E? Fy?" << endln;
     return 0;
   }
 
@@ -56,13 +56,25 @@ OPS_ArctangentBackbone(void)
     return 0;
   }
 
-  numData = 3;
+  numData = 2;
   if (OPS_GetDoubleInput(&numData, dData) != 0) {
     opserr << "WARNING invalid data for hystereticBackbone Arctangent" << endln;
     return 0;
   }
 
-  theBackbone = new ArctangentBackbone(iData[0], dData[0], dData[1], dData[2]);
+  if (OPS_GetNumRemainingInputArgs() > 0) {
+    numData = 1;
+    if (OPS_GetDoubleInput(&numData, &dData[2]) != 0) {
+      opserr << "WARNING invalid data for hystereticBackbone Arctangent" << endln;
+      return 0;
+    }
+  
+    theBackbone = new ArctangentBackbone(iData[0], dData[0], dData[1], dData[2]);
+  }
+  else {
+    theBackbone = new ArctangentBackbone(iData[0], dData[0], dData[1]);
+  }
+  
   if (theBackbone == 0) {
     opserr << "WARNING could not create ArctangentBackbone\n";
     return 0;
@@ -84,6 +96,19 @@ ArctangentBackbone::ArctangentBackbone(int tag, double k1, double gy, double a):
   K2 = tan(alpha)/gammaY;
 }
 
+ArctangentBackbone::ArctangentBackbone(int tag, double E, double Fy):
+  HystereticBackbone(tag,BACKBONE_TAG_Arctangent),
+  K1(0.0), K2(0.0), gammaY(Fy/E), alpha(0.8)
+{
+  if (gammaY == 0.0)
+    opserr << "ArctangentBackbone::ArctangentBackbone -- gammaY is zero" << endln;
+  
+  gammaY = fabs(gammaY);
+
+  K2 = tan(alpha)/gammaY;
+  K1 = E/K2;
+}
+
 ArctangentBackbone::ArctangentBackbone():
   HystereticBackbone(0,BACKBONE_TAG_Arctangent),
   K1(0.0), K2(0.0), gammaY(0.0), alpha(0.0)
@@ -99,7 +124,9 @@ ArctangentBackbone::~ArctangentBackbone()
 double
 ArctangentBackbone::getTangent (double strain)
 {
-  return K1/(1+pow(K2*strain,2))*K2;
+  double u = K2*strain;
+
+  return K1/(1+u*u)*K2;
 }
 
 double
