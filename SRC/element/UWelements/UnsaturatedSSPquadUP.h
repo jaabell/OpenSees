@@ -31,6 +31,7 @@
 #include <Matrix.h>
 #include <ID.h>
 #include <SSPquadUP.h>
+#include <Response.h>
 
 #include <cmath>
 
@@ -49,7 +50,8 @@ class UnsaturatedSSPquadUP : public SSPquadUP
     UnsaturatedSSPquadUP();
 
     const char* getClassType()  const { return "UnsaturatedSSPquadUP"; };
-    
+    Response *setResponse(const char **argv, int argc, OPS_Stream &eleInfo);
+    int getResponse(int responseID, Information &eleInformation);
     const Matrix &getMass(void);
     const Vector &getResistingForce(void); 
  
