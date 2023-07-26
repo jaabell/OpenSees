@@ -22,18 +22,7 @@
 #define UnsaturatedSSPquadUP_h
 
 //
-// Adapted: Luis Miranda, LNEC, Andre Barbosa, OSU; July 2015 - added boundary tractions (see LM changes)
-//
-// Created: C.McGann, UW, 05.2011
-//
-// Description: This file contains the class definition for UnsaturatedSSPquadUP
-//                Stabilized Single-Point Quad element with a u-p formulation 
-//                for plane strain analysis of saturated porous media
-//
-// Reference:   Zienkiewicz, O.C. and Shiomi, T. (1984). "Dynamic behavior of 
-//                saturated porous media; the generalized Biot formulation and 
-//                its numerical solution." International Journal for Numerical 
-//                Methods in Geomechanics, 8, 71-96.
+// Sublassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
 
 #include <Element.h>
 #include <Node.h>
@@ -42,19 +31,9 @@
 #include <ID.h>
 #include <SSPquadUP.h>
 
-// number of nodes per element
-#define SQUP_NUM_NODE 4
-// number of dimensions
-#define SQUP_NUM_DIM  2
-// degrees of freedom per element
-#define SQUP_NUM_DOF  12
+#include <cmath>
 
-class Domain;
-class Node;
-class Channel;
-class NDMaterial;
-class FEM_ObjectBroker;
-class Response;
+using namespace std;
 
 class UnsaturatedSSPquadUP : public SSPquadUP
 {
@@ -62,7 +41,9 @@ class UnsaturatedSSPquadUP : public SSPquadUP
     // LM change
     UnsaturatedSSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &theMat,
                        double thick, double Kf, double Rf, double k1, double k2,
-                       double eVoid, double alpha, double b1 = 0.0, double b2 = 0.0,
+                       double eVoid, double alpha, 
+                       double Sres, double Ssat, double ga, double gn, double gc, double mkrel_min, double glocal,
+                       double b1 = 0.0, double b2 = 0.0,
                        double Pup = 0.0, double Plow = 0.0, double Pleft = 0.0, double Pright = 0.0);
     UnsaturatedSSPquadUP();
 
@@ -74,7 +55,43 @@ class UnsaturatedSSPquadUP : public SSPquadUP
 
   protected:
 
-    void GetPermeabilityMatrix(void);          // compute permeability matrix ****
+    void GetPermeabilityMatrix(void);
+
+
+    // Van Genuchten (1980) equations
+
+    inline double getRelativeSaturation(double psi) const 
+    {
+        return mSres + (mSsat - mSres)*pow(1 + pow(mga*abs(psi), mgn), mgc);
+    }
+
+    inline double getRelativeSaturationPressureDerivative(double pw) const
+    {   
+
+        return (mSsat - mSres) * 
+            mgc * 
+            ( mgn * pow( mga / fDens, mgn) * pow(pw, mgn-1) ) * 
+            pow(1 + pow(mga*abs(pw / fDens), mgn), mgc-1);
+    }
+
+    inline double getRelativePermeability(double S) const 
+    {
+        double Seff = (S - mSres)/(mSsat - mSres);
+        return max(mkrel_min, 
+            pow(Seff, mgl) * 
+            pow(1 - pow(1 - pow(Seff, -1/mgc), -mgc),2)
+            );
+    }
+
+
+    double mSres;           //A residual saturation, part of the fluid that remains in the pores even at high suction heads
+    double mSsat;           //Saturated condition (Ssat=1, fully saturated which in general is not true)
+    double mga;             //Van Genuchten fitting parameter related to air entry value of the soil, specific for material, units: 1/L
+    double mgn;             //Van Genuchten fitting parameter related to the rate of water extraction from soil once air entry value is exceeded, specific for material, units: 1/L
+    double mgc;             //Van Genuchten fitting parameter, specific for material, in absence of data can use gc = (1-gn)/gn
+    double mgl;             //Van Genuchten fitting parameter for the relative permeability
+    double mkrel_min;       //Minimum relative permeability (default 1e-4)
+
 
   private:
 

@@ -42,7 +42,6 @@
 
 static int num_UnsaturatedSSPquadUP = 0;
 
-
 void* OPS_UnsaturatedSSPquadUP(void)
 {
     if (num_UnsaturatedSSPquadUP == 0) {
@@ -54,62 +53,72 @@ void* OPS_UnsaturatedSSPquadUP(void)
     Element *theElement = 0;
 
     int numRemainingInputArgs = OPS_GetNumRemainingInputArgs();
-    // LM change
-    if (numRemainingInputArgs < 13) {
-        opserr << "Invalid #args, want: element UnsaturatedSSPquadUP eleTag? iNode? jNode? kNode? lNode? matTag? t? fBulk? fDen? k1? k2? e? alpha? <b1? b2?> <Pup? Plow? Pleft? Pright?>?\n";
+
+    if (numRemainingInputArgs < 21) {
+        opserr << "Invalid #args, want: element UnsaturatedSSPquadUP eleTag? iNode? jNode? kNode? lNode? matTag? t? fBulk? fDen? k1? k2? e? alpha? Sres? Ssat? ga? gn? mgc? gl? krel_min?  <b1? b2?> <Pup? Plow? Pleft? Pright?>?\n";
         return 0;
     }
 
     int iData[6];
-    double dData[13];
-    dData[7]  = 0.0;
-    dData[8]  = 0.0;
-    dData[9]  = 0.0;
-    dData[10] = 0.0;
-    dData[11] = 0.0;
-    dData[12] = 0.0;
-    // LM change
+    double dData[20];
+    dData[7]  = 0.0; // Sres?
+    dData[8]  = 0.0; // Ssat?
+    dData[9]  = 0.0; // ga?
+    dData[10] = 0.0; // gn?
+    dData[11] = 0.0; // gc?
+    dData[12] = 0.0; // gl?
+    dData[13] = 1e-4; // krel_min?
+    dData[14] = 0.0; // <b1?>
+    dData[15] = 0.0; // <b2?>
+    dData[16] = 0.0; // <Pup?>
+    dData[17] = 0.0; // <Plow?>
+    dData[18] = 0.0; // <Pleft?>
+    dData[19] = 0.0; // <Pright?>
 
-    int numData = 6;
+    int numData = 6; // number of data to read
     if (OPS_GetIntInput(&numData, iData) != 0) {
         opserr << "WARNING invalid integer data: element UnsaturatedSSPquadUP " << iData[0] << endln;
         return 0;
     }
+    numRemainingInputArgs -= numData; // update remaining args
 
-    numData = 7;
+    numData = 14; // update number of data to read
     if (OPS_GetDoubleInput(&numData, dData) != 0) {
         opserr << "WARNING invalid double data: element UnsaturatedSSPquadUP " << iData[0] << endln;
         return 0;
     }
+    numRemainingInputArgs -= numData; // update remaining args
 
     int matID = iData[5];
     NDMaterial *theMaterial = OPS_GetNDMaterial(matID);
     if (theMaterial == 0) {
         opserr << "WARNING element UnsaturatedSSPquadUP " << iData[0] << endln;
-        opserr << " Material: " << matID << "not found\n";
+        opserr << " Material: " << matID << " not found\n";
         return 0;
     }
 
-    // LM change
-    if (numRemainingInputArgs == 15) {
+    if (numRemainingInputArgs >= 2) { // check if there are at least 2 more args
         numData = 2;
-        if (OPS_GetDoubleInput(&numData, &dData[7]) != 0) {
+        if (OPS_GetDoubleInput(&numData, &dData[14]) != 0) {
             opserr << "WARNING invalid optional data: element UnsaturatedSSPquadUP " << iData[0] << endln;
             return 0;
         }
-    } else if (numRemainingInputArgs == 19) {
-        numData = 6;
-        if (OPS_GetDoubleInput(&numData, &dData[7]) != 0) {
+        numRemainingInputArgs -= numData; // update remaining args
+    } 
+
+    if (numRemainingInputArgs >= 4) { // check if there are at least 4 more args
+        numData = 4;
+        if (OPS_GetDoubleInput(&numData, &dData[16]) != 0) {
             opserr << "WARNING invalid optional data: element UnsaturatedSSPquadUP " << iData[0] << endln;
             return 0;
         }
+        numRemainingInputArgs -= numData; // update remaining args
     }
 
-    // parsing was successful, allocate the element
-    theElement = new UnsaturatedSSPquadUP(iData[0], iData[1], iData[2], iData[3],  iData[4], *theMaterial,
-                                          dData[0], dData[1], dData[2], dData[3],  dData[4],  dData[5], dData[6],
-                                          dData[7], dData[8], dData[9], dData[10], dData[11], dData[12]);
-    // LM change
+    theElement = new UnsaturatedSSPquadUP(iData[0], iData[1], iData[2], iData[3], iData[4], *theMaterial,
+                                          dData[0], dData[1], dData[2], dData[3], dData[4],  dData[5], dData[6],
+                                          dData[7], dData[8], dData[9], dData[10], dData[11], dData[12],
+                                          dData[13], dData[14], dData[15], dData[16], dData[17], dData[18], dData[19]);
 
     if (theElement == 0) {
         opserr << "WARNING could not create element of type UnsaturatedSSPquadUP\n";
@@ -122,20 +131,24 @@ void* OPS_UnsaturatedSSPquadUP(void)
 // full constructor
 UnsaturatedSSPquadUP::UnsaturatedSSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &theMat,
         double thick, double Kf, double Rf, double k1, double k2,
-        double eVoid, double alpha, double b1, double b2,
+        double eVoid, double alpha, 
+        double Sres, double Ssat, double ga, double gn, double gc, double gl, double krel_min, 
+        double b1, double b2,
         double Pup, double Plow, double Pleft, double Pright)
     : SSPquadUP(tag, Nd1, Nd2, Nd3, Nd4, theMat,
                 thick, Kf, Rf, k1, k2,
                 eVoid, alpha, b1, b2,
                 Pup, Plow, Pleft, Pright,
-                ELE_TAG_UnsaturatedSSPquadUP)
+                ELE_TAG_UnsaturatedSSPquadUP),
+      mSres(Sres), mSsat(Ssat), mga(ga), mgn(gn), mgc(gc), mgl(gl), mkrel_min(krel_min)
 {
 
-}
+}   
 
 // null constructor
 UnsaturatedSSPquadUP::UnsaturatedSSPquadUP()
-    : SSPquadUP(ELE_TAG_UnsaturatedSSPquadUP)
+    : SSPquadUP(ELE_TAG_UnsaturatedSSPquadUP),
+    mSres(0.0), mSsat(0.0), mga(0.0), mgn(0.0), mgc(0.0), mgl(0.0), mkrel_min(0.0)
 {
 }
 
@@ -146,9 +159,23 @@ UnsaturatedSSPquadUP::getMass(void)
 {
     mMass.Zero();
 
+    //Compute fluid pressure as average of nodal values
+    const double p0 = theNodes[0]->getTrialVel()(2);
+    const double p1 = theNodes[1]->getTrialVel()(2);
+    const double p2 = theNodes[2]->getTrialVel()(2);
+    const double p3 = theNodes[3]->getTrialVel()(2);
+
+    double pw = (p0 + p1 + p2 + p3)/4;
+
+    pw = pw < 0 ? pw : 0;
+
     // compute compressibility matrix term
-    // double oneOverQ = -0.25*J0*mThickness*(mPorosity/fBulk*S - n * dSdP);  // Eq 58 Plaxis
-    double oneOverQ = -0.25 * J0 * mThickness * mPorosity / fBulk;
+    double glocal = sqrt(b[0]*b[0] + b[1]*b[1]);
+    double psi = -pw / (fDens*glocal);
+    double S = getRelativeSaturation(psi);
+    double dSdpw = getRelativeSaturationPressureDerivative(pw);
+    double oneOverQ = -0.25*J0*mThickness*(mPorosity/fBulk*S - mPorosity * dSdpw);  // Eq 58 Plaxis
+    // double oneOverQ = -0.25 * J0 * mThickness * mPorosity / fBulk;
 
     // get mass density from the material
     double density = theMaterial->getRho();
@@ -267,8 +294,24 @@ UnsaturatedSSPquadUP::getResistingForce(void)
         body(0) = appliedB[0];
         body(1) = appliedB[1];
     }
-    // f2 = 4.0*J0*mThickness*fDens*dN*krel/gammaw*k*body;   // Eq. 59 Plaxis
-    f2 = 4.0 * J0 * mThickness * fDens * dN * k * body;
+
+    //Compute fluid pressure as average of nodal values
+    const double p0 = theNodes[0]->getTrialVel()(2);
+    const double p1 = theNodes[1]->getTrialVel()(2);
+    const double p2 = theNodes[2]->getTrialVel()(2);
+    const double p3 = theNodes[3]->getTrialVel()(2);
+
+    double pw = (p0 + p1 + p2 + p3)/4;
+
+    pw = pw < 0 ? pw : 0;
+
+    // compute compressibility matrix term
+    double glocal = sqrt(b[0]*b[0] + b[1]*b[1]);
+    double psi = -pw / (fDens*glocal);
+    double S = getRelativeSaturation(psi);
+    double krel = getRelativePermeability(S);
+    f2 = 4.0*J0*mThickness * fDens * dN * krel / (fDens * glocal) * k * body;   // Eq. 59 Plaxis
+    // f2 = 4.0 * J0 * mThickness * fDens * dN * k * body;
 
     // assemble full internal force vector for the element
     mInternalForces(0)  = f1(0);
@@ -314,8 +357,24 @@ UnsaturatedSSPquadUP::GetPermeabilityMatrix(void)
     dNp(1, 0) = dN(0, 1); dNp(1, 1) = dN(1, 1); dNp(1, 2) = dN(2, 1); dNp(1, 3) = dN(3, 1);
 
     // compute permeability matrix
-    // mPerm.addMatrixTripleProduct(1.0, dNp, krel / gamma*k, 4.0*J0*mThickness);  // Eq 57 Plaxis
-    mPerm.addMatrixTripleProduct(1.0, dNp, k, 4.0 * J0 * mThickness);
+    const double p0 = theNodes[0]->getTrialVel()(2);
+    const double p1 = theNodes[1]->getTrialVel()(2);
+    const double p2 = theNodes[2]->getTrialVel()(2);
+    const double p3 = theNodes[3]->getTrialVel()(2);
+
+    double pw = (p0 + p1 + p2 + p3)/4;
+
+    pw = pw < 0 ? pw : 0;
+
+    // compute compressibility matrix term
+    double glocal = sqrt(b[0]*b[0] + b[1]*b[1]);
+    double psi = -pw / (fDens*glocal);
+    double S = getRelativeSaturation(psi);
+    double krel = getRelativePermeability(S);
+
+
+    mPerm.addMatrixTripleProduct(1.0, dNp, krel / (fDens * glocal)*k, 4.0*J0*mThickness);  // Eq 57 Plaxis
+    // mPerm.addMatrixTripleProduct(1.0, dNp, k, 4.0 * J0 * mThickness);
 
     return;
 }
