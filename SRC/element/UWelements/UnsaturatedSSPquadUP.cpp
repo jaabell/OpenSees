@@ -19,21 +19,8 @@
 ** ****************************************************************** */
 
 //
-// Adapted: Luis Miranda, LNEC, Andre Barbosa, OSU; July 2015 - added boundary tractions (see LM changes)
+// Sublassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
 //
-// Created: Chris McGann, UW, 05.2011
-//
-// Description: This file contains the implementation of the UnsaturatedSSPquadUP class
-//                Stabilized Single-Point Quad element with a u-p formulation
-//                for plane strain analysis of saturated porous media
-//
-// References:  Zienkiewicz, O.C. and Shiomi, T. (1984). "Dynamic behavior of
-//                saturated porous media; the generalized Biot formulation and
-//                its numerical solution." International Journal for Numerical
-//                Methods in Geomechanics, 8, 71-96.
-//              McGann, C.R., Arduino, P., and Mackenzie-Helnwein, P. (2012) "Stabilized single-point
-//                4-node quadrilateral element for dynamic analysis of fluid saturated porous media."
-//                Acta Geotechnica, 7(4):297-311
 
 #include "UnsaturatedSSPquadUP.h"
 
@@ -46,7 +33,7 @@ void* OPS_UnsaturatedSSPquadUP(void)
 {
     if (num_UnsaturatedSSPquadUP == 0) {
         num_UnsaturatedSSPquadUP++;
-        opserr << "UnsaturatedSSPquadUP element - Written: C.McGann, P.Arduino, P.Mackenzie-Helnwein, U.Washington\n";
+        opserr << "UnsaturatedSSPquadUP element - Written: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)\n";
     }
 
     // Pointer to an element that will be returned
