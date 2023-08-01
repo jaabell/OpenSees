@@ -850,6 +850,7 @@
 #define ELE_TAG_E_SFI        			257 // C. N. Lopez
 #define ELE_TAG_TripleFrictionPendulumX               258
 #define ELE_TAG_UnsaturatedSSPquadUP               259
+#define ELE_TAG_UnsaturatedSSPbrickUP               260
 #define ELE_TAG_ExternalElement           99990
 
 

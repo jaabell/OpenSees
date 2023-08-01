@@ -57,8 +57,9 @@ class SSPbrickUP : public Element
   public:
     SSPbrickUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, int Nd5, int Nd6, int Nd7, int Nd8,
                       NDMaterial &theMat, double Kf, double Rf, double k1, double k2, double k3,
-					  double eVoid, double alpha, double b1 = 0.0, double b2 = 0.0, double b3 = 0.0);
-    SSPbrickUP();
+					  double eVoid, double alpha, double b1 = 0.0, double b2 = 0.0, double b3 = 0.0, 
+					  int class_tag=ELE_TAG_SSPbrickUP);
+    SSPbrickUP(int classTag=ELE_TAG_SSPquadUP);
     ~SSPbrickUP();
 
 	const char* getClassType()  const { return "SSPbrickUP"; };
@@ -102,8 +103,6 @@ class SSPbrickUP : public Element
     int updateParameter(int parameterID, Information &info);
 
   protected:
-
-  private:
 
     // member functions
 	void GetStab(void);                                 // compute stabilization stiffness matrix

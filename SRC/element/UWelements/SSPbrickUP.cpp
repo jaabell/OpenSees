@@ -122,8 +122,9 @@ OPS_SSPbrickUP(void)
 // full constructor
 SSPbrickUP::SSPbrickUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, int Nd5, int Nd6, int Nd7, int Nd8,
                        NDMaterial &theMat, double Kf, double Rf, double k1, double k2, double k3,
-					   double eVoid, double alpha, double b1, double b2, double b3)
-  :Element(tag,ELE_TAG_SSPbrickUP),
+					   double eVoid, double alpha, double b1, double b2, double b3,
+					   int classTag)
+  :Element(tag,classTag),
   	theMaterial(0),
 	mExternalNodes(SBUP_NUM_NODE),
 	mTangentStiffness(SBUP_NUM_DOF,SBUP_NUM_DOF),
@@ -196,8 +197,8 @@ SSPbrickUP::SSPbrickUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, int Nd5, int
 }
 
 // null constructor
-SSPbrickUP::SSPbrickUP()
-  :Element(0,ELE_TAG_SSPbrickUP),
+SSPbrickUP::SSPbrickUP(int classTag)
+  :Element(0,classTag),
     theMaterial(0),
 	mExternalNodes(SBUP_NUM_NODE),
 	mTangentStiffness(SBUP_NUM_DOF,SBUP_NUM_DOF),
