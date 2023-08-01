@@ -22,7 +22,7 @@
 #define UnsaturatedSSPquadUP_h
 
 //
-// Sublassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
+// Subclassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
 //
 
 #include <Element.h>
@@ -44,7 +44,7 @@ class UnsaturatedSSPquadUP : public SSPquadUP
     UnsaturatedSSPquadUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, NDMaterial &theMat,
                        double thick, double Kf, double Rf, double k1, double k2,
                        double eVoid, double alpha, 
-                       double Sres, double Ssat, double ga, double gn, double gc, double mkrel_min, double glocal,
+                       double Sres, double Ssat, double ga, double gn, double gc, double gl, double krel_min,
                        double b1 = 0.0, double b2 = 0.0,
                        double Pup = 0.0, double Plow = 0.0, double Pleft = 0.0, double Pright = 0.0);
     UnsaturatedSSPquadUP();

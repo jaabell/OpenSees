@@ -19,7 +19,7 @@
 ** ****************************************************************** */
 
 //
-// Sublassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
+// Subclassed by: José A. Abell (UANDES), Francisco Pinto (UChile), Ricardo Gallardo (PUCV)
 //
 
 #include "UnsaturatedSSPquadUP.h"
@@ -44,7 +44,7 @@ void* OPS_UnsaturatedSSPquadUP(void)
 	int numRemainingInputArgs = OPS_GetNumRemainingInputArgs();
 
 	if (numRemainingInputArgs < 21) {
-		opserr << "Invalid #args, want: element UnsaturatedSSPquadUP eleTag? iNode? jNode? kNode? lNode? matTag? t? fBulk? fDen? k1? k2? e? alpha? Sres? Ssat? ga? gn? mgc? krel_min?  <b1? b2? Pup? Plow? Pleft? Pright?>\n";
+		opserr << "Invalid #args, want: element UnsaturatedSSPquadUP eleTag? iNode? jNode? kNode? lNode? matTag? t? fBulk? fDen? k1? k2? e? alpha? Sres? Ssat? ga? gn? gc? gl? krel_min?  <b1? b2? Pup? Plow? Pleft? Pright?>\n";
 		return 0;
 	}
 
