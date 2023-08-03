@@ -58,28 +58,28 @@ void* OPS_UnsaturatedSSPbrickUP(void)
         return 0;
     }
 
-    int iData[9];
-    double dData[16];
-    dData[12] = 1e-4; // krel_min?
-    dData[13] = 0.0; // <b1?>
-    dData[14] = 0.0; // <b2?>
-    dData[15] = 0.0; // <b3?>
+    int iData[10];
+    double dData[17];
+    dData[13] = 1e-4; // krel_min?
+    dData[14] = 0.0; // <b1?>
+    dData[15] = 0.0; // <b2?>
+    dData[16] = 0.0; // <b3?>
 
-    int numData = 9; // number of data to read
+    int numData = 10; // number of data to read
     if (OPS_GetIntInput(&numData, iData) != 0) {
         opserr << "WARNING invalid integer data: element UnsaturatedSSPbrickUP " << iData[0] << endln;
         return 0;
     }
     numRemainingInputArgs -= numData; // update remaining args
 
-    numData = 13; // update number of data to read
+    numData = 14; // update number of data to read
     if (OPS_GetDoubleInput(&numData, dData) != 0) {
         opserr << "WARNING invalid double data: element UnsaturatedSSPbrickUP " << iData[0] << endln;
         return 0;
     }
     numRemainingInputArgs -= numData; // update remaining args
 
-    int matID = iData[8];
+    int matID = iData[9];
     NDMaterial *theMaterial = OPS_GetNDMaterial(matID);
     if (theMaterial == 0) {
         opserr << "WARNING element UnsaturatedSSPbrickUP " << iData[0] << endln;
@@ -89,7 +89,7 @@ void* OPS_UnsaturatedSSPbrickUP(void)
 
     if (numRemainingInputArgs >= 3) { // check if there are at least 3 more args
         numData = 3;
-        if (OPS_GetDoubleInput(&numData, &dData[13]) != 0) {
+        if (OPS_GetDoubleInput(&numData, &dData[14]) != 0) {
             opserr << "WARNING invalid optional data: element UnsaturatedSSPbrickUP " << iData[0] << endln;
             return 0;
         }
