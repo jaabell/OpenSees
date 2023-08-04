@@ -78,6 +78,8 @@ public:
 
 	// parameters and responses
 	int setParameter(const char** argv, int argc, Parameter& param);
+	int updateParameter(int parameterID, Information& info);
+
 	Response* setResponse(const char** argv, int argc, OPS_Stream& s);
 
 private:
@@ -89,5 +91,10 @@ private:
 	Matrix Aepsilon = Matrix(6, 6);
 	// inverse of stress tensor map (saved as vector, it's diagonal)
 	Vector Asigma_inv = Vector(6);
+
+	double parameters[15];
+
+	Vector epsilon_internal = Vector(6);
+    Vector epsilon_internal_n = Vector(6);
 };
 #endif
