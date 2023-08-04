@@ -208,6 +208,7 @@
     <ClCompile Include="..\..\..\SRC\domain\load\NodalThermalAction.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\load\ShellThermalAction.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\load\ThermalActionWrapper.cpp" />
+    <ClCompile Include="..\..\..\SRC\domain\load\ThermalHeatSource.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\node\NodalLoad.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\node\Node.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\domain\Domain.cpp" />
@@ -306,6 +307,7 @@
     <ClInclude Include="..\..\..\SRC\domain\load\NodalThermalAction.h" />
     <ClInclude Include="..\..\..\SRC\domain\load\ShellThermalAction.h" />
     <ClInclude Include="..\..\..\SRC\domain\load\ThermalActionWrapper.h" />
+    <ClInclude Include="..\..\..\SRC\domain\load\ThermalHeatSource.h" />
     <ClInclude Include="..\..\..\SRC\domain\node\NodalLoad.h" />
     <ClInclude Include="..\..\..\SRC\domain\node\Node.h" />
     <ClInclude Include="..\..\..\SRC\domain\domain\Domain.h" />

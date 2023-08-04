@@ -306,6 +306,9 @@
     <ClCompile Include="..\..\..\SRC\domain\load\ThermalActionWrapper.cpp">
       <Filter>load</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\domain\load\ThermalHeatSource.cpp">
+      <Filter>load</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\domain\load\ShellThermalAction.cpp">
       <Filter>load\shell</Filter>
     </ClCompile>
@@ -588,6 +591,9 @@
       <Filter>load</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\load\ThermalActionWrapper.h">
+      <Filter>load</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\domain\load\ThermalHeatSource.h">
       <Filter>load</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\load\ShellThermalAction.h">

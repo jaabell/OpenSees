@@ -495,7 +495,7 @@ TenNodeTetrahedronThermal::addLoad(ElementalLoad *theLoad, double loadFactor)
     const Vector &data = theLoad->getData(type, loadFactor);
 
     if (type == LOAD_TAG_ThermalHeatSource) {
-        opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " applying q =  " << data(0) << "\n";
+        // opserr << "TenNodeTetrahedronThermal::addLoad() - ele with tag: " << this->getTag() << " applying q =  " << data(0) << "\n";
         applyLoad = 1;
         appliedB[0] = data(0);
         return 0;
