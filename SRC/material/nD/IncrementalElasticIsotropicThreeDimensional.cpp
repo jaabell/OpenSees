@@ -34,6 +34,7 @@ void *OPS_IncrementalElasticIsotropicThreeDimensional(void)
   NDMaterial *theMaterial = 0;
   
   int numArgs = OPS_GetNumRemainingInputArgs();
+  opserr << "Using IncrementalElasticIsotropicThreeDimensional" << endln ;
   
 
   if (numArgs < 3) {

@@ -87,12 +87,14 @@ private:
 	NDMaterial *theIsotropicMaterial = nullptr;
 	// the strain in the real orthotropic space
 	Vector epsilon = Vector(6);
+	Vector epsilon_n = Vector(6);
 	// strain tensor map
 	Matrix Aepsilon = Matrix(6, 6);
 	// inverse of stress tensor map (saved as vector, it's diagonal)
 	Vector Asigma_inv = Vector(6);
 
-	double parameters[15];
+	// double parameters[15];
+	Vector parameters = Vector(15);
 
 	Vector epsilon_internal = Vector(6);
     Vector epsilon_internal_n = Vector(6);
