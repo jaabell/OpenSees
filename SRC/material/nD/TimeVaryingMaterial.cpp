@@ -113,6 +113,24 @@ TimeVaryingMaterial::TimeVaryingMaterial(
         opserr << "nDMaterial Orthotropic Error: failed to get a (3D) copy of the isotropic material\n";
         exit(-1);
     }
+
+    opserr << "TimeVaryingMaterial paremeters:"<< endln ;
+    opserr << "   Ex = "         << Ex         << endln ;
+    opserr << "   Ey = "         << Ey         << endln ;
+    opserr << "   Ez = "         << Ez         << endln ;
+    opserr << "   Gxy = "        << Gxy        << endln ;
+    opserr << "   Gyz = "        << Gyz        << endln ;
+    opserr << "   Gzx = "        << Gzx        << endln ;
+    opserr << "   vxy = "        << vxy        << endln ;
+    opserr << "   vyz = "        << vyz        << endln ;
+    opserr << "   vzx = "        << vzx        << endln ;
+    opserr << "   Asigmaxx = "   << Asigmaxx   << endln ;
+    opserr << "   Asigmayy = "   << Asigmayy   << endln ;
+    opserr << "   Asigmazz = "   << Asigmazz   << endln ;
+    opserr << "   Asigmaxyxy = " << Asigmaxyxy << endln ;
+    opserr << "   Asigmayzyz = " << Asigmayzyz << endln ;
+    opserr << "   Asigmaxzxz = " << Asigmaxzxz << endln ;
+
     parameters(0) = Ex;
     parameters(1) = Ey;
     parameters(2) = Ez;
@@ -143,7 +161,8 @@ double TimeVaryingMaterial::getRho(void)
 
 int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 {
-    /*
+    /* START --- THESE LINES ARE TO TEST FOR Δε
+
     static Vector depsilon(6);
     static Vector depsilon_internal(6);
     depsilon.Zero();
@@ -151,21 +170,22 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
   
     depsilon = epsilon - epsilon_n;
     depsilon_internal = epsilon_internal - epsilon_internal_n;
+   
+    // commitState():
+    //     epsilon_n = epsilon
+    //     epsilon_internal_n = epsilon_internal
+    // epsilon = (epsilon - epsilon_n) - (epsilon_internal - epsilon_internal_n)
 
-    commitState():
-        epsilon_n = epsilon
-        epsilon_internal_n = epsilon_internal
-
-    epsilon = (epsilon - epsilon_n) - (epsilon_internal - epsilon_internal_n)
     epsilon = depsilon - depsilon_internal ;
-    */
-    // strain in orthotropic space
+    END --- THESE LINES ARE TO TEST FOR Δε */ 
+
+    // strain in orthotropic space (TOTAL STRAIN)
     epsilon = strain - epsilon_internal ;
 
     // Actualizar matrices de resistencia
     // Aepsilon
     // Asigma_inv
-    // opserr << "ops_Dt = " << ops_Dt << endln; // Δt
+    // opserr << "ops_Dt = " << ops_Dt << endln; // ITS Δt NOT TOTAL CURRENT TIME
 
     // Lugar donde hay que variar los parametros elasticos
     // y de resistencia usando ops_Dt
