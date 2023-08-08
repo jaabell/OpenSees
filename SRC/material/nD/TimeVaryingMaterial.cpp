@@ -39,6 +39,7 @@
 
 void *OPS_TimeVaryingMaterial(void)
 {
+    opserr << "Using TimeVaryingMaterial" << endln ;
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 17) {
@@ -93,6 +94,11 @@ void *OPS_TimeVaryingMaterial(void)
     return theTimeVaryingMaterial;
 }
 
+TimeVaryingMaterial::TimeVaryingMaterial()
+    : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
+{
+}
+
 TimeVaryingMaterial::TimeVaryingMaterial(
     int tag,
     NDMaterial &theIsoMat,
@@ -107,28 +113,21 @@ TimeVaryingMaterial::TimeVaryingMaterial(
         opserr << "nDMaterial Orthotropic Error: failed to get a (3D) copy of the isotropic material\n";
         exit(-1);
     }
-
-    parameters[0] = Ex;
-    parameters[1] = Ey;
-    parameters[2] = Ez;
-    parameters[3] = Gxy;
-    parameters[4] = Gyz;
-    parameters[5] = Gzx;
-    parameters[6] = vxy;
-    parameters[7] = vyz;
-    parameters[8] = vzx;
-    parameters[9] = Asigmaxx;
-    parameters[10] = Asigmayy;
-    parameters[11] = Asigmazz;
-    parameters[12] = Asigmaxyxy;
-    parameters[13] = Asigmayzyz;
-    parameters[14] = Asigmaxzxz;
-
-}
-
-TimeVaryingMaterial::TimeVaryingMaterial()
-    : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
-{
+    parameters(0) = Ex;
+    parameters(1) = Ey;
+    parameters(2) = Ez;
+    parameters(3) = Gxy;
+    parameters(4) = Gyz;
+    parameters(5) = Gzx;
+    parameters(6) = vxy;
+    parameters(7) = vyz;
+    parameters(8) = vzx;
+    parameters(9) = Asigmaxx;
+    parameters(10) = Asigmayy;
+    parameters(11) = Asigmazz;
+    parameters(12) = Asigmaxyxy;
+    parameters(13) = Asigmayzyz;
+    parameters(14) = Asigmaxzxz;
 }
 
 TimeVaryingMaterial::~TimeVaryingMaterial()
@@ -144,14 +143,29 @@ double TimeVaryingMaterial::getRho(void)
 
 int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 {
-    // strain in orthotropic space
-    epsilon = strain - epsilon_internal;
+    /*
+    static Vector depsilon(6);
+    static Vector depsilon_internal(6);
+    depsilon.Zero();
+    depsilon_internal.Zero();
+  
+    depsilon = epsilon - epsilon_n;
+    depsilon_internal = epsilon_internal - epsilon_internal_n;
 
+    commitState():
+        epsilon_n = epsilon
+        epsilon_internal_n = epsilon_internal
+
+    epsilon = (epsilon - epsilon_n) - (epsilon_internal - epsilon_internal_n)
+    epsilon = depsilon - depsilon_internal ;
+    */
+    // strain in orthotropic space
+    epsilon = strain - epsilon_internal ;
 
     // Actualizar matrices de resistencia
     // Aepsilon
     // Asigma_inv
-    opserr << "ops_Dt = " << ops_Dt << endln;
+    // opserr << "ops_Dt = " << ops_Dt << endln; // Δt
 
     // Lugar donde hay que variar los parametros elasticos
     // y de resistencia usando ops_Dt
@@ -160,21 +174,21 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     // Los de resistencia son resistencia_inicial(t) / resistencia_actual(t) = A(t)
     // Asigmazz = 0.5 significa el doble de sigma_zz de resistencia
 
-    double Ex = parameters[0];   // E(t)
-    double Ey = parameters[1];   // E(t)
-    double Ez = parameters[2];   // E(t)
-    double Gxy = parameters[3];  // G(t) en funcion de Bulk(t) 
-    double Gyz = parameters[4];  // G(t) en funcion de Bulk(t) 
-    double Gzx = parameters[5];  // G(t) en funcion de Bulk(t) 
-    double vxy = parameters[6];  // nu(t) en funcion de Bulk(t) 
-    double vyz = parameters[7];  // nu(t) en funcion de Bulk(t) 
-    double vzx = parameters[8];  // nu(t) en funcion de Bulk(t) 
-    double Asigmaxx = parameters[9];    // A(t)
-    double Asigmayy = parameters[10];   // A(t)
-    double Asigmazz = parameters[11];   // A(t)
-    double Asigmaxyxy = parameters[12]; // A(t)
-    double Asigmayzyz = parameters[13]; // A(t)
-    double Asigmaxzxz = parameters[14]; // A(t)
+    double Ex         = parameters(0);  // E(t)
+    double Ey         = parameters(1);  // E(t)
+    double Ez         = parameters(2);  // E(t)
+    double Gxy        = parameters(3);  // G(t) en funcion de Bulk(t) 
+    double Gyz        = parameters(4);  // G(t) en funcion de Bulk(t) 
+    double Gzx        = parameters(5);  // G(t) en funcion de Bulk(t) 
+    double vxy        = parameters(6);  // nu(t) en funcion de Bulk(t) 
+    double vyz        = parameters(7);  // nu(t) en funcion de Bulk(t) 
+    double vzx        = parameters(8);  // nu(t) en funcion de Bulk(t) 
+    double Asigmaxx   = parameters(9);  // A(t)
+    double Asigmayy   = parameters(10); // A(t)
+    double Asigmazz   = parameters(11); // A(t)
+    double Asigmaxyxy = parameters(12); // A(t)
+    double Asigmayzyz = parameters(13); // A(t)
+    double Asigmaxzxz = parameters(14); // A(t)
 
     ///  Old code at constructor BEGIN ========================================================
     // compute the initial orthotropic constitutive tensor
@@ -229,7 +243,6 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     Aepsilon.addMatrixProduct(0.0, C0iso_inv, Asigma_C0, 1.0);
 
     ///  Old code at constructor END ========================================================
-
 
     // move to isotropic space
     static Vector eps_iso(6);
@@ -297,7 +310,8 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 
 int TimeVaryingMaterial::commitState(void)
 {
-    epsilon_internal_n = epsilon_internal;
+    epsilon_n=epsilon;
+    epsilon_internal_n=epsilon_internal;
     return theIsotropicMaterial->commitState();
 }
 
@@ -317,8 +331,12 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     theCopy->setTag(getTag());
     theCopy->theIsotropicMaterial = theIsotropicMaterial->getCopy("ThreeDimensional");
     theCopy->epsilon = epsilon;
+    theCopy->epsilon_n = epsilon_n;
     theCopy->Aepsilon = Aepsilon;
     theCopy->Asigma_inv = Asigma_inv;
+    theCopy->parameters = parameters;
+    theCopy->epsilon_internal = epsilon_internal;
+    theCopy->epsilon_internal_n = epsilon_internal_n;
     return theCopy;
 }
 
@@ -341,7 +359,7 @@ int TimeVaryingMaterial::getOrder(void) const
 
 void TimeVaryingMaterial::Print(OPS_Stream &s, int flag)
 {
-    s << "Orthotropic Material, tag: " << this->getTag() << "\n";
+    s << "Time Varying Material, tag: " << this->getTag() << "\n";
 }
 
 int TimeVaryingMaterial::sendSelf(int commitTag, Channel &theChannel)
@@ -439,12 +457,10 @@ int TimeVaryingMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_Objec
 
 int TimeVaryingMaterial::setParameter(const char** argv, int argc, Parameter& param)
 {
-
     // 4000 - init strain
     if (strcmp(argv[0], "initNormalStrain") == 0) {
-        double initNormalStrain = epsilon_internal(0) ;
+        double initNormalStrain = epsilon_internal(0);
         param.setValue(initNormalStrain);
-        // opserr << "InitStrain (setParameter)= " << initNormalStrain << endln ;
         return param.addObject(4001, this);
     }
 
@@ -464,7 +480,6 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
         epsilon_internal(0) = initNormalStrain;  
         epsilon_internal(1) = initNormalStrain;
         epsilon_internal(2) = initNormalStrain;
-        // opserr << "InitStrain (updateParameter) = " << initNormalStrain << endln ;
         return 0;
     }
 
