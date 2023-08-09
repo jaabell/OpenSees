@@ -121,7 +121,7 @@ class UnsaturatedSSPbrickUP : public SSPbrickUP
 
         double pw = (p0 + p1 + p2 + p3 + p5 + p6 + p7) / 8;
 
-        // pw = pw < 0 ? pw : 0;
+        pw = pw > 0 ? pw : 0;
 
         if (pw != pw)
         {
