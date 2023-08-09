@@ -54,16 +54,17 @@ void* OPS_UnsaturatedSSPbrickUP(void)
     int numRemainingInputArgs = OPS_GetNumRemainingInputArgs();
 
     if (numRemainingInputArgs < 25) {
-        opserr << "Invalid #args, want: element UnsaturatedSSPbrickUP eleTag? iNode? jNode? kNode? lNode? mNode? nNode? oNode? pNode? matTag? Kf? Rf? k1? k2? k3? eVoid? alpha? Sres? Ssat? ga? gn? gc? gl? krel_min? <b1? b2? b3?>\n";
+        opserr << "Invalid #args, want: element UnsaturatedSSPbrickUP eleTag? iNode? jNode? kNode? lNode? mNode? nNode? oNode? pNode? matTag? Kf? Rf? k1? k2? k3? eVoid? alpha? Sres? Ssat? ga? gn? gc? gl? krel_min? glocal? <b1? b2? b3?>\n";
         return 0;
     }
 
     int iData[10];
-    double dData[17];
+    double dData[18];
     dData[13] = 1e-4; // krel_min?
-    dData[14] = 0.0; // <b1?>
-    dData[15] = 0.0; // <b2?>
-    dData[16] = 0.0; // <b3?>
+    dData[14] = 0.0; // glocal?
+    dData[15] = 0.0; // <b1?>
+    dData[16] = 0.0; // <b2?>
+    dData[17] = 0.0; // <b3?>
 
     int numData = 10; // number of data to read
     if (OPS_GetIntInput(&numData, iData) != 0) {
@@ -72,7 +73,7 @@ void* OPS_UnsaturatedSSPbrickUP(void)
     }
     numRemainingInputArgs -= numData; // update remaining args
 
-    numData = 14; // update number of data to read
+    numData = 15; // update number of data to read
     if (OPS_GetDoubleInput(&numData, dData) != 0) {
         opserr << "WARNING invalid double data: element UnsaturatedSSPbrickUP " << iData[0] << endln;
         return 0;
@@ -89,7 +90,7 @@ void* OPS_UnsaturatedSSPbrickUP(void)
 
     if (numRemainingInputArgs >= 3) { // check if there are at least 3 more args
         numData = 3;
-        if (OPS_GetDoubleInput(&numData, &dData[14]) != 0) {
+        if (OPS_GetDoubleInput(&numData, &dData[15]) != 0) {
             opserr << "WARNING invalid optional data: element UnsaturatedSSPbrickUP " << iData[0] << endln;
             return 0;
         }
@@ -99,7 +100,7 @@ void* OPS_UnsaturatedSSPbrickUP(void)
     theElement = new UnsaturatedSSPbrickUP(iData[0], iData[1], iData[2], iData[3], iData[4], iData[5], iData[6], iData[7], iData[8], *theMaterial,
                                            dData[0], dData[1], dData[2], dData[3], dData[4],  dData[5], dData[6],
                                            dData[7], dData[8], dData[9], dData[10], dData[11], dData[12],
-                                           dData[13], dData[14], dData[15]);
+                                           dData[13], dData[14], dData[15], dData[16], dData[17]);
 
     if (theElement == 0) {
         opserr << "WARNING could not create element of type UnsaturatedSSPbrickUP\n";
@@ -114,14 +115,44 @@ void* OPS_UnsaturatedSSPbrickUP(void)
 UnsaturatedSSPbrickUP::UnsaturatedSSPbrickUP(int tag, int Nd1, int Nd2, int Nd3, int Nd4, int Nd5, int Nd6, int Nd7, int Nd8,
         NDMaterial &theMat, double Kf, double Rf, double k1, double k2, double k3,
         double eVoid, double alpha,
-        double Sres, double Ssat, double ga, double gn, double gc, double gl, double krel_min,
+        double Sres, double Ssat, double ga, double gn, double gc, double gl, double krel_min, double glocal,
         double b1, double b2, double b3)
     : SSPbrickUP(tag,  Nd1,  Nd2,  Nd3,  Nd4,  Nd5,  Nd6,  Nd7,  Nd8,
                  theMat, Kf, Rf, k1, k2, k3,
                  eVoid, alpha, b1, b2, b3,
                  ELE_TAG_UnsaturatedSSPbrickUP),
-      mSres(Sres), mSsat(Ssat), mga(ga), mgn(gn), mgc(gc), mgl(gl), mkrel_min(krel_min)
+      mSres(Sres), mSsat(Ssat), mga(ga), mgn(gn), mgc(gc), mgl(gl), mkrel_min(krel_min), mglocal(glocal)
 {
+
+    opserr << "New UnsaturatedSSPbrickUP " << endln;
+    opserr << "tag = " << tag << endln;
+    opserr << "Nd1 ... Nd8 = " 
+    << Nd1 << " "
+    << Nd2 << " "
+    << Nd3 << " "
+    << Nd4 << " "
+    << Nd5 << " "
+    << Nd6 << " "
+    << Nd7 << " "
+    << Nd8 << endln;
+    opserr << "Kf       = " << Kf << endln;
+    opserr << "Rf       = " << Rf << endln;
+    opserr << "k1       = " << k1 << endln;
+    opserr << "k2       = " << k2 << endln;
+    opserr << "k3       = " << k3 << endln;
+    opserr << "eVoid    = " << eVoid << endln;
+    opserr << "alpha    = " << alpha << endln;
+    opserr << "Sres     = " << Sres << endln;
+    opserr << "Ssat     = " << Ssat << endln;
+    opserr << "ga       = " << ga << endln;
+    opserr << "gn       = " << gn << endln;
+    opserr << "gc       = " << gc << endln;
+    opserr << "gl       = " << gl << endln;
+    opserr << "krel_min = " << krel_min << endln;
+    opserr << "glocal = " << glocal << endln;
+    opserr << "b1       = " << b1 << endln;
+    opserr << "b2       = " << b2 << endln;
+    opserr << "b3       = " << b3 << endln;
 
 }
 
@@ -140,23 +171,12 @@ UnsaturatedSSPbrickUP::getMass(void)
 {
     mMass.Zero();
 
-    //Compute fluid pressure as average of nodal values
-    const double p0 = theNodes[0]->getTrialVel()(2);
-    const double p1 = theNodes[1]->getTrialVel()(2);
-    const double p2 = theNodes[2]->getTrialVel()(2);
-    const double p3 = theNodes[3]->getTrialVel()(2);
-    const double p4 = theNodes[4]->getTrialVel()(2);
-    const double p5 = theNodes[5]->getTrialVel()(2);
-    const double p6 = theNodes[6]->getTrialVel()(2);
-    const double p7 = theNodes[7]->getTrialVel()(2);
-
-    double pw = (p0 + p1 + p2 + p3 + p5 + p6 + p7) / 8;
-
-    pw = pw < 0 ? pw : 0;
+    double pw = getMeanPressure();
 
     // compute compressibilty matrix term S
     // double oneOverQ = -0.015625 * mVol * mPorosity / fBulk;
-    double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+    // double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+    double glocal = mglocal;
     double psi = -pw / (fDens * glocal);
     double S = getRelativeSaturation(psi);
     double dSdpw = getRelativeSaturationPressureDerivative(pw);
@@ -309,23 +329,13 @@ UnsaturatedSSPbrickUP::getResistingForce(void)
         body(2) = appliedB[2];
     }
 
-    //Compute fluid pressure as average of nodal values
-    const double p0 = theNodes[0]->getTrialVel()(2);
-    const double p1 = theNodes[1]->getTrialVel()(2);
-    const double p2 = theNodes[2]->getTrialVel()(2);
-    const double p3 = theNodes[3]->getTrialVel()(2);
-    const double p4 = theNodes[4]->getTrialVel()(2);
-    const double p5 = theNodes[5]->getTrialVel()(2);
-    const double p6 = theNodes[6]->getTrialVel()(2);
-    const double p7 = theNodes[7]->getTrialVel()(2);
 
-    double pw = (p0 + p1 + p2 + p3 + p5 + p6 + p7) / 8;
-
-    pw = pw < 0 ? pw : 0;
 
     // compute compressibilty matrix term S
     // double oneOverQ = -0.015625 * mVol * mPorosity / fBulk;
-    double glocal = sqrt(b[0] * b[0] + b[1] * b[1]);
+    // double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+    double pw = getMeanPressure();
+    double glocal = mglocal;
     double psi = -pw / (fDens * glocal);
     double S = getRelativeSaturation(psi);
     double dSdpw = getRelativeSaturationPressureDerivative(pw);
@@ -413,20 +423,11 @@ UnsaturatedSSPbrickUP::getResponse(int responseID, Information &eleInfo)
     static Vector saturation_vec(1);
 
     if (responseID == 1010) {
-        //Compute fluid pressure as average of nodal values
-        const double p0 = theNodes[0]->getTrialVel()(2);
-        const double p1 = theNodes[1]->getTrialVel()(2);
-        const double p2 = theNodes[2]->getTrialVel()(2);
-        const double p3 = theNodes[3]->getTrialVel()(2);
-        const double p4 = theNodes[4]->getTrialVel()(2);
-        const double p5 = theNodes[5]->getTrialVel()(2);
-        const double p6 = theNodes[6]->getTrialVel()(2);
-        const double p7 = theNodes[7]->getTrialVel()(2);
-
-        double pw = (p0 + p1 + p2 + p3 + p5 + p6 + p7) / 8;
 
         // compute compressibility matrix term
-        double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+        // double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+        double pw = getMeanPressure();
+        double glocal = mglocal;
         double psi = -pw / (fDens * glocal);
         double S = getRelativeSaturation(psi);
         saturation_vec(0) = S;
@@ -514,23 +515,13 @@ UnsaturatedSSPbrickUP::GetPermeabilityMatrix(void)
                        - Jmat(0, 2) * Jmat(1, 1) * Jmat(2, 0) - Jmat(0, 1) * Jmat(1, 0) * Jmat(2, 2) - Jmat(0, 0) * Jmat(1, 2) * Jmat(2, 1);
 
 
-        //Compute fluid pressure as average of nodal values
-        const double p0 = theNodes[0]->getTrialVel()(2);
-        const double p1 = theNodes[1]->getTrialVel()(2);
-        const double p2 = theNodes[2]->getTrialVel()(2);
-        const double p3 = theNodes[3]->getTrialVel()(2);
-        const double p4 = theNodes[4]->getTrialVel()(2);
-        const double p5 = theNodes[5]->getTrialVel()(2);
-        const double p6 = theNodes[6]->getTrialVel()(2);
-        const double p7 = theNodes[7]->getTrialVel()(2);
 
-        double pw = (p0 + p1 + p2 + p3 + p5 + p6 + p7) / 8;
-
-        pw = pw < 0 ? pw : 0;
+        double pw = getMeanPressure();
 
         // compute compressibilty matrix term S
         // double oneOverQ = -0.015625 * mVol * mPorosity / fBulk;
-        double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+        // double glocal = sqrt(b[0] * b[0] + b[1] * b[1] + b[2] * b[2]);
+        double glocal = mglocal;
         double psi = -pw / (fDens * glocal);
         double S = getRelativeSaturation(psi);
         double krel = getRelativePermeability(S);
