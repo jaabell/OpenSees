@@ -111,13 +111,13 @@ void
 ThermalVolumetricLoadingPattern::applyLoad(double time)
 {
     // Calculate Young's modulus and Poisson's ratio at the given time
-    double E = c2;
+    // double E = c2;
+
+    // if (time >= 1)
+    //     E = c1 * log(time) + c2;
+
+    // double nu = (3 * K - E) / (6 * K);
     std::vector<double> initTemp;
-
-    if (time >= 1)
-        E = c1 * log(time) + c2;
-
-    double nu = (3 * K - E) / (6 * K);
 
     // Open the file containing Gauss temperature data
     std::ifstream gausstemps_file(gausstemps_filename);
@@ -200,21 +200,21 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
                 param.update(deltaEpsilon);
             }
 
-            {
-                // Update Young's modulus
-                const char* argv[3] = {"material", std::to_string(gp).c_str(), "E"};
-                int argc = 3;
-                Parameter param(0, theElement, argv, argc);
-                param.update(E);
-            }
+            // {
+            //     // Update Young's modulus
+            //     const char* argv[3] = {"material", std::to_string(gp).c_str(), "E"};
+            //     int argc = 3;
+            //     Parameter param(0, theElement, argv, argc);
+            //     param.update(E);
+            // }
 
-            {
-                // Update Poisson's ratio
-                const char* argv[3] = {"material", std::to_string(gp).c_str(), "v"};
-                int argc = 3;
-                Parameter param(0, theElement, argv, argc);
-                param.update(nu);
-            }
+            // {
+            //     // Update Poisson's ratio
+            //     const char* argv[3] = {"material", std::to_string(gp).c_str(), "v"};
+            //     int argc = 3;
+            //     Parameter param(0, theElement, argv, argc);
+            //     param.update(nu);
+            // }
         }
         elementIndex++;
     }

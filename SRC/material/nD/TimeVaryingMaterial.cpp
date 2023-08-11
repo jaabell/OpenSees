@@ -34,6 +34,7 @@
 #include <FEM_ObjectBroker.h>
 #include <OPS_Globals.h>
 #include <elementAPI.h>
+#include <AnalysisModel.h>
 #include <Parameter.h>
 
 
@@ -42,10 +43,10 @@ void *OPS_TimeVaryingMaterial(void)
     opserr << "Using TimeVaryingMaterial" << endln ;
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
-    if (numArgs < 17) {
+    if (numArgs < 7) {
         opserr <<
                "nDMaterial TimeVarying Error: Few arguments (< 17).\n"
-               "nDMaterial TimeVarying $tag $theIsoMat $Ex $Ey $Ez $Gxy $Gyz $Gzx $vxy $vyz $vzx $Asigmaxx $Asigmayy $Asigmazz $Asigmaxyxy $Asigmayzyz $Asigmaxzxz.\n";
+               "nDMaterial TimeVarying $tag $theIsoMat $Nt t1 t2 t3 .. t_Nt E1 E2 E3 ... E_Nt K1 K2 K3...K_Nt  A1 A2 A3...A_Nt\n";
         return nullptr;
     }
 
@@ -57,13 +58,60 @@ void *OPS_TimeVaryingMaterial(void)
         return nullptr;
     }
 
-    // get double data
-    double dData[15];
-    numData = 15;
-    if (OPS_GetDouble(&numData, dData) != 0) {
-        opserr << "nDMaterial TimeVarying Error: invalid data for nDMaterial TimeVarying with tah " << iData[0] << ".\n";
+
+    int Ndatapoints = 0;
+    numData = 1;
+    if (OPS_GetInt(&numData, &Ndatapoints) != 0)  {
+        opserr << "nDMaterial TimeVarying Error: error reading Ndatapoints\n";
         return nullptr;
     }
+
+
+
+    Vector t(Ndatapoints);
+    Vector E(Ndatapoints);
+    Vector K(Ndatapoints);
+    Vector A(Ndatapoints);
+
+    // get double data
+    double * dData = new double[Ndatapoints];
+    
+    numData = Ndatapoints;
+
+    //Read time steps
+    if (OPS_GetDouble(&numData, dData) != 0) {
+        opserr << "nDMaterial TimeVarying Error: reading t data for nDMaterial TimeVarying with tag " << iData[0] << ".\n";
+        return nullptr;
+    }
+    t.setData(dData, Ndatapoints);
+
+    //Read E
+    dData = new double[Ndatapoints];
+    if (OPS_GetDouble(&numData, dData) != 0) {
+        opserr << "nDMaterial TimeVarying Error: reading E data for nDMaterial TimeVarying with tag " << iData[0] << ".\n";
+        return nullptr;
+    }
+    E.setData(dData, Ndatapoints);
+
+    //Read K
+    dData = new double[Ndatapoints];
+    if (OPS_GetDouble(&numData, dData) != 0) {
+        opserr << "nDMaterial TimeVarying Error: reading K data for nDMaterial TimeVarying with tag " << iData[0] << ".\n";
+        return nullptr;
+    }
+    K.setData(dData, Ndatapoints);
+
+    //Read A
+    dData = new double[Ndatapoints];
+    if (OPS_GetDouble(&numData, dData) != 0) {
+        opserr << "nDMaterial TimeVarying Error: reading A data for nDMaterial TimeVarying with tag " << iData[0] << ".\n";
+        return nullptr;
+    }
+    A.setData(dData, Ndatapoints);
+
+// model basic -ndf 3 -ndm 3
+// nDMaterial ElasticIsotropic 1 1 0.1
+// nDMaterial TimeVarying 2 1 3 1 1 1 2 2 2 3 3 3 4 4 4
 
     // get the isotropic material to map
     NDMaterial *theIsoMaterial = OPS_getNDMaterial(iData[1]);
@@ -81,10 +129,7 @@ void *OPS_TimeVaryingMaterial(void)
     NDMaterial* theTimeVaryingMaterial = new TimeVaryingMaterial(
         iData[0],
         *theIsoMaterial,
-        dData[0], dData[1], dData[2], dData[3],
-        dData[4], dData[5], dData[6], dData[7],
-        dData[8], dData[9], dData[10], dData[11],
-        dData[12], dData[13], dData[14]);
+        t, E, K , A);
     if (theTimeVaryingMaterial == 0) {
         opserr << "nDMaterial TimeVarying Error: failed to allocate a new material.\n";
         return nullptr;
@@ -94,6 +139,12 @@ void *OPS_TimeVaryingMaterial(void)
     return theTimeVaryingMaterial;
 }
 
+Vector* TimeVaryingMaterial::time_history = 0;
+Vector* TimeVaryingMaterial::E_history = 0;
+Vector* TimeVaryingMaterial::K_history = 0;
+Vector* TimeVaryingMaterial::A_history = 0;
+bool TimeVaryingMaterial::new_time_step = false;
+
 TimeVaryingMaterial::TimeVaryingMaterial()
     : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
 {
@@ -102,9 +153,7 @@ TimeVaryingMaterial::TimeVaryingMaterial()
 TimeVaryingMaterial::TimeVaryingMaterial(
     int tag,
     NDMaterial &theIsoMat,
-    double Ex, double Ey, double Ez, double Gxy, double Gyz, double Gzx,
-    double vxy, double vyz, double vzx,
-    double Asigmaxx, double Asigmayy, double Asigmazz, double Asigmaxyxy, double Asigmayzyz, double Asigmaxzxz)
+    const Vector& t_, const Vector& E_, const Vector& K_, const Vector& A_)
     : NDMaterial(tag, ND_TAG_TimeVaryingMaterial)
 {
     // copy the isotropic material
@@ -114,44 +163,37 @@ TimeVaryingMaterial::TimeVaryingMaterial(
         exit(-1);
     }
 
-    opserr << "TimeVaryingMaterial paremeters:"<< endln ;
-    opserr << "   Ex = "         << Ex         << endln ;
-    opserr << "   Ey = "         << Ey         << endln ;
-    opserr << "   Ez = "         << Ez         << endln ;
-    opserr << "   Gxy = "        << Gxy        << endln ;
-    opserr << "   Gyz = "        << Gyz        << endln ;
-    opserr << "   Gzx = "        << Gzx        << endln ;
-    opserr << "   vxy = "        << vxy        << endln ;
-    opserr << "   vyz = "        << vyz        << endln ;
-    opserr << "   vzx = "        << vzx        << endln ;
-    opserr << "   Asigmaxx = "   << Asigmaxx   << endln ;
-    opserr << "   Asigmayy = "   << Asigmayy   << endln ;
-    opserr << "   Asigmazz = "   << Asigmazz   << endln ;
-    opserr << "   Asigmaxyxy = " << Asigmaxyxy << endln ;
-    opserr << "   Asigmayzyz = " << Asigmayzyz << endln ;
-    opserr << "   Asigmaxzxz = " << Asigmaxzxz << endln ;
+    int Ndatapoints = E_.Size();
+    time_history = new Vector(Ndatapoints);
+    E_history = new Vector(Ndatapoints);
+    K_history = new Vector(Ndatapoints);
+    A_history = new Vector(Ndatapoints);
 
-    parameters(0) = Ex;
-    parameters(1) = Ey;
-    parameters(2) = Ez;
-    parameters(3) = Gxy;
-    parameters(4) = Gyz;
-    parameters(5) = Gzx;
-    parameters(6) = vxy;
-    parameters(7) = vyz;
-    parameters(8) = vzx;
-    parameters(9) = Asigmaxx;
-    parameters(10) = Asigmayy;
-    parameters(11) = Asigmazz;
-    parameters(12) = Asigmaxyxy;
-    parameters(13) = Asigmayzyz;
-    parameters(14) = Asigmaxzxz;
+    *time_history = t_;
+    *E_history = E_;
+    *K_history = K_;
+    *A_history = A_;
+
+    opserr << "Created new TimeVaryingMaterial \n";
+    opserr << "    tag = " << tag << endln;
+    opserr << "    proj_tag = " << theIsoMat.getTag() << endln;
+    opserr << "    Nt = " << E_history->Size() << endln;
+    opserr << "    time_history = " << *time_history << endln;
+    opserr << "    E_history = " << *E_history << endln;
+    opserr << "    K_history = " << *K_history << endln;
+    opserr << "    A_history = " << *A_history << endln;
 }
 
 TimeVaryingMaterial::~TimeVaryingMaterial()
 {
     if (theIsotropicMaterial)
+    {
+    	delete time_history;
+    	delete E_history;
+    	delete K_history;
+    	delete A_history;
         delete theIsotropicMaterial;
+    }
 }
 
 double TimeVaryingMaterial::getRho(void)
@@ -180,7 +222,13 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     END --- THESE LINES ARE TO TEST FOR Δε */ 
 
     // strain in orthotropic space (TOTAL STRAIN)
-    epsilon = strain - epsilon_internal ;
+
+    epsilon_real = strain;
+
+    static Vector epsilon_use(6);
+    epsilon_use.Zero();
+
+    epsilon_use = strain - epsilon_internal ;
 
     // Actualizar matrices de resistencia
     // Aepsilon
@@ -194,21 +242,28 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     // Los de resistencia son resistencia_inicial(t) / resistencia_actual(t) = A(t)
     // Asigmazz = 0.5 significa el doble de sigma_zz de resistencia
 
-    double Ex         = parameters(0);  // E(t)
-    double Ey         = parameters(1);  // E(t)
-    double Ez         = parameters(2);  // E(t)
-    double Gxy        = parameters(3);  // G(t) en funcion de Bulk(t) 
-    double Gyz        = parameters(4);  // G(t) en funcion de Bulk(t) 
-    double Gzx        = parameters(5);  // G(t) en funcion de Bulk(t) 
-    double vxy        = parameters(6);  // nu(t) en funcion de Bulk(t) 
-    double vyz        = parameters(7);  // nu(t) en funcion de Bulk(t) 
-    double vzx        = parameters(8);  // nu(t) en funcion de Bulk(t) 
-    double Asigmaxx   = parameters(9);  // A(t)
-    double Asigmayy   = parameters(10); // A(t)
-    double Asigmazz   = parameters(11); // A(t)
-    double Asigmaxyxy = parameters(12); // A(t)
-    double Asigmayzyz = parameters(13); // A(t)
-    double Asigmaxzxz = parameters(14); // A(t)
+    double current_time = (*OPS_GetAnalysisModel())->getCurrentDomainTime();
+
+    opserr << "current_time = " << current_time << endln;
+
+    double E, G, nu, A;
+    getParameters(current_time, E, G, nu, A);
+
+    double Ex         = E; //parameters(0);  // E(t)
+    double Ey         = E; //parameters(1);  // E(t)
+    double Ez         = E; //parameters(2);  // E(t)
+    double Gxy        = G; //parameters(3);  // G(t) en funcion de Bulk(t) 
+    double Gyz        = G; //parameters(4);  // G(t) en funcion de Bulk(t) 
+    double Gzx        = G; //parameters(5);  // G(t) en funcion de Bulk(t) 
+    double vxy        = nu; //parameters(6);  // nu(t) en funcion de Bulk(t) 
+    double vyz        = nu; //parameters(7);  // nu(t) en funcion de Bulk(t) 
+    double vzx        = nu; //parameters(8);  // nu(t) en funcion de Bulk(t) 
+    double Asigmaxx   = A; //parameters(9);  // A(t)
+    double Asigmayy   = A; //parameters(10); // A(t)
+    double Asigmazz   = A; //parameters(11); // A(t)
+    double Asigmaxyxy = A; //parameters(12); // A(t)
+    double Asigmayzyz = A; //parameters(13); // A(t)
+    double Asigmaxzxz = A; //parameters(14); // A(t)
 
     ///  Old code at constructor BEGIN ========================================================
     // compute the initial orthotropic constitutive tensor
@@ -266,7 +321,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 
     // move to isotropic space
     static Vector eps_iso(6);
-    eps_iso.addMatrixVector(0.0, Aepsilon, epsilon, 1.0);
+    eps_iso.addMatrixVector(0.0, Aepsilon, epsilon_use, 1.0);
 
     // call isotropic material
     res = theIsotropicMaterial->setTrialStrain(eps_iso);
@@ -279,7 +334,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 
 const Vector &TimeVaryingMaterial::getStrain(void)
 {
-    return epsilon;
+    return epsilon_real;
 }
 
 const Vector &TimeVaryingMaterial::getStress(void)
@@ -330,8 +385,10 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 
 int TimeVaryingMaterial::commitState(void)
 {
-    epsilon_n=epsilon;
-    epsilon_internal_n=epsilon_internal;
+	sigma_real_n = sigma_real;
+	sigma_proj_n = sigma_proj;
+	epsilon_real_n = epsilon_real;
+	epsilon_proj_n = epsilon_proj;
     return theIsotropicMaterial->commitState();
 }
 
@@ -350,13 +407,20 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     TimeVaryingMaterial *theCopy = new TimeVaryingMaterial();
     theCopy->setTag(getTag());
     theCopy->theIsotropicMaterial = theIsotropicMaterial->getCopy("ThreeDimensional");
-    theCopy->epsilon = epsilon;
-    theCopy->epsilon_n = epsilon_n;
+    // theCopy->epsilon = epsilon;
+    // theCopy->epsilon_n = epsilon_n;
     theCopy->Aepsilon = Aepsilon;
     theCopy->Asigma_inv = Asigma_inv;
-    theCopy->parameters = parameters;
+    // theCopy->parameters = parameters;
     theCopy->epsilon_internal = epsilon_internal;
-    theCopy->epsilon_internal_n = epsilon_internal_n;
+    theCopy->sigma_real = sigma_real;
+	theCopy->sigma_proj = sigma_proj;
+	theCopy->epsilon_real = epsilon_real;
+	theCopy->epsilon_proj = epsilon_proj;
+	theCopy->sigma_real_n = sigma_real_n;
+	theCopy->sigma_proj_n = sigma_proj_n;
+	theCopy->epsilon_real_n = epsilon_real_n;
+	theCopy->epsilon_proj_n = epsilon_proj_n;
     return theCopy;
 }
 
@@ -385,94 +449,96 @@ void TimeVaryingMaterial::Print(OPS_Stream &s, int flag)
 int TimeVaryingMaterial::sendSelf(int commitTag, Channel &theChannel)
 {
     // result
-    int res = 0;
+    // int res = 0;
 
-    // data
-    static Vector data(48);
-    int counter = 0;
-    // store int values
-    data(counter++) = static_cast<double>(getTag());
-    data(counter++) = static_cast<double>(theIsotropicMaterial->getClassTag());
-    int matDbTag = theIsotropicMaterial->getDbTag();
-    if (matDbTag == 0) {
-        matDbTag = theChannel.getDbTag();
-        theIsotropicMaterial->setDbTag(matDbTag);
-    }
-    data(counter++) = static_cast<double>(matDbTag);
-    // store internal variables
-    for (int i = 0; i < 6; ++i)
-        data(counter++) = epsilon(i);
-    for (int i = 0; i < 6; ++i)
-        for (int j = 0; j < 6; ++j)
-            data(counter++) = Aepsilon(i, j);
-    for (int i = 0; i < 6; ++i)
-        data(counter++) = Asigma_inv(i);
-    // send data
-    res = theChannel.sendVector(getDbTag(), commitTag, data);
-    if (res < 0) {
-        opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
-        return res;
-    }
+    // // data
+    // static Vector data(48);
+    // int counter = 0;
+    // // store int values
+    // data(counter++) = static_cast<double>(getTag());
+    // data(counter++) = static_cast<double>(theIsotropicMaterial->getClassTag());
+    // int matDbTag = theIsotropicMaterial->getDbTag();
+    // if (matDbTag == 0) {
+    //     matDbTag = theChannel.getDbTag();
+    //     theIsotropicMaterial->setDbTag(matDbTag);
+    // }
+    // data(counter++) = static_cast<double>(matDbTag);
+    // // store internal variables
+    // for (int i = 0; i < 6; ++i)
+    //     data(counter++) = epsilon(i);
+    // for (int i = 0; i < 6; ++i)
+    //     for (int j = 0; j < 6; ++j)
+    //         data(counter++) = Aepsilon(i, j);
+    // for (int i = 0; i < 6; ++i)
+    //     data(counter++) = Asigma_inv(i);
+    // // send data
+    // res = theChannel.sendVector(getDbTag(), commitTag, data);
+    // if (res < 0) {
+    //     opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
+    //     return res;
+    // }
 
-    // now send the materials data
-    res = theIsotropicMaterial->sendSelf(commitTag, theChannel);
-    if (res < 0) {
-        opserr << "nDMaterial Orthotropic Error: failed to send the isotropic material\n";
-        return res;
-    }
+    // // now send the materials data
+    // res = theIsotropicMaterial->sendSelf(commitTag, theChannel);
+    // if (res < 0) {
+    //     opserr << "nDMaterial Orthotropic Error: failed to send the isotropic material\n";
+    //     return res;
+    // }
 
-    // done
-    return res;
+    // // done
+    // return res;
+    return 0;
 }
 
 int TimeVaryingMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_ObjectBroker & theBroker)
 {
-    // result
-    int res = 0;
+    // // result
+    // int res = 0;
 
-    // data
-    static Vector data(48);
-    int counter = 0;
+    // // data
+    // static Vector data(48);
+    // int counter = 0;
 
-    // receive data
-    res = theChannel.recvVector(getDbTag(), commitTag, data);
-    if (res < 0) {
-        opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
-        return res;
-    }
-    // get int values
-    setTag(static_cast<int>(data(counter++)));
-    int matClassTag = static_cast<int>(data(counter++));
-    // if the associated material has not yet been created or is of the wrong type
-    // create a new material for recvSelf later
-    if ((theIsotropicMaterial == nullptr) || (theIsotropicMaterial->getClassTag() != matClassTag)) {
-        if (theIsotropicMaterial)
-            delete theIsotropicMaterial;
-        theIsotropicMaterial = theBroker.getNewNDMaterial(matClassTag);
-        if (theIsotropicMaterial == nullptr) {
-            opserr << "nDMaterial Orthotropic Error: failed to get a material of type: " << matClassTag << endln;
-            return -1;
-        }
-    }
-    theIsotropicMaterial->setDbTag(static_cast<int>(data(counter++)));
-    // store internal variables
-    for (int i = 0; i < 6; ++i)
-        epsilon(i) = data(counter++);
-    for (int i = 0; i < 6; ++i)
-        for (int j = 0; j < 6; ++j)
-            Aepsilon(i, j) = data(counter++);
-    for (int i = 0; i < 6; ++i)
-        Asigma_inv(i) = data(counter++);
+    // // receive data
+    // res = theChannel.recvVector(getDbTag(), commitTag, data);
+    // if (res < 0) {
+    //     opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
+    //     return res;
+    // }
+    // // get int values
+    // setTag(static_cast<int>(data(counter++)));
+    // int matClassTag = static_cast<int>(data(counter++));
+    // // if the associated material has not yet been created or is of the wrong type
+    // // create a new material for recvSelf later
+    // if ((theIsotropicMaterial == nullptr) || (theIsotropicMaterial->getClassTag() != matClassTag)) {
+    //     if (theIsotropicMaterial)
+    //         delete theIsotropicMaterial;
+    //     theIsotropicMaterial = theBroker.getNewNDMaterial(matClassTag);
+    //     if (theIsotropicMaterial == nullptr) {
+    //         opserr << "nDMaterial Orthotropic Error: failed to get a material of type: " << matClassTag << endln;
+    //         return -1;
+    //     }
+    // }
+    // theIsotropicMaterial->setDbTag(static_cast<int>(data(counter++)));
+    // // store internal variables
+    // for (int i = 0; i < 6; ++i)
+    //     epsilon(i) = data(counter++);
+    // for (int i = 0; i < 6; ++i)
+    //     for (int j = 0; j < 6; ++j)
+    //         Aepsilon(i, j) = data(counter++);
+    // for (int i = 0; i < 6; ++i)
+    //     Asigma_inv(i) = data(counter++);
 
-    // now receive the associated materials data
-    res = theIsotropicMaterial->recvSelf(commitTag, theChannel, theBroker);
-    if (res < 0) {
-        opserr << "nDMaterial Orthotropic Error: failed to receive the isotropic material\n";
-        return res;
-    }
+    // // now receive the associated materials data
+    // res = theIsotropicMaterial->recvSelf(commitTag, theChannel, theBroker);
+    // if (res < 0) {
+    //     opserr << "nDMaterial Orthotropic Error: failed to receive the isotropic material\n";
+    //     return res;
+    // }
 
-    // done
-    return res;
+    // // done
+    // return res;
+    return 0;
 }
 
 int TimeVaryingMaterial::setParameter(const char** argv, int argc, Parameter& param)
@@ -496,6 +562,7 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
     case 4001:
     {
         double initNormalStrain = info.theDouble; // alpha * (Temp(t)  - Temp())
+        opserr << "initNormalStrain = " << initNormalStrain << endln;
         epsilon_internal.Zero();
         epsilon_internal(0) = initNormalStrain;  
         epsilon_internal(1) = initNormalStrain;
@@ -530,3 +597,20 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
     }
     return NDMaterial::setResponse(argv, argc, s);
 }
+
+
+void TimeVaryingMaterial::getParameters(double time, double& E, double& G, double& nu, double& A)
+{
+	if(new_time_step)
+	{
+		//hacer calculos
+		new_time_step = false;
+		E = 0;   //interpolate
+		G = 0;
+		nu = 0;
+		A = 0;
+	}
+
+	return;
+}
+
