@@ -34,8 +34,8 @@
 #include <FEM_ObjectBroker.h>
 #include <OPS_Globals.h>
 #include <elementAPI.h>
-#include <AnalysisModel.h>
 #include <Parameter.h>
+#include <AnalysisModel.h>
 
 
 void *OPS_TimeVaryingMaterial(void)
@@ -243,7 +243,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     // Asigmazz = 0.5 significa el doble de sigma_zz de resistencia
 
     double current_time = (*OPS_GetAnalysisModel())->getCurrentDomainTime();
-
+    // double current_time = 1.0;
     opserr << "current_time = " << current_time << endln;
 
     double E, G, nu, A;
@@ -601,16 +601,36 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
 
 void TimeVaryingMaterial::getParameters(double time, double& E, double& G, double& nu, double& A)
 {
-	if(new_time_step)
-	{
-		//hacer calculos
-		new_time_step = false;
-		E = 0;   //interpolate
-		G = 0;
-		nu = 0;
-		A = 0;
-	}
+    if (new_time_step) {
+        new_time_step = false;
 
-	return;
+        // Find the interval in which 'time' falls within time_history
+        int index = 0;
+        for (; index < time_history->Size(); ++index)
+        {
+            if ((*time_history)(index) >= time)
+            {
+                break;
+            }
+        }
+
+        if (index > 0 && index < time_history->Size()) {
+            // Perform linear interpolation for the values of E, A, and  K
+            double t1    = (*time_history)(index - 1);
+            double t2    = (*time_history)(index);
+            double alpha = (time - t1) / (t2 - t1);
+
+            E = (1.0 - alpha) * (*E_history)(index - 1) + alpha * (*E_history)(index);
+            A = (1.0 - alpha) * (*A_history)(index - 1) + alpha * (*A_history)(index);
+            double K = (1.0 - alpha) * (*K_history)(index - 1) + alpha * (*K_history)(index);
+
+            G  = (3.0 * K * E) / (9.0 * K - E);
+            nu = (3.0 * K - E) / (6.0 * K);
+
+        }
+        else {
+            // If 'time' is out of bounds:
+            E = G = nu = A = 0.0;
+        }
+    }
 }
-
