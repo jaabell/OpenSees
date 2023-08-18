@@ -142,7 +142,6 @@ Vector* TimeVaryingMaterial::E_history = 0;
 Vector* TimeVaryingMaterial::K_history = 0;
 Vector* TimeVaryingMaterial::A_history = 0;
 bool TimeVaryingMaterial::new_time_step = true;
-static int timer = 0;
 
 TimeVaryingMaterial::TimeVaryingMaterial()
     : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
@@ -204,53 +203,28 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 {
     if (*OPS_GetAnalysisModel())
     {
-        if (timer > 3)
-        {
-            timer = 0 ;
-            new_time_step = true;
-        }
-        timer ++ ;
-
         epsilon_real = strain;
 
-        static Vector epsilon_use(6);
-        epsilon_use.Zero();
+        static Vector epsilon_new(6);
+        static Vector depsilon(6);
+        epsilon_new.Zero();
+        depsilon.Zero();
 
-        epsilon_use = strain - epsilon_internal ;
-
-        // Actualizar matrices de resistencia
-        // Aepsilon
-        // Asigma_inv
-        // opserr << "ops_Dt = " << ops_Dt << endln; // ITS Δt NOT TOTAL CURRENT TIME
-
-        // Lugar donde hay que variar los parametros elasticos
-        // y de resistencia usando ops_Dt
-
-        // Los de rigidez son rigideces "finales"
-        // Los de resistencia son resistencia_inicial(t) / resistencia_actual(t) = A(t)
-        // Asigmazz = 0.5 significa el doble de sigma_zz de resistencia
+        // epsilon_internal comes from thermal analysis
+        epsilon_new = epsilon_real - epsilon_internal ; // new
+        depsilon = epsilon_new - epsilon_new_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
         double current_time = (*OPS_GetAnalysisModel())->getCurrentDomainTime();
-        opserr << "current_time = " << current_time << endln;
 
+        // E(t) -- G(t) y nu(t) en función de Bulk(t) -- A(t)
         double E, G, nu, A;
         getParameters(current_time, E, G, nu, A);
 
-        double Ex         = E;  //parameters(0);  // E(t)
-        double Ey         = E;  //parameters(1);  // E(t)
-        double Ez         = E;  //parameters(2);  // E(t)
-        double Gxy        = G;  //parameters(3);  // G(t)  en funcion de Bulk(t) 
-        double Gyz        = G;  //parameters(4);  // G(t)  en funcion de Bulk(t) 
-        double Gzx        = G;  //parameters(5);  // G(t)  en funcion de Bulk(t) 
-        double vxy        = nu; //parameters(6);  // nu(t) en funcion de Bulk(t) 
-        double vyz        = nu; //parameters(7);  // nu(t) en funcion de Bulk(t) 
-        double vzx        = nu; //parameters(8);  // nu(t) en funcion de Bulk(t) 
-        double Asigmaxx   = A;  //parameters(9);  // A(t)
-        double Asigmayy   = A;  //parameters(10); // A(t)
-        double Asigmazz   = A;  //parameters(11); // A(t)
-        double Asigmaxyxy = A;  //parameters(12); // A(t)
-        double Asigmayzyz = A;  //parameters(13); // A(t)
-        double Asigmaxzxz = A;  //parameters(14); // A(t)
+        double Ex  = E;  double Ey  = E;  double Ez  = E;
+        double Gxy = G;  double Gyz = G;  double Gzx = G;
+        double vxy = nu; double vyz = nu; double vzx = nu;
+        double Asigmaxx   = A; double Asigmayy   = A; double Asigmazz   = A; 
+        double Asigmaxyxy = A; double Asigmayzyz = A; double Asigmaxzxz = A;
 
         ///  Old code at constructor BEGIN ========================================================
         // compute the initial orthotropic constitutive tensor
@@ -308,10 +282,12 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 
         // move to isotropic space
         static Vector eps_iso(6);
-        eps_iso.addMatrixVector(0.0, Aepsilon, epsilon_use, 1.0);
+        eps_iso.addMatrixVector(0.0, Aepsilon, depsilon, 1.0); // depsilon_proj = Aepsilon(t) * depsilon_real
+
+        epsilon_proj = epsilon_proj_n + eps_iso; // epsilon_proj = epsilon_proj_old + depsilon_proj
 
         // call isotropic material
-        res = theIsotropicMaterial->setTrialStrain(eps_iso);
+        res = theIsotropicMaterial->setTrialStrain(epsilon_proj);
         if (res != 0) {
             opserr << "nDMaterial Orthotropic Error: the isotropic material failed in setTrialStrain.\n";
             return res;
@@ -329,13 +305,20 @@ const Vector &TimeVaryingMaterial::getStrain(void)
 const Vector &TimeVaryingMaterial::getStress(void)
 {
     // stress in isotropic space
-    const Vector& sigma_iso = theIsotropicMaterial->getStress();
+    const Vector& sigma_iso = theIsotropicMaterial->getStress(); // sigma_proj(epsilon_proj)
+    sigma_proj = sigma_iso; // sigma_proj_new = sigma_proj(epsilon_proj)
+    static Vector dsigma(6);
+    dsigma.Zero();
+    dsigma = sigma_proj - sigma_proj_n; // dsigma_proj = sigma_proj_new - sigma_proj_old
 
     // move to orthotropic space
     static Vector sigma(6);
     for (int i = 0; i < 6; ++i)
-        sigma(i) = Asigma_inv(i) * sigma_iso(i);
-    return sigma;
+        sigma(i) = Asigma_inv(i) * dsigma(i); // dsigma_real = Asigma^-1 * dsigma_proj
+
+    sigma_real = sigma_real_n + sigma; // sigma_real_old + dsigma_real
+
+    return sigma_real; // se retorna sigma o sigma real?
 }
 
 const Matrix &TimeVaryingMaterial::getTangent(void)
@@ -378,6 +361,8 @@ int TimeVaryingMaterial::commitState(void)
 	sigma_proj_n = sigma_proj;
 	epsilon_real_n = epsilon_real;
 	epsilon_proj_n = epsilon_proj;
+    epsilon_new_n = epsilon_new;
+    new_time_step = true;
     return theIsotropicMaterial->commitState();
 }
 
@@ -407,6 +392,8 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
 	theCopy->sigma_proj_n = sigma_proj_n;
 	theCopy->epsilon_real_n = epsilon_real_n;
 	theCopy->epsilon_proj_n = epsilon_proj_n;
+    theCopy->epsilon_new = epsilon_new;
+    theCopy->epsilon_new_n = epsilon_new_n;
     return theCopy;
 }
 
@@ -633,8 +620,12 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
         }
 
         else {
-            opserr << "Current time = " << time << " is out of bounds." ;
-            E = G = nu = A = 0.0;
+            E = (*E_history)(time_history->Size()-1) ;
+            A = (*A_history)(time_history->Size()-1) ;
+            K = (*K_history)(time_history->Size()-1) ;
+
+            G  = (3.0 * K * E) / (9.0 * K - E);
+            nu = (3.0 * K - E) / (6.0 * K);
         }
 
         opserr << "  E  = " << E  << endln;
