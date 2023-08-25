@@ -203,6 +203,13 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 {
     if (*OPS_GetAnalysisModel())
     {
+        static int count = 0;
+        if (count > 3) {
+            new_time_step = true;
+            count = 0;
+        }
+        count++;
+
         epsilon_real = strain;
 
         static Vector epsilon_new(6);
@@ -215,7 +222,6 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
         depsilon = epsilon_new - epsilon_new_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
         double current_time = (*OPS_GetAnalysisModel())->getCurrentDomainTime();
-
         // E(t) -- G(t) y nu(t) en función de Bulk(t) -- A(t)
         double E, G, nu, A;
         getParameters(current_time, E, G, nu, A);
@@ -362,7 +368,6 @@ int TimeVaryingMaterial::commitState(void)
 	epsilon_real_n = epsilon_real;
 	epsilon_proj_n = epsilon_proj;
     epsilon_new_n = epsilon_new;
-    new_time_step = true;
     return theIsotropicMaterial->commitState();
 }
 
@@ -535,7 +540,6 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
     case 4001:
     {
         double initNormalStrain = info.theDouble; // alpha * (Temp(t)  - Temp())
-        opserr << "initNormalStrain = " << initNormalStrain << endln;
         epsilon_internal.Zero();
         epsilon_internal(0) = initNormalStrain;  
         epsilon_internal(1) = initNormalStrain;
@@ -574,8 +578,8 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
 
 void TimeVaryingMaterial::getParameters(double time, double& E, double& G, double& nu, double& A)
 {
-    opserr << "Getting Parameters (E, G, nu, A)" << endln;
     if (new_time_step) {
+        // opserr << "Getting Parameters (E, G, nu, A)" << endln;
         double K = 0;
         new_time_step = false;
 
@@ -589,7 +593,7 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
             }
         }
 
-        opserr << "index = " << index << endln;
+        // opserr << "index for time (" << time << ") = " << index << endln;
 
         if (index == 0)
         {
@@ -607,9 +611,9 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
             double t1    = (*time_history)(index - 1);
             double t2    = (*time_history)(index);
             double alpha = (time - t1) / (t2 - t1);
-            opserr << "t1    = " << t1    << endln ;
-            opserr << "t2    = " << t2    << endln ;
-            opserr << "alpha = " << alpha << endln ;
+            // opserr << "t1    = " << t1    << endln ;
+            // opserr << "t2    = " << t2    << endln ;
+            // opserr << "alpha = " << alpha << endln ;
 
             E = (1.0 - alpha) * (*E_history)(index - 1) + alpha * (*E_history)(index);
             A = (1.0 - alpha) * (*A_history)(index - 1) + alpha * (*A_history)(index);
@@ -628,9 +632,9 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
             nu = (3.0 * K - E) / (6.0 * K);
         }
 
-        opserr << "  E  = " << E  << endln;
-        opserr << "  G  = " << G  << endln;
-        opserr << "  nu = " << nu << endln;
-        opserr << "  A  = " << A  << endln;
+        // opserr << "  E  = " << E  << endln;
+        // opserr << "  G  = " << G  << endln;
+        // opserr << "  nu = " << nu << endln;
+        // opserr << "  A  = " << A  << endln;
     }
 }
