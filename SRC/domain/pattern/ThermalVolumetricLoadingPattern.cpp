@@ -59,12 +59,9 @@
  * @param elements_filename_ String, name of the file containing element tags
  * @param gausstemps_filename_ String, name of the file containing Gauss temperature data
  */
-ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, double c1_, double c2_, double K_, std::string elements_filename_, std::string gausstemps_filename_)
+ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_)
   :LoadPattern(tag, PATTERN_TAG_ThermalVolumetricLoadingPattern),  
   alpha(alpha_),
-  c1(c1_),
-  c2(c2_),
-  K(K_),
   elements_filename(elements_filename_),
   gausstemps_filename(gausstemps_filename_),
   currentTime(0.0), parameterID(0)
@@ -72,9 +69,6 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
 
   opserr << "Creating ThermalVolumetricLoadingPattern" << endln;
   opserr << " alpha               = " << alpha << endln;
-  opserr << " c1                  = " << c1 << endln;
-  opserr << " c2                  = " << c2 << endln;
-  opserr << " K                   = " << K << endln;
   opserr << " elements_filename   = " << elements_filename.c_str() << endln;
   opserr << " gausstemps_filename = " << gausstemps_filename.c_str() << endln;
 

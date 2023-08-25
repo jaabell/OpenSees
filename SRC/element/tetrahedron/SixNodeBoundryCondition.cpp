@@ -1001,8 +1001,14 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     // J = | Jy1 - Jx1 , Jz1 - Jx1 |
     //     | Jy2 - Jx2 , Jz2 - Jx2 |
 
-    // double Jdet = sqrt(pow((Jy1 * Jz2 - Jz1 * Jy2), 2) + pow((Jz1 * Jx2 - Jx1 * Jz2), 2) + pow((Jx1 * Jy2 - Jy1 * Jx2), 2)) / 2.0 ;
-    double Jdet = ( (Jy1 - Jx1) * (Jz2 - Jx2) - (Jz1 - Jx1) * (Jy2 - Jx2) ) / 2.0 ;
+    double J1 = Jy1 * Jz2 - Jy2 * Jz1;
+    double J2 = Jx2 * Jz1 - Jx1 * Jz2;
+    double J3 = Jx1 * Jy2 - Jx2 * Jy1;
+    double Jdet = sqrt( J1*J1 + J2*J2 + J3*J3 ) / 2.0 ;
+    if (Jdet <= 0)
+    {
+        opserr << "Jdet = " << Jdet << endln;
+    }
     xsj = Jdet ;
 
     // invJ = (1 / detJ) * [  Jz2 - Jx2 , - Jz1 + Jx1]

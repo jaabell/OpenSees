@@ -590,10 +590,10 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
 
 else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0) 
 {
-    if (argc != 9)
+    if (argc != 6)
     {
         opserr << "WARNING: Incorrect number of arguments.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename\n";
         return TCL_ERROR;
     }
 
@@ -601,7 +601,7 @@ else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0)
     if (Tcl_GetInt(interp, argv[2], &tag) != TCL_OK) 
     {
         opserr << "WARNING: Unable to interpret argument 3 (tag) as an integer.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename\n";
         return TCL_ERROR;
     }
 
@@ -609,38 +609,14 @@ else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0)
     if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK) 
     {
         opserr << "WARNING: Unable to interpret argument 4 (alpha) as a double.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename\n";
         return TCL_ERROR;
     }
 
-    double c1 = 1.0;
-    if (Tcl_GetDouble(interp, argv[4], &c1) != TCL_OK) 
-    {
-        opserr << "WARNING: Unable to interpret argument 5 (c1) as a double.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
-        return TCL_ERROR;
-    }
+    std::string elements_filename = argv[4];
+    std::string gausstemps_filename = argv[5];
 
-    double c2 = 1.0;
-    if (Tcl_GetDouble(interp, argv[5], &c2) != TCL_OK) 
-    {
-        opserr << "WARNING: Unable to interpret argument 6 (c2) as a double.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
-        return TCL_ERROR;
-    }
-
-    double K = 1.0;
-    if (Tcl_GetDouble(interp, argv[6], &K) != TCL_OK) 
-    {
-        opserr << "WARNING: Unable to interpret argument 7 (K) as a double.\n";
-        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha c1 c2 K elements_filename gausstemps_filename\n";
-        return TCL_ERROR;
-    }
-
-    std::string elements_filename = argv[7];
-    std::string gausstemps_filename = argv[8];
-
-    thePattern = new ThermalVolumetricLoadingPattern(tag, alpha, c1, c2, K, elements_filename, gausstemps_filename);
+    thePattern = new ThermalVolumetricLoadingPattern(tag, alpha, elements_filename, gausstemps_filename);
 
     theDomain->addLoadPattern(thePattern);
     return TCL_OK;

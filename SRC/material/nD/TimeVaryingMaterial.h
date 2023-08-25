@@ -123,11 +123,13 @@ private:
     Vector sigma_proj = Vector(6);
     Vector epsilon_real = Vector(6);  
     Vector epsilon_proj = Vector(6);  
+    Vector epsilon_new = Vector(6);  
 
     Vector sigma_real_n = Vector(6);    // T
     Vector sigma_proj_n = Vector(6);
     Vector epsilon_real_n = Vector(6);  // Equivalent to epsilon_n
     Vector epsilon_proj_n = Vector(6);  //
+    Vector epsilon_new_n = Vector(6);  //
 
     static bool new_time_step;
 };
