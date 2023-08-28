@@ -18,11 +18,11 @@
 **                                                                    **
 ** ****************************************************************** */
 
-// Davide Raino, Massimo Petracca - ASDEA Software, Italy
+// José L. Larenas & José A. Abell (UANDES)
+// Massimo Petracca - ASDEA Software, Italy
 //
-// A Generic Orthotropic Material Wrapper that can convert any
-// nonlinear isotropic material into an orthotropic one by means of tensor
-// mapping
+// A Wapper material that allow's time varying stiffness and
+// resistance properties for the wrapped material. 
 //
 
 #ifndef TimeVaryingMaterial_h
@@ -87,50 +87,50 @@ public:
 
 private:
 
-    // double E(double time) const ;
-    // double G(double time) const ;
-    // double nu(double time) const ;
-    // double A(double time) const ;
-    void getParameters(double, double& E, double&G,double& nu,double& A);
+    void getParameters(double);// Determines the current properties for E, G, nu and A for this material
 
-
-
-
-
-    // the mapped isotropic material
-    NDMaterial *theIsotropicMaterial = nullptr;
-    // the strain in the real orthotropic space
-    // Vector epsilon = Vector(6);
-    // Vector epsilon_n = Vector(6);
-    // strain tensor map
+    // the projected material pointer
+    NDMaterial *theProjectedMaterial = nullptr;
+    
+    //Strain transformation map
     Matrix Aepsilon = Matrix(6, 6);
-    // inverse of stress tensor map (saved as vector, it's diagonal)
-    Vector Asigma_inv = Vector(6);
 
-    // double parameters[15];
-    // Vector parameters = Vector(15);
-
+    //History of evolution
     static Vector* time_history;
     static Vector* E_history;
     static Vector* K_history;
     static Vector* A_history;
 
+    //The "tag" of this material to the evolution laws (unused)
     int evolution_law_id;
+    static int number_of_evolution_laws;
 
+    //Strain offset due to thermal action
     Vector epsilon_internal = Vector(6);
     
+    // State for the incremental model. 
+    // _proj are the tensors for the projected material
+    // _real are the tensors for the final (real) material 
     Vector sigma_real = Vector(6);    
     Vector sigma_proj = Vector(6);
     Vector epsilon_real = Vector(6);  
     Vector epsilon_proj = Vector(6);  
     Vector epsilon_new = Vector(6);  
 
-    Vector sigma_real_n = Vector(6);    // T
+    // State for the incremental model
+    Vector sigma_real_n = Vector(6);    
     Vector sigma_proj_n = Vector(6);
-    Vector epsilon_real_n = Vector(6);  // Equivalent to epsilon_n
-    Vector epsilon_proj_n = Vector(6);  //
-    Vector epsilon_new_n = Vector(6);  //
+    Vector epsilon_real_n = Vector(6);  
+    Vector epsilon_proj_n = Vector(6);  
+    Vector epsilon_new_n = Vector(6);  
+
+    //global variables for all materials... should not be
+    static double E, G, nu, A;
 
     static bool new_time_step;
+    static bool print_strain_once;
+    static bool print_stress_once;
+    static bool print_commit_once;
+    static bool print_tang_once;
 };
 #endif

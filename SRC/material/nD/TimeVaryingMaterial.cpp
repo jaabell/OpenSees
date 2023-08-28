@@ -18,15 +18,11 @@
 **                                                                    **
 ** ****************************************************************** */
 
-// $Revision: 1.4 $
-// $Date: 2020-04-19 23:01:25 $
-// $Source: /usr/local/cvs/OpenSees/SRC/material/nD/TimeVaryingMaterial.h,v $
-
-// Davide Raino, Massimo Petracca - ASDEA Software, Italy
+// José L. Larenas & José A. Abell (UANDES)
+// Massimo Petracca - ASDEA Software, Italy
 //
-// A Generic Orthotropic Material Wrapper that can convert any
-// nonlinear isotropic material into an orthotropic one by means of tensor
-// mapping
+// A Wapper material that allow's time varying stiffness and
+// resistance properties for the wrapped material. 
 //
 
 #include <TimeVaryingMaterial.h>
@@ -35,7 +31,7 @@
 #include <OPS_Globals.h>
 #include <elementAPI.h>
 #include <Parameter.h>
-#include <analysis/model/AnalysisModel.h>
+#include <Domain.h>
 
 
 void *OPS_TimeVaryingMaterial(void)
@@ -46,7 +42,7 @@ void *OPS_TimeVaryingMaterial(void)
     if (numArgs < 7) {
         opserr <<
                "nDMaterial TimeVarying Error: Few arguments (< 17).\n"
-               "nDMaterial TimeVarying $tag $theIsoMat $Nt t1 t2 t3 .. t_Nt E1 E2 E3 ... E_Nt K1 K2 K3...K_Nt  A1 A2 A3...A_Nt\n";
+               "nDMaterial TimeVarying $tag $theProjectedMat $Nt t1 t2 t3 .. t_Nt E1 E2 E3 ... E_Nt K1 K2 K3...K_Nt  A1 A2 A3...A_Nt\n";
         return nullptr;
     }
 
@@ -73,7 +69,7 @@ void *OPS_TimeVaryingMaterial(void)
 
     // get double data
     double * dData = new double[Ndatapoints];
-    
+
     numData = Ndatapoints;
 
     //Read time steps
@@ -107,26 +103,19 @@ void *OPS_TimeVaryingMaterial(void)
     }
     A.setData(dData, Ndatapoints);
 
-// model basic -ndf 3 -ndm 3
-// nDMaterial ElasticIsotropic 1 1 0.1
-// nDMaterial TimeVarying 2 1 3 1 1 1 2 2 2 3 3 3 4 4 4
-
-    // get the isotropic material to map
-    NDMaterial *theIsoMaterial = OPS_getNDMaterial(iData[1]);
-    if (theIsoMaterial == 0) {
+    // get the projected material to map
+    NDMaterial *theProjMaterial = OPS_getNDMaterial(iData[1]);
+    if (theProjMaterial == 0) {
         opserr << "WARNING: nDMaterial does not exist.\n";
         opserr << "nDMaterial: " << iData[1] << "\n";
         opserr << "nDMaterial TimeVarying: " << iData[0] << "\n";
         return nullptr;
     }
 
-    // Agregar lectura de curvas de tiempo para modulo de elasticidad y de resistencia
-
-
     // create the TimeVarying wrapper
     NDMaterial* theTimeVaryingMaterial = new TimeVaryingMaterial(
         iData[0],
-        *theIsoMaterial,
+        *theProjMaterial,
         t, E, K , A);
     if (theTimeVaryingMaterial == 0) {
         opserr << "nDMaterial TimeVarying Error: failed to allocate a new material.\n";
@@ -137,26 +126,36 @@ void *OPS_TimeVaryingMaterial(void)
     return theTimeVaryingMaterial;
 }
 
+int TimeVaryingMaterial::number_of_evolution_laws = 0;
 Vector* TimeVaryingMaterial::time_history = 0;
 Vector* TimeVaryingMaterial::E_history = 0;
 Vector* TimeVaryingMaterial::K_history = 0;
 Vector* TimeVaryingMaterial::A_history = 0;
 bool TimeVaryingMaterial::new_time_step = true;
+bool TimeVaryingMaterial::print_strain_once = true;
+bool TimeVaryingMaterial::print_stress_once = true;
+bool TimeVaryingMaterial::print_commit_once = true;
+bool TimeVaryingMaterial::print_tang_once = true;
+double TimeVaryingMaterial::E = 0;
+double TimeVaryingMaterial::G = 0;
+double TimeVaryingMaterial::A = 0;
+double TimeVaryingMaterial::nu = 0;
 
 TimeVaryingMaterial::TimeVaryingMaterial()
     : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
 {
+
 }
 
 TimeVaryingMaterial::TimeVaryingMaterial(
     int tag,
-    NDMaterial &theIsoMat,
+    NDMaterial &theProjMat,
     const Vector& t_, const Vector& E_, const Vector& K_, const Vector& A_)
     : NDMaterial(tag, ND_TAG_TimeVaryingMaterial)
 {
     // copy the isotropic material
-    theIsotropicMaterial = theIsoMat.getCopy("ThreeDimensional");
-    if (theIsotropicMaterial == 0) {
+    theProjectedMaterial = theProjMat.getCopy("ThreeDimensional");
+    if (theProjectedMaterial == 0) {
         opserr << "nDMaterial Orthotropic Error: failed to get a (3D) copy of the isotropic material\n";
         exit(-1);
     }
@@ -172,9 +171,15 @@ TimeVaryingMaterial::TimeVaryingMaterial(
     *K_history = K_;
     *A_history = A_;
 
+    //This is a new material constructor, hence we save the evolution law
+    evolution_law_id = number_of_evolution_laws;
+    //and advance the number of evolution laws. 
+    number_of_evolution_laws++;
+
     opserr << "Created new TimeVaryingMaterial \n";
+    opserr << "  evolution_law_id          = " << evolution_law_id                << endln;
     opserr << "  tag          = " << tag                << endln;
-    opserr << "  proj_tag     = " << theIsoMat.getTag() << endln;
+    opserr << "  proj_tag     = " << theProjectedMaterial->getTag() << endln;
     opserr << "  Nt           = " << E_history->Size()  << endln;
     opserr << "  time_history = " << *time_history      << endln;
     opserr << "  E_history    = " << *E_history         << endln;
@@ -184,221 +189,301 @@ TimeVaryingMaterial::TimeVaryingMaterial(
 
 TimeVaryingMaterial::~TimeVaryingMaterial()
 {
-    if (theIsotropicMaterial)
+    if (theProjectedMaterial)
     {
-    	delete time_history;
-    	delete E_history;
-    	delete K_history;
-    	delete A_history;
-        delete theIsotropicMaterial;
+        delete time_history;
+        time_history = 0;
+        delete E_history;
+        E_history = 0;
+        delete K_history;
+        K_history = 0;
+        delete A_history;
+        A_history = 0;
+        delete theProjectedMaterial;
+        theProjectedMaterial = 0;
     }
 }
 
 double TimeVaryingMaterial::getRho(void)
 {
-    return theIsotropicMaterial->getRho();
+    return theProjectedMaterial->getRho();
 }
 
 int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 {
-    if (*OPS_GetAnalysisModel())
-    {
-        static int count = 0;
-        if (count > 3) {
-            new_time_step = true;
-            count = 0;
-        }
-        count++;
 
-        epsilon_real = strain;
+    //Compute the real strain increment
+    static Vector depsilon_real(6);
+    epsilon_real = strain - epsilon_internal ; // epsilon_internal comes from thermal analysis
+    depsilon_real = epsilon_real - epsilon_real_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
-        static Vector epsilon_new(6);
-        static Vector depsilon(6);
-        epsilon_new.Zero();
-        depsilon.Zero();
+    // Get the current parameters at current time
+    double current_time = OPS_GetDomain()->getCurrentTime();
+    getParameters(current_time);
 
-        // epsilon_internal comes from thermal analysis
-        epsilon_new = epsilon_real - epsilon_internal ; // new
-        depsilon = epsilon_new - epsilon_new_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
-        double current_time = (*OPS_GetAnalysisModel())->getCurrentDomainTime();
-        // E(t) -- G(t) y nu(t) en función de Bulk(t) -- A(t)
-        double E, G, nu, A;
-        getParameters(current_time, E, G, nu, A);
+    double Ex  = E;  double Ey  = E;  double Ez  = E;
+    double Gxy = G;  double Gyz = G;  double Gzx = G;
+    double vxy = nu; double vyz = nu; double vzx = nu;
+    // double Asigmaxx   = A; double Asigmayy   = A; double Asigmazz   = A;
+    // double Asigmaxyxy = A; double Asigmayzyz = A; double Asigmaxzxz = A;
 
-        double Ex  = E;  double Ey  = E;  double Ez  = E;
-        double Gxy = G;  double Gyz = G;  double Gzx = G;
-        double vxy = nu; double vyz = nu; double vzx = nu;
-        double Asigmaxx   = A; double Asigmayy   = A; double Asigmazz   = A; 
-        double Asigmaxyxy = A; double Asigmayzyz = A; double Asigmaxzxz = A;
+    // compute the initial orthotropic constitutive tensor
+    static Matrix C0(6, 6);
+    C0.Zero();
+    double vyx = vxy * Ey / Ex;
+    double vzy = vyz * Ez / Ey;
+    double vxz = vzx * Ex / Ez;
+    double d = (1.0 - vxy * vyx - vyz * vzy - vzx * vxz - 2.0 * vxy * vyz * vzx) / (Ex * Ey * Ez);
+    C0(0, 0) = (1.0 - vyz * vzy) / (Ey * Ez * d);
+    C0(1, 1) = (1.0 - vzx * vxz) / (Ez * Ex * d);
+    C0(2, 2) = (1.0 - vxy * vyx) / (Ex * Ey * d);
+    C0(1, 0) = (vxy + vxz * vzy) / (Ez * Ex * d);
+    C0(0, 1) = C0(1, 0);
+    C0(2, 0) = (vxz + vxy * vyz) / (Ex * Ey * d);
+    C0(0, 2) = C0(2, 0);
+    C0(2, 1) = (vyz + vxz * vyx) / (Ex * Ey * d);
+    C0(1, 2) = C0(2, 1);
+    C0(3, 3) = Gxy;
+    C0(4, 4) = Gyz;
+    C0(5, 5) = Gzx;
 
-        ///  Old code at constructor BEGIN ========================================================
-        // compute the initial orthotropic constitutive tensor
-        static Matrix C0(6, 6);
-        C0.Zero();
-        double vyx = vxy * Ey / Ex;
-        double vzy = vyz * Ez / Ey;
-        double vxz = vzx * Ex / Ez;
-        double d = (1.0 - vxy * vyx - vyz * vzy - vzx * vxz - 2.0 * vxy * vyz * vzx) / (Ex * Ey * Ez);
-        C0(0, 0) = (1.0 - vyz * vzy) / (Ey * Ez * d);
-        C0(1, 1) = (1.0 - vzx * vxz) / (Ez * Ex * d);
-        C0(2, 2) = (1.0 - vxy * vyx) / (Ex * Ey * d);
-        C0(1, 0) = (vxy + vxz * vzy) / (Ez * Ex * d);
-        C0(0, 1) = C0(1, 0);
-        C0(2, 0) = (vxz + vxy * vyz) / (Ex * Ey * d);
-        C0(0, 2) = C0(2, 0);
-        C0(2, 1) = (vyz + vxz * vyx) / (Ex * Ey * d);
-        C0(1, 2) = C0(2, 1);
-        C0(3, 3) = Gxy;
-        C0(4, 4) = Gyz;
-        C0(5, 5) = Gzx;
+    // compute the Asigma and its inverse
+    if (A <= 0 ) {
+        opserr << "nDMaterial TimeVarying Error: Asigma11, Asigma22, Asigma33, Asigma12, Asigma23, Asigma13 must be greater than 0.\n";
+        opserr << "A = " << A << endln;
+        exit(-1);
+    }
+    // static Matrix Asigma(6, 6);
+    // Asigma.Zero();
+    // Asigma(0, 0) = Asigmaxx;
+    // Asigma(1, 1) = Asigmayy;
+    // Asigma(2, 2) = Asigmazz;
+    // Asigma(3, 3) = Asigmaxyxy;
+    // Asigma(4, 4) = Asigmayzyz;
+    // Asigma(5, 5) = Asigmaxzxz;
+    // for (int i = 0; i < 6; ++i)
+    //     Asigma_inv(i) = 1.0 / Asigma(i, i);
 
-        // compute the Asigma and its inverse
-        if (Asigmaxx <= 0 || Asigmayy <= 0 || Asigmazz <= 0 || Asigmaxyxy <= 0 || Asigmayzyz <= 0 || Asigmaxzxz <= 0) {
-            opserr << "nDMaterial Orthotropic Error: Asigma11, Asigma22, Asigma33, Asigma12, Asigma23, Asigma13 must be greater than 0.\n";
-            exit(-1);
-        }
-        static Matrix Asigma(6, 6);
-        Asigma.Zero();
-        Asigma(0, 0) = Asigmaxx;
-        Asigma(1, 1) = Asigmayy;
-        Asigma(2, 2) = Asigmazz;
-        Asigma(3, 3) = Asigmaxyxy;
-        Asigma(4, 4) = Asigmayzyz;
-        Asigma(5, 5) = Asigmaxzxz;
-        for (int i = 0; i < 6; ++i)
-            Asigma_inv(i) = 1.0 / Asigma(i, i);
-
-        // coompute the initial isotropic constitutive tensor and its inverse
-        static Matrix C0iso(6, 6);
-        static Matrix C0iso_inv(6, 6);
-        C0iso = theIsotropicMaterial->getInitialTangent();
-        int res = C0iso.Invert(C0iso_inv);
-        if (res < 0) {
-            opserr << "nDMaterial Orthotropic Error: the isotropic material gave a singular initial tangent.\n";
-            exit(-1);
-        }
-
-        // compute the strain tensor map inv(C0_iso) * Asigma * C0_ortho
-        static Matrix Asigma_C0(6, 6);
-        Asigma_C0.addMatrixProduct(0.0, Asigma, C0, 1.0);
-        Aepsilon.addMatrixProduct(0.0, C0iso_inv, Asigma_C0, 1.0);
-
-        ///  Old code at constructor END ========================================================
-
-        // move to isotropic space
-        static Vector eps_iso(6);
-        eps_iso.addMatrixVector(0.0, Aepsilon, depsilon, 1.0); // depsilon_proj = Aepsilon(t) * depsilon_real
-
-        epsilon_proj = epsilon_proj_n + eps_iso; // epsilon_proj = epsilon_proj_old + depsilon_proj
-
-        // call isotropic material
-        res = theIsotropicMaterial->setTrialStrain(epsilon_proj);
-        if (res != 0) {
-            opserr << "nDMaterial Orthotropic Error: the isotropic material failed in setTrialStrain.\n";
-            return res;
-        }
+    // compute the initial projected constitutive tensor and its inverse
+    static Matrix C0proj(6, 6);
+    static Matrix C0proj_inv(6, 6);
+    C0proj = theProjectedMaterial->getInitialTangent();
+    int res = C0proj.Invert(C0proj_inv);
+    if (res < 0) {
+        opserr << "nDMaterial Orthotropic Error: the isotropic material gave a singular initial tangent.\n";
+        exit(-1);
     }
 
+    // compute the strain tensor map inv(C0_iso) * Asigma * C0_ortho
+    // static Matrix Asigma_C0(6, 6);
+    // Asigma_C0.addMatrixProduct(0.0, Asigma, C0, 1.0);
+    // Asigma_C0 = A*C0;
+    Aepsilon.addMatrixProduct(0.0, C0proj_inv, C0, A);
+
+    //Compute the projected strain increment
+    static Vector depsilon_proj(6);
+    depsilon_proj.addMatrixVector(0.0, Aepsilon, depsilon_real, 1.0); // depsilon_proj = Aepsilon(t) * depsilon_real
+    
+    //Compute the projected total strain
+    epsilon_proj = epsilon_proj_n + depsilon_proj; // epsilon_proj = epsilon_proj_old + depsilon_proj
+
+
+    // if (print_strain_once)
+    // {
+    //     opserr << "@ TimeVaryingMaterial::setTrialStrain" << endln;
+    //     opserr << "strain = " << strain << endln;
+    //     opserr << "epsilon_internal = " << epsilon_internal << endln;
+    //     opserr << "epsilon_real = " << epsilon_real << endln;
+    //     opserr << "depsilon_real = " << depsilon_real << endln;
+    //     opserr << "depsilon_proj = " << depsilon_proj << endln;
+    //     opserr << "epsilon_proj = " << epsilon_proj << endln;
+    //     print_strain_once = false;
+    //     print_commit_once = true;
+    // }
+
+    // call projected material with the projected total strain
+    res = theProjectedMaterial->setTrialStrain(epsilon_proj);
+    if (res != 0) {
+        opserr << "TimeVaryingMaterial::setTrialStrain\n";
+        opserr << "nDMaterial Projected Material Error: the isotropic material failed in setTrialStrain.\n";
+        return res;
+    }
+
+    //cool! we're done!
     return 0;
 }
 
 const Vector &TimeVaryingMaterial::getStrain(void)
 {
-    return epsilon_real;
+    // the strain to report back is the real strain plus the internal, 
+    // the internal gets removed before converting it to "real"
+    static Vector epsilon_return(6);
+    epsilon_return = epsilon_real + epsilon_internal;
+    return epsilon_return;
 }
 
 const Vector &TimeVaryingMaterial::getStress(void)
 {
-    // stress in isotropic space
-    const Vector& sigma_iso = theIsotropicMaterial->getStress(); // sigma_proj(epsilon_proj)
-    sigma_proj = sigma_iso; // sigma_proj_new = sigma_proj(epsilon_proj)
-    static Vector dsigma(6);
-    dsigma.Zero();
-    dsigma = sigma_proj - sigma_proj_n; // dsigma_proj = sigma_proj_new - sigma_proj_old
+    // stress in projected space
+    const Vector& sigma_proj = theProjectedMaterial->getStress(); 
 
-    // move to orthotropic space
-    static Vector sigma(6);
-    for (int i = 0; i < 6; ++i)
-        sigma(i) = Asigma_inv(i) * dsigma(i); // dsigma_real = Asigma^-1 * dsigma_proj
+    // compute the projected stress increment
+    static Vector dsigma_proj(6);
+    dsigma_proj = sigma_proj - sigma_proj_n; // dsigma_proj = sigma_proj_new - sigma_proj_old
 
-    sigma_real = sigma_real_n + sigma; // sigma_real_old + dsigma_real
+    // rescale the stress increment to back to real space
+    static Vector dsigma_real(6);
+    // for (int i = 0; i < 6; ++i)
+    //     dsigma_real(i) = dsigma_proj(i) / A; 
+    // dsigma_real = Asigma^-1 * dsigma_proj
+    // dsigma_real(i) = Asigma_inv(i) * dsigma_proj(i); // dsigma_real = Asigma^-1 * dsigma_proj
+    dsigma_real = dsigma_proj /A;  // dsigma_real = Asigma^-1 * dsigma_proj
 
-    return sigma_real; // se retorna sigma o sigma real?
+    //add real stress increment to the previous real stress
+    sigma_real = sigma_real_n + dsigma_real; 
+
+    // if (print_stress_once)
+    // {
+    //     opserr << " @TimeVaryingMaterial::getStress mattag = " << this->getTag() << endln;
+    //     opserr << "sigma_proj = " << sigma_proj << endln;
+    //     opserr << "dsigma_proj = " << dsigma_proj << endln;
+    //     opserr << "sigma_real = " << sigma_real << endln;
+    //     opserr << "Aepsilon = " << Aepsilon << endln;
+    //     // print_stress_once = false;
+    // }
+
+    return sigma_real; 
 }
 
 const Matrix &TimeVaryingMaterial::getTangent(void)
 {
     // tensor in isotropic space
-    const Matrix &C_iso = theIsotropicMaterial->getTangent();
+    const Matrix &C_proj = theProjectedMaterial->getTangent();
 
     // compute orthotripic tangent
-    static Matrix C(6, 6);
-    static Matrix temp(6, 6);
-    static Matrix invAsigma(6, 6);
-    invAsigma.Zero();
-    for (int i = 0; i < 6; ++i)
-        invAsigma(i, i) = Asigma_inv(i);
-    temp.addMatrixProduct(0.0, C_iso, Aepsilon, 1.0);
-    C.addMatrixProduct(0.0, invAsigma, temp, 1.0);
-    return C;
+    static Matrix C_real(6, 6);
+    // static Matrix temp(6, 6);
+    // static Matrix cdiff(6, 6);
+    // static Matrix invAsigma(6, 6);
+    // invAsigma.Zero();
+    // for (int i = 0; i < 6; ++i)
+    //     invAsigma(i, i) = Asigma_inv(i);
+    // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
+    // C_real.addMatrixProduct(0.0, invAsigma, temp, 1.0);
+    // C_real = temp / A;
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A);
+
+
+    // cdiff = C_proj - C_real;
+    // bool printnow = false;
+    // for (int i = 0; i < 6; ++i)
+    // {
+    //     for (int j = 0; j < 6; ++j)
+    //     {
+    //         if (abs(cdiff(i, j)) > 1e-4 || cdiff(i, j) != cdiff(i, j) )
+    //         {
+    //             printnow = true;
+    //         }
+    //     }
+    // }
+
+    // if (print_tang_once || printnow)
+    // {
+    //     opserr << "@ getTangent" << endln;
+    //     opserr << "C_real = " << C_real << endln;
+    //     opserr << "C_proj = " << C_proj << endln;
+    //     opserr << "diff = " << cdiff  << endln;
+    //     opserr << "Asigma_inv = " << 1 / A  << endln;
+    //     opserr << "Aepsilon = " << Aepsilon  << endln;
+    //     print_tang_once = false;
+    // }
+
+
+    return C_real;
 }
 
 const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 {
-    // tensor in isotropic space
-    const Matrix& C_iso = theIsotropicMaterial->getInitialTangent();
+    opserr << "@TimeVaryingMaterial::getInitialTangent" << endln;
 
-    // compute orthotripic tangent
-    static Matrix C(6, 6);
+    // elasticity tensor in projected space
+    const Matrix& C_proj = theProjectedMaterial->getInitialTangent();
+
+    // compute the real tangent from the projected one
+    static Matrix C_real(6, 6);
     static Matrix temp(6, 6);
-    static Matrix invAsigma(6, 6);
-    invAsigma.Zero();
-    for (int i = 0; i < 6; ++i)
-        invAsigma(i, i) = Asigma_inv(i);
-    temp.addMatrixProduct(0.0, C_iso, Aepsilon, 1.0);
-    C.addMatrixProduct(0.0, invAsigma, temp, 1.0);
-    return C;;
+    // static Matrix invAsigma(6, 6);
+    // invAsigma.Zero();
+    // for (int i = 0; i < 6; ++i)
+    //     invAsigma(i, i) = Asigma_inv(i);
+    // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
+    // C.addMatrixProduct(0.0, invAsigma, temp, 1.0);
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A);
+    return C_real;
+
+
 }
 
 int TimeVaryingMaterial::commitState(void)
 {
-	sigma_real_n = sigma_real;
-	sigma_proj_n = sigma_proj;
-	epsilon_real_n = epsilon_real;
-	epsilon_proj_n = epsilon_proj;
+    new_time_step = true;
+    print_stress_once = true;
+    print_strain_once = true;
+    print_tang_once = true;
+    sigma_real_n = sigma_real;
+    sigma_proj_n = sigma_proj;
+    epsilon_real_n = epsilon_real;
+    epsilon_proj_n = epsilon_proj;
     epsilon_new_n = epsilon_new;
-    return theIsotropicMaterial->commitState();
+
+    // if (print_commit_once)
+    // {
+    //     opserr << "@ TimeVaryingMaterial::commitState(void) " << endln;
+    //     opserr << "sigma_real_n = " << sigma_real_n;
+    //     opserr << "sigma_proj_n = " << sigma_proj_n;
+    //     opserr << "epsilon_real_n = " << epsilon_real_n;
+    //     opserr << "epsilon_proj_n = " << epsilon_proj_n;
+    //     opserr << "epsilon_new_n = " << epsilon_new_n;
+    //     print_commit_once = false;
+    // }
+
+    return theProjectedMaterial->commitState();
 }
 
 int TimeVaryingMaterial::revertToLastCommit(void)
 {
-    return theIsotropicMaterial->revertToLastCommit();
+    return theProjectedMaterial->revertToLastCommit();
 }
 
 int TimeVaryingMaterial::revertToStart(void)
 {
-    return theIsotropicMaterial->revertToStart();
+    return theProjectedMaterial->revertToStart();
 }
 
 NDMaterial * TimeVaryingMaterial::getCopy(void)
 {
+    // opserr << "TimeVaryingMaterial::getCopy" << endln;
     TimeVaryingMaterial *theCopy = new TimeVaryingMaterial();
     theCopy->setTag(getTag());
-    theCopy->theIsotropicMaterial = theIsotropicMaterial->getCopy("ThreeDimensional");
+    theCopy->theProjectedMaterial = theProjectedMaterial->getCopy("ThreeDimensional");
+    theCopy->evolution_law_id = evolution_law_id;
     theCopy->Aepsilon = Aepsilon;
-    theCopy->Asigma_inv = Asigma_inv;
     theCopy->epsilon_internal = epsilon_internal;
     theCopy->sigma_real = sigma_real;
-	theCopy->sigma_proj = sigma_proj;
-	theCopy->epsilon_real = epsilon_real;
-	theCopy->epsilon_proj = epsilon_proj;
-	theCopy->sigma_real_n = sigma_real_n;
-	theCopy->sigma_proj_n = sigma_proj_n;
-	theCopy->epsilon_real_n = epsilon_real_n;
-	theCopy->epsilon_proj_n = epsilon_proj_n;
+    theCopy->sigma_proj = sigma_proj;
+    theCopy->epsilon_real = epsilon_real;
+    theCopy->epsilon_proj = epsilon_proj;
+    theCopy->sigma_real_n = sigma_real_n;
+    theCopy->sigma_proj_n = sigma_proj_n;
+    theCopy->epsilon_real_n = epsilon_real_n;
+    theCopy->epsilon_proj_n = epsilon_proj_n;
     theCopy->epsilon_new = epsilon_new;
     theCopy->epsilon_new_n = epsilon_new_n;
+    theCopy->E = E;
+    theCopy->G = G;
+    theCopy->nu = nu;
+    theCopy->A = A;
     return theCopy;
 }
 
@@ -426,96 +511,13 @@ void TimeVaryingMaterial::Print(OPS_Stream &s, int flag)
 
 int TimeVaryingMaterial::sendSelf(int commitTag, Channel &theChannel)
 {
-    // result
-    // int res = 0;
-
-    // // data
-    // static Vector data(48);
-    // int counter = 0;
-    // // store int values
-    // data(counter++) = static_cast<double>(getTag());
-    // data(counter++) = static_cast<double>(theIsotropicMaterial->getClassTag());
-    // int matDbTag = theIsotropicMaterial->getDbTag();
-    // if (matDbTag == 0) {
-    //     matDbTag = theChannel.getDbTag();
-    //     theIsotropicMaterial->setDbTag(matDbTag);
-    // }
-    // data(counter++) = static_cast<double>(matDbTag);
-    // // store internal variables
-    // for (int i = 0; i < 6; ++i)
-    //     data(counter++) = epsilon(i);
-    // for (int i = 0; i < 6; ++i)
-    //     for (int j = 0; j < 6; ++j)
-    //         data(counter++) = Aepsilon(i, j);
-    // for (int i = 0; i < 6; ++i)
-    //     data(counter++) = Asigma_inv(i);
-    // // send data
-    // res = theChannel.sendVector(getDbTag(), commitTag, data);
-    // if (res < 0) {
-    //     opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
-    //     return res;
-    // }
-
-    // // now send the materials data
-    // res = theIsotropicMaterial->sendSelf(commitTag, theChannel);
-    // if (res < 0) {
-    //     opserr << "nDMaterial Orthotropic Error: failed to send the isotropic material\n";
-    //     return res;
-    // }
-
-    // // done
-    // return res;
+    
     return 0;
 }
 
 int TimeVaryingMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_ObjectBroker & theBroker)
 {
-    // // result
-    // int res = 0;
-
-    // // data
-    // static Vector data(48);
-    // int counter = 0;
-
-    // // receive data
-    // res = theChannel.recvVector(getDbTag(), commitTag, data);
-    // if (res < 0) {
-    //     opserr << "nDMaterial Orthotropic Error: failed to send vector data\n";
-    //     return res;
-    // }
-    // // get int values
-    // setTag(static_cast<int>(data(counter++)));
-    // int matClassTag = static_cast<int>(data(counter++));
-    // // if the associated material has not yet been created or is of the wrong type
-    // // create a new material for recvSelf later
-    // if ((theIsotropicMaterial == nullptr) || (theIsotropicMaterial->getClassTag() != matClassTag)) {
-    //     if (theIsotropicMaterial)
-    //         delete theIsotropicMaterial;
-    //     theIsotropicMaterial = theBroker.getNewNDMaterial(matClassTag);
-    //     if (theIsotropicMaterial == nullptr) {
-    //         opserr << "nDMaterial Orthotropic Error: failed to get a material of type: " << matClassTag << endln;
-    //         return -1;
-    //     }
-    // }
-    // theIsotropicMaterial->setDbTag(static_cast<int>(data(counter++)));
-    // // store internal variables
-    // for (int i = 0; i < 6; ++i)
-    //     epsilon(i) = data(counter++);
-    // for (int i = 0; i < 6; ++i)
-    //     for (int j = 0; j < 6; ++j)
-    //         Aepsilon(i, j) = data(counter++);
-    // for (int i = 0; i < 6; ++i)
-    //     Asigma_inv(i) = data(counter++);
-
-    // // now receive the associated materials data
-    // res = theIsotropicMaterial->recvSelf(commitTag, theChannel, theBroker);
-    // if (res < 0) {
-    //     opserr << "nDMaterial Orthotropic Error: failed to receive the isotropic material\n";
-    //     return res;
-    // }
-
-    // // done
-    // return res;
+   
     return 0;
 }
 
@@ -529,7 +531,7 @@ int TimeVaryingMaterial::setParameter(const char** argv, int argc, Parameter& pa
     }
 
     // forward to the adapted (isotropic) material
-    return theIsotropicMaterial->setParameter(argv, argc, param);
+    return theProjectedMaterial->setParameter(argv, argc, param);
 }
 
 
@@ -541,7 +543,7 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
     {
         double initNormalStrain = info.theDouble; // alpha * (Temp(t)  - Temp())
         epsilon_internal.Zero();
-        epsilon_internal(0) = initNormalStrain;  
+        epsilon_internal(0) = initNormalStrain;
         epsilon_internal(1) = initNormalStrain;
         epsilon_internal(2) = initNormalStrain;
         return 0;
@@ -569,14 +571,14 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
 
         else {
             // any other response should be obtained from the adapted (isotropic) material
-            return theIsotropicMaterial->setResponse(argv, argc, s);
+            return theProjectedMaterial->setResponse(argv, argc, s);
         }
     }
     return NDMaterial::setResponse(argv, argc, s);
 }
 
 
-void TimeVaryingMaterial::getParameters(double time, double& E, double& G, double& nu, double& A)
+void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, double& nu, double& A)
 {
     if (new_time_step) {
         // opserr << "Getting Parameters (E, G, nu, A)" << endln;
@@ -593,7 +595,7 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
             }
         }
 
-        // opserr << "index for time (" << time << ") = " << index << endln;
+        opserr << "index for time (" << time << ") = " << index << endln;
 
         if (index == 0)
         {
@@ -618,23 +620,30 @@ void TimeVaryingMaterial::getParameters(double time, double& E, double& G, doubl
             E = (1.0 - alpha) * (*E_history)(index - 1) + alpha * (*E_history)(index);
             A = (1.0 - alpha) * (*A_history)(index - 1) + alpha * (*A_history)(index);
             K = (1.0 - alpha) * (*K_history)(index - 1) + alpha * (*K_history)(index);
-            
+
             G  = (3.0 * K * E) / (9.0 * K - E);
             nu = (3.0 * K - E) / (6.0 * K);
         }
 
         else {
-            E = (*E_history)(time_history->Size()-1) ;
-            A = (*A_history)(time_history->Size()-1) ;
-            K = (*K_history)(time_history->Size()-1) ;
+            E = (*E_history)(time_history->Size() - 1) ;
+            A = (*A_history)(time_history->Size() - 1) ;
+            K = (*K_history)(time_history->Size() - 1) ;
 
             G  = (3.0 * K * E) / (9.0 * K - E);
             nu = (3.0 * K - E) / (6.0 * K);
         }
 
-        // opserr << "  E  = " << E  << endln;
-        // opserr << "  G  = " << G  << endln;
-        // opserr << "  nu = " << nu << endln;
-        // opserr << "  A  = " << A  << endln;
+        opserr << " UPDATING PARAMETERS TO "  << endln;
+        opserr << "  E  = " << E  << endln;
+        opserr << "  G  = " << G  << endln;
+        opserr << "  nu = " << nu << endln;
+        opserr << "  A  = " << A  << endln;
     }
+//     opserr << "current_time = " << time << " "
+//            << "new_time_step = " << (int)new_time_step << " "
+//            << "E = " << E << " "
+//            << "G = " << G << " "
+//            << "nu = " << nu << " "
+//            << "A = " << A << " " << endln;
 }
