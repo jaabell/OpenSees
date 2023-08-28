@@ -22,7 +22,7 @@
 // Massimo Petracca - ASDEA Software, Italy
 //
 // A Wapper material that allow's time varying stiffness and
-// resistance properties for the wrapped material. 
+// resistance properties for the wrapped material.
 //
 
 #include <TimeVaryingMaterial.h>
@@ -126,20 +126,28 @@ void *OPS_TimeVaryingMaterial(void)
     return theTimeVaryingMaterial;
 }
 
-int TimeVaryingMaterial::number_of_evolution_laws = 0;
-Vector* TimeVaryingMaterial::time_history = 0;
-Vector* TimeVaryingMaterial::E_history = 0;
-Vector* TimeVaryingMaterial::K_history = 0;
-Vector* TimeVaryingMaterial::A_history = 0;
-bool TimeVaryingMaterial::new_time_step = true;
+// int TimeVaryingMaterial::number_of_evolution_laws = 0;
+// Vector* TimeVaryingMaterial::time_history = 0;
+// Vector* TimeVaryingMaterial::E_history = 0;
+// Vector* TimeVaryingMaterial::K_history = 0;
+// Vector* TimeVaryingMaterial::A_history = 0;
+std::map<int, Vector> TimeVaryingMaterial::time_histories;
+std::map<int, Vector> TimeVaryingMaterial::E_histories;
+std::map<int, Vector> TimeVaryingMaterial::K_histories;
+std::map<int, Vector> TimeVaryingMaterial::A_histories;
+std::map<int, bool> TimeVaryingMaterial::new_time_step ;
 bool TimeVaryingMaterial::print_strain_once = true;
 bool TimeVaryingMaterial::print_stress_once = true;
 bool TimeVaryingMaterial::print_commit_once = true;
 bool TimeVaryingMaterial::print_tang_once = true;
-double TimeVaryingMaterial::E = 0;
-double TimeVaryingMaterial::G = 0;
-double TimeVaryingMaterial::A = 0;
-double TimeVaryingMaterial::nu = 0;
+// double TimeVaryingMaterial::E = 0;
+// double TimeVaryingMaterial::G = 0;
+// double TimeVaryingMaterial::A = 0;
+// double TimeVaryingMaterial::nu = 0;
+std::map<int, double> TimeVaryingMaterial::E;
+std::map<int, double> TimeVaryingMaterial::G;
+std::map<int, double> TimeVaryingMaterial::A;
+std::map<int, double> TimeVaryingMaterial::nu;
 
 TimeVaryingMaterial::TimeVaryingMaterial()
     : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
@@ -161,44 +169,53 @@ TimeVaryingMaterial::TimeVaryingMaterial(
     }
 
     int Ndatapoints = E_.Size();
-    time_history = new Vector(Ndatapoints);
-    E_history = new Vector(Ndatapoints);
-    K_history = new Vector(Ndatapoints);
-    A_history = new Vector(Ndatapoints);
+    // time_history = new Vector(Ndatapoints);
+    // E_history = new Vector(Ndatapoints);
+    // K_history = new Vector(Ndatapoints);
+    // A_history = new Vector(Ndatapoints);
+    time_histories[tag] = Vector(Ndatapoints);
+    E_histories[tag] = Vector(Ndatapoints);
+    K_histories[tag] = Vector(Ndatapoints);
+    A_histories[tag] = Vector(Ndatapoints);
+    // *time_history = t_;
+    // *E_history = E_;
+    // *K_history = K_;
+    // *A_history = A_;
+    time_histories[tag] = t_;
+    E_histories[tag] = E_;
+    K_histories[tag] = K_;
+    A_histories[tag] = A_;
 
-    *time_history = t_;
-    *E_history = E_;
-    *K_history = K_;
-    *A_history = A_;
+    new_time_step[tag] = true;
 
     //This is a new material constructor, hence we save the evolution law
-    evolution_law_id = number_of_evolution_laws;
-    //and advance the number of evolution laws. 
-    number_of_evolution_laws++;
+    // evolution_law_id = number_of_evolution_laws;
+    //and advance the number of evolution laws.
+    // number_of_evolution_laws++;
 
     opserr << "Created new TimeVaryingMaterial \n";
-    opserr << "  evolution_law_id          = " << evolution_law_id                << endln;
+    // opserr << "  evolution_law_id          = " << evolution_law_id                << endln;
     opserr << "  tag          = " << tag                << endln;
     opserr << "  proj_tag     = " << theProjectedMaterial->getTag() << endln;
-    opserr << "  Nt           = " << E_history->Size()  << endln;
-    opserr << "  time_history = " << *time_history      << endln;
-    opserr << "  E_history    = " << *E_history         << endln;
-    opserr << "  K_history    = " << *K_history         << endln;
-    opserr << "  A_history    = " << *A_history         << endln;
+    opserr << "  Nt           = " << E_histories[tag].Size()  << endln;
+    opserr << "  time_history = " << time_histories[tag]      << endln;
+    opserr << "  E_history    = " << E_histories[tag]         << endln;
+    opserr << "  K_history    = " << K_histories[tag]         << endln;
+    opserr << "  A_history    = " << A_histories[tag]         << endln;
 }
 
 TimeVaryingMaterial::~TimeVaryingMaterial()
 {
     if (theProjectedMaterial)
     {
-        delete time_history;
-        time_history = 0;
-        delete E_history;
-        E_history = 0;
-        delete K_history;
-        K_history = 0;
-        delete A_history;
-        A_history = 0;
+        // delete time_history;
+        // time_history = 0;
+        // delete E_history;
+        // E_history = 0;
+        // delete K_history;
+        // K_history = 0;
+        // delete A_history;
+        // A_history = 0;
         delete theProjectedMaterial;
         theProjectedMaterial = 0;
     }
@@ -221,10 +238,10 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     double current_time = OPS_GetDomain()->getCurrentTime();
     getParameters(current_time);
 
-
-    double Ex  = E;  double Ey  = E;  double Ez  = E;
-    double Gxy = G;  double Gyz = G;  double Gzx = G;
-    double vxy = nu; double vyz = nu; double vzx = nu;
+    int tag = this->getTag();
+    double Ex  = E[tag];  double Ey  = E[tag];  double Ez  = E[tag];
+    double Gxy = G[tag];  double Gyz = G[tag];  double Gzx = G[tag];
+    double vxy = nu[tag]; double vyz = nu[tag]; double vzx = nu[tag];
     // double Asigmaxx   = A; double Asigmayy   = A; double Asigmazz   = A;
     // double Asigmaxyxy = A; double Asigmayzyz = A; double Asigmaxzxz = A;
 
@@ -249,9 +266,9 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     C0(5, 5) = Gzx;
 
     // compute the Asigma and its inverse
-    if (A <= 0 ) {
-        opserr << "nDMaterial TimeVarying Error: Asigma11, Asigma22, Asigma33, Asigma12, Asigma23, Asigma13 must be greater than 0.\n";
-        opserr << "A = " << A << endln;
+    if (A[tag] <= 0 ) {
+        opserr << "nDMaterial TimeVarying Error: A must be greater than 0 for tag = " << tag << "\n";
+        opserr << "A = " << A[tag] << endln;
         exit(-1);
     }
     // static Matrix Asigma(6, 6);
@@ -279,12 +296,12 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     // static Matrix Asigma_C0(6, 6);
     // Asigma_C0.addMatrixProduct(0.0, Asigma, C0, 1.0);
     // Asigma_C0 = A*C0;
-    Aepsilon.addMatrixProduct(0.0, C0proj_inv, C0, A);
+    Aepsilon.addMatrixProduct(0.0, C0proj_inv, C0, A[tag]);
 
     //Compute the projected strain increment
     static Vector depsilon_proj(6);
     depsilon_proj.addMatrixVector(0.0, Aepsilon, depsilon_real, 1.0); // depsilon_proj = Aepsilon(t) * depsilon_real
-    
+
     //Compute the projected total strain
     epsilon_proj = epsilon_proj_n + depsilon_proj; // epsilon_proj = epsilon_proj_old + depsilon_proj
 
@@ -316,7 +333,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
 
 const Vector &TimeVaryingMaterial::getStrain(void)
 {
-    // the strain to report back is the real strain plus the internal, 
+    // the strain to report back is the real strain plus the internal,
     // the internal gets removed before converting it to "real"
     static Vector epsilon_return(6);
     epsilon_return = epsilon_real + epsilon_internal;
@@ -326,7 +343,7 @@ const Vector &TimeVaryingMaterial::getStrain(void)
 const Vector &TimeVaryingMaterial::getStress(void)
 {
     // stress in projected space
-    const Vector& sigma_proj = theProjectedMaterial->getStress(); 
+    const Vector& sigma_proj = theProjectedMaterial->getStress();
 
     // compute the projected stress increment
     static Vector dsigma_proj(6);
@@ -335,13 +352,13 @@ const Vector &TimeVaryingMaterial::getStress(void)
     // rescale the stress increment to back to real space
     static Vector dsigma_real(6);
     // for (int i = 0; i < 6; ++i)
-    //     dsigma_real(i) = dsigma_proj(i) / A; 
+    //     dsigma_real(i) = dsigma_proj(i) / A;
     // dsigma_real = Asigma^-1 * dsigma_proj
     // dsigma_real(i) = Asigma_inv(i) * dsigma_proj(i); // dsigma_real = Asigma^-1 * dsigma_proj
-    dsigma_real = dsigma_proj /A;  // dsigma_real = Asigma^-1 * dsigma_proj
+    dsigma_real = dsigma_proj / A[this->getTag()];  // dsigma_real = Asigma^-1 * dsigma_proj
 
     //add real stress increment to the previous real stress
-    sigma_real = sigma_real_n + dsigma_real; 
+    sigma_real = sigma_real_n + dsigma_real;
 
     // if (print_stress_once)
     // {
@@ -353,7 +370,7 @@ const Vector &TimeVaryingMaterial::getStress(void)
     //     // print_stress_once = false;
     // }
 
-    return sigma_real; 
+    return sigma_real;
 }
 
 const Matrix &TimeVaryingMaterial::getTangent(void)
@@ -372,7 +389,7 @@ const Matrix &TimeVaryingMaterial::getTangent(void)
     // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
     // C_real.addMatrixProduct(0.0, invAsigma, temp, 1.0);
     // C_real = temp / A;
-    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A);
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A[this->getTag()]);
 
 
     // cdiff = C_proj - C_real;
@@ -419,7 +436,7 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
     //     invAsigma(i, i) = Asigma_inv(i);
     // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
     // C.addMatrixProduct(0.0, invAsigma, temp, 1.0);
-    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A);
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A[this->getTag()]);
     return C_real;
 
 
@@ -427,7 +444,7 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 
 int TimeVaryingMaterial::commitState(void)
 {
-    new_time_step = true;
+    new_time_step[this->getTag()] = true;
     print_stress_once = true;
     print_strain_once = true;
     print_tang_once = true;
@@ -467,7 +484,7 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     TimeVaryingMaterial *theCopy = new TimeVaryingMaterial();
     theCopy->setTag(getTag());
     theCopy->theProjectedMaterial = theProjectedMaterial->getCopy("ThreeDimensional");
-    theCopy->evolution_law_id = evolution_law_id;
+    // theCopy->evolution_law_id = evolution_lsaw_id;
     theCopy->Aepsilon = Aepsilon;
     theCopy->epsilon_internal = epsilon_internal;
     theCopy->sigma_real = sigma_real;
@@ -480,10 +497,10 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     theCopy->epsilon_proj_n = epsilon_proj_n;
     theCopy->epsilon_new = epsilon_new;
     theCopy->epsilon_new_n = epsilon_new_n;
-    theCopy->E = E;
-    theCopy->G = G;
-    theCopy->nu = nu;
-    theCopy->A = A;
+    // theCopy->E = E;
+    // theCopy->G = G;
+    // theCopy->nu = nu;
+    // theCopy->A = A;
     return theCopy;
 }
 
@@ -511,13 +528,13 @@ void TimeVaryingMaterial::Print(OPS_Stream &s, int flag)
 
 int TimeVaryingMaterial::sendSelf(int commitTag, Channel &theChannel)
 {
-    
+
     return 0;
 }
 
 int TimeVaryingMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_ObjectBroker & theBroker)
 {
-   
+
     return 0;
 }
 
@@ -580,16 +597,17 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
 
 void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, double& nu, double& A)
 {
-    if (new_time_step) {
-        // opserr << "Getting Parameters (E, G, nu, A)" << endln;
+    int tag = this->getTag();
+    if (new_time_step[tag]) {
         double K = 0;
-        new_time_step = false;
+        // opserr << "Getting Parameters (E, G, nu, A)" << endln;
+        new_time_step[tag] = false;
 
         // Find the interval in which 'time' falls within time_history
         int index = 0;
-        for (; index < time_history->Size(); ++index)
+        for (; index < time_histories[tag].Size(); ++index)
         {
-            if ((*time_history)(index) >= time)
+            if (time_histories[tag](index) >= time)
             {
                 break;
             }
@@ -599,46 +617,46 @@ void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, do
 
         if (index == 0)
         {
-            E = (*E_history)(0) ;
-            A = (*A_history)(0) ;
-            K = (*K_history)(0) ;
+            E[tag] = E_histories[tag](0) ;
+            A[tag] = A_histories[tag](0) ;
+            K = K_histories[tag](0) ;
 
-            G  = (3.0 * K * E) / (9.0 * K - E);
-            nu = (3.0 * K - E) / (6.0 * K);
+            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
+            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
         }
 
-        else if (index > 0 && index < time_history->Size())
+        else if (index > 0 && index < time_histories[tag].Size())
         {
             // Perform linear interpolation for the values of E, A, and  K
-            double t1    = (*time_history)(index - 1);
-            double t2    = (*time_history)(index);
+            double t1    = time_histories[tag](index - 1);
+            double t2    = time_histories[tag](index);
             double alpha = (time - t1) / (t2 - t1);
             // opserr << "t1    = " << t1    << endln ;
             // opserr << "t2    = " << t2    << endln ;
             // opserr << "alpha = " << alpha << endln ;
 
-            E = (1.0 - alpha) * (*E_history)(index - 1) + alpha * (*E_history)(index);
-            A = (1.0 - alpha) * (*A_history)(index - 1) + alpha * (*A_history)(index);
-            K = (1.0 - alpha) * (*K_history)(index - 1) + alpha * (*K_history)(index);
+            E[tag] = (1.0 - alpha) * E_histories[tag](index - 1) + alpha * E_histories[tag](index);
+            A[tag] = (1.0 - alpha) * A_histories[tag](index - 1) + alpha * A_histories[tag](index);
+            K = (1.0 - alpha) * K_histories[tag](index - 1) + alpha * K_histories[tag](index);
 
-            G  = (3.0 * K * E) / (9.0 * K - E);
-            nu = (3.0 * K - E) / (6.0 * K);
+            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
+            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
         }
 
         else {
-            E = (*E_history)(time_history->Size() - 1) ;
-            A = (*A_history)(time_history->Size() - 1) ;
-            K = (*K_history)(time_history->Size() - 1) ;
+            E[tag] = E_histories[tag](time_histories[tag].Size() - 1) ;
+            A[tag] = A_histories[tag](time_histories[tag].Size() - 1) ;
+            K = K_histories[tag](time_histories[tag].Size() - 1) ;
 
-            G  = (3.0 * K * E) / (9.0 * K - E);
-            nu = (3.0 * K - E) / (6.0 * K);
+            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
+            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
         }
 
-        opserr << " UPDATING PARAMETERS TO "  << endln;
-        opserr << "  E  = " << E  << endln;
-        opserr << "  G  = " << G  << endln;
-        opserr << "  nu = " << nu << endln;
-        opserr << "  A  = " << A  << endln;
+        opserr << " UPDATING PARAMETERS of mat = " << this->getTag() <<   " TO "  << endln;
+        opserr << "  E  = " << E[tag]  << endln;
+        opserr << "  G  = " << G[tag]  << endln;
+        opserr << "  nu = " << nu[tag] << endln;
+        opserr << "  A  = " << A[tag]  << endln;
     }
 //     opserr << "current_time = " << time << " "
 //            << "new_time_step = " << (int)new_time_step << " "

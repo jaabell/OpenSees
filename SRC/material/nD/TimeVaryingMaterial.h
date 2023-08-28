@@ -32,6 +32,8 @@
 #include <Vector.h>
 #include <Matrix.h>
 
+#include <map>
+
 class TimeVaryingMaterial : public NDMaterial 
 {
 public:
@@ -96,14 +98,18 @@ private:
     Matrix Aepsilon = Matrix(6, 6);
 
     //History of evolution
-    static Vector* time_history;
-    static Vector* E_history;
-    static Vector* K_history;
-    static Vector* A_history;
+    // static Vector* time_history;
+    // static Vector* E_history;
+    // static Vector* K_history;
+    // static Vector* A_history;
+    static std::map<int, Vector> time_histories;
+    static std::map<int, Vector> E_histories;
+    static std::map<int, Vector> K_histories;
+    static std::map<int, Vector> A_histories;
 
     //The "tag" of this material to the evolution laws (unused)
-    int evolution_law_id;
-    static int number_of_evolution_laws;
+    // int evolution_law_id;
+    // static int number_of_evolution_laws;
 
     //Strain offset due to thermal action
     Vector epsilon_internal = Vector(6);
@@ -125,9 +131,10 @@ private:
     Vector epsilon_new_n = Vector(6);  
 
     //global variables for all materials... should not be
-    static double E, G, nu, A;
+    // static double E, G, nu, A;
+    static std::map<int, double> E, G, nu, A;
+    static std::map<int, bool> new_time_step;
 
-    static bool new_time_step;
     static bool print_strain_once;
     static bool print_stress_once;
     static bool print_commit_once;
