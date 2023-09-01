@@ -118,9 +118,9 @@ private:
     // _proj are the tensors for the projected material
     // _real are the tensors for the final (real) material 
     Vector sigma_real = Vector(6);    
-    Vector sigma_proj = Vector(6);
+    // Vector sigma_proj = Vector(6);
     Vector epsilon_real = Vector(6);  
-    Vector epsilon_proj = Vector(6);  
+    // Vector epsilon_proj = Vector(6);  
     Vector epsilon_new = Vector(6);  
 
     // State for the incremental model
@@ -134,6 +134,8 @@ private:
     // static double E, G, nu, A;
     static std::map<int, double> E, G, nu, A;
     static std::map<int, bool> new_time_step;
+
+    int my_element_tag;
 
     static bool print_strain_once;
     static bool print_stress_once;

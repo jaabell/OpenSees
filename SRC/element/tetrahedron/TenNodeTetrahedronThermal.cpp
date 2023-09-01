@@ -95,7 +95,7 @@ const double  TenNodeTetrahedronThermal::alpha = ( 5.0 + 3.0 * sqrt( 5.0 ) ) / 2
 const double  TenNodeTetrahedronThermal::beta = ( 5.0 - sqrt( 5.0 ) ) / 20. ;
 
 const double  TenNodeTetrahedronThermal::sg[] = { alpha, beta, beta, beta } ;
-const double  TenNodeTetrahedronThermal::wg[] = { 1.0 / 4.0 } ;
+const double  TenNodeTetrahedronThermal::wg[] = { 1.0 / 24 } ;
 
 // static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 Matrix TenNodeTetrahedronThermal::B(NumStressComponents, NumDOFsPerNode) ;

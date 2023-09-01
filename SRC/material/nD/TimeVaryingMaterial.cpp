@@ -32,6 +32,7 @@
 #include <elementAPI.h>
 #include <Parameter.h>
 #include <Domain.h>
+#include <Element.h>
 
 
 void *OPS_TimeVaryingMaterial(void)
@@ -235,7 +236,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     depsilon_real = epsilon_real - epsilon_real_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
     // Get the current parameters at current time
-    double current_time = OPS_GetDomain()->getCurrentTime();
+    double current_time = OPS_GetDomain()->getCurrentTime();  //should not be used in displacement control user could set the current time as a parameter (check ASDConcrete3D)
     getParameters(current_time);
 
     int tag = this->getTag();
@@ -303,10 +304,13 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     depsilon_proj.addMatrixVector(0.0, Aepsilon, depsilon_real, 1.0); // depsilon_proj = Aepsilon(t) * depsilon_real
 
     //Compute the projected total strain
-    epsilon_proj = epsilon_proj_n + depsilon_proj; // epsilon_proj = epsilon_proj_old + depsilon_proj
+    static Vector epsilon_proj(6);
+    epsilon_proj = epsilon_proj_n;
+    epsilon_proj.addVector(1.0, depsilon_proj, 1.0); // epsilon_proj = epsilon_proj_old + depsilon_proj
 
-
-    // if (print_strain_once)
+    my_element_tag = ops_TheActiveElement->getTag();
+    // opserr << "my_element_tag = " << my_element_tag << endln;
+    // if (my_element_tag == 83 )
     // {
     //     opserr << "@ TimeVaryingMaterial::setTrialStrain" << endln;
     //     opserr << "strain = " << strain << endln;
@@ -360,15 +364,15 @@ const Vector &TimeVaryingMaterial::getStress(void)
     //add real stress increment to the previous real stress
     sigma_real = sigma_real_n + dsigma_real;
 
-    // if (print_stress_once)
-    // {
-    //     opserr << " @TimeVaryingMaterial::getStress mattag = " << this->getTag() << endln;
-    //     opserr << "sigma_proj = " << sigma_proj << endln;
-    //     opserr << "dsigma_proj = " << dsigma_proj << endln;
-    //     opserr << "sigma_real = " << sigma_real << endln;
-    //     opserr << "Aepsilon = " << Aepsilon << endln;
-    //     // print_stress_once = false;
-    // }
+    if (my_element_tag == 83)
+    {
+        opserr << " @TimeVaryingMaterial::getStress mattag = " << this->getTag() << endln;
+        opserr << "sigma_real_n = " << sigma_real_n << endln;
+        opserr << "dsigma_real = " << dsigma_real << endln;
+        opserr << "sigma_real = " << sigma_real << endln;
+        // opserr << "Aepsilon = " << Aepsilon << endln;
+        print_stress_once = false;
+    }
 
     return sigma_real;
 }
@@ -393,7 +397,7 @@ const Matrix &TimeVaryingMaterial::getTangent(void)
 
 
     // cdiff = C_proj - C_real;
-    // bool printnow = false;
+    bool printnow = false;
     // for (int i = 0; i < 6; ++i)
     // {
     //     for (int j = 0; j < 6; ++j)
@@ -405,15 +409,15 @@ const Matrix &TimeVaryingMaterial::getTangent(void)
     //     }
     // }
 
-    // if (print_tang_once || printnow)
+    // if (my_element_tag == 83  )
     // {
     //     opserr << "@ getTangent" << endln;
     //     opserr << "C_real = " << C_real << endln;
     //     opserr << "C_proj = " << C_proj << endln;
-    //     opserr << "diff = " << cdiff  << endln;
-    //     opserr << "Asigma_inv = " << 1 / A  << endln;
+    //     // opserr << "diff = " << cdiff  << endln;
+    //     opserr << "Asigma_inv = " << 1 / A[this->getTag()]  << endln;
     //     opserr << "Aepsilon = " << Aepsilon  << endln;
-    //     print_tang_once = false;
+    //     // print_tang_once = false;
     // }
 
 
@@ -445,6 +449,10 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 int TimeVaryingMaterial::commitState(void)
 {
     new_time_step[this->getTag()] = true;
+
+    const Vector& sigma_proj = theProjectedMaterial->getStress();
+    const Vector& epsilon_proj = theProjectedMaterial->getStrain();
+
     print_stress_once = true;
     print_strain_once = true;
     print_tang_once = true;
@@ -454,27 +462,37 @@ int TimeVaryingMaterial::commitState(void)
     epsilon_proj_n = epsilon_proj;
     epsilon_new_n = epsilon_new;
 
-    // if (print_commit_once)
-    // {
-    //     opserr << "@ TimeVaryingMaterial::commitState(void) " << endln;
-    //     opserr << "sigma_real_n = " << sigma_real_n;
-    //     opserr << "sigma_proj_n = " << sigma_proj_n;
-    //     opserr << "epsilon_real_n = " << epsilon_real_n;
-    //     opserr << "epsilon_proj_n = " << epsilon_proj_n;
-    //     opserr << "epsilon_new_n = " << epsilon_new_n;
-    //     print_commit_once = false;
-    // }
+    if (my_element_tag == 83)
+    {
+        opserr << "@ TimeVaryingMaterial::commitState(void) " << endln;
+        opserr << "sigma_real_n = " << sigma_real_n;
+        opserr << "sigma_proj_n = " << sigma_proj_n;
+        opserr << "epsilon_real_n = " << epsilon_real_n;
+        opserr << "epsilon_proj_n = " << epsilon_proj_n;
+        opserr << "epsilon_new_n = " << epsilon_new_n;
+        // print_commit_once = false;
+    }
 
     return theProjectedMaterial->commitState();
 }
 
 int TimeVaryingMaterial::revertToLastCommit(void)
 {
+    sigma_real = sigma_real_n ;
+    // sigma_proj = sigma_proj_n ;
+    epsilon_real = epsilon_real_n ;
+    // epsilon_proj = epsilon_proj_n ;
+    epsilon_new = epsilon_new_n ;
     return theProjectedMaterial->revertToLastCommit();
 }
 
 int TimeVaryingMaterial::revertToStart(void)
 {
+    sigma_real_n.Zero();
+    sigma_proj_n.Zero();
+    epsilon_real_n.Zero();
+    epsilon_proj_n.Zero();
+    epsilon_new_n .Zero();
     return theProjectedMaterial->revertToStart();
 }
 
@@ -488,9 +506,9 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     theCopy->Aepsilon = Aepsilon;
     theCopy->epsilon_internal = epsilon_internal;
     theCopy->sigma_real = sigma_real;
-    theCopy->sigma_proj = sigma_proj;
+    // theCopy->sigma_proj = sigma_proj;
     theCopy->epsilon_real = epsilon_real;
-    theCopy->epsilon_proj = epsilon_proj;
+    // theCopy->epsilon_proj = epsilon_proj;
     theCopy->sigma_real_n = sigma_real_n;
     theCopy->sigma_proj_n = sigma_proj_n;
     theCopy->epsilon_real_n = epsilon_real_n;

@@ -107,7 +107,7 @@ Matrix  TenNodeTetrahedron::damping(NumDOFsTotal, NumDOFsTotal) ;
 const double  TenNodeTetrahedron::alpha = (5.0 + 3.0 * sqrt(5.0)) / 20. ;
 const double  TenNodeTetrahedron::beta = (5.0 - sqrt(5.0)) / 20. ;
 const double  TenNodeTetrahedron::sg[] = { alpha, beta, beta, beta} ;
-const double  TenNodeTetrahedron::wg[] = { 1.0 / 4.0 } ;
+const double  TenNodeTetrahedron::wg[] = { 1.0 / 24. } ;
 
 
 // static Matrix B(NumStressComponents, NumDOFsPerNode) ;
