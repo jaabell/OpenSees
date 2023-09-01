@@ -612,7 +612,6 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
     return NDMaterial::setResponse(argv, argc, s);
 }
 
-
 void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, double& nu, double& A)
 {
     int tag = this->getTag();

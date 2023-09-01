@@ -2120,9 +2120,10 @@ TenNodeTetrahedron::shp3d( const double zeta[4], double &xsj, double shp[4][NumN
     // Saving the Jacobians Determinant
     xsj = Jdet ;
 
-    if (Jdet != Jdet)
+    if (Jdet != Jdet || Jdet < 0.0)
     {
         opserr << "Jdet NAN! " << endln;
+        opserr << "Jdet = " << Jdet << endln;
         opserr << "x1, y1, z1 = " << x1 << " " << y1 << " " << z1 << endln;
         opserr << "x2, y2, z2 = " << x2 << " " << y2 << " " << z2 << endln;
         opserr << "x3, y3, z3 = " << x3 << " " << y3 << " " << z3 << endln;
