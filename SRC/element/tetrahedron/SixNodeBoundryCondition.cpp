@@ -93,7 +93,7 @@ Matrix  SixNodeBoundryCondition::mass(NumDOFsTotal, NumDOFsTotal)    ;
 const double  SixNodeBoundryCondition::alpha = 2.0 / 3.0 ;
 const double  SixNodeBoundryCondition::beta  = 1.0 / 6.0 ;
 const double  SixNodeBoundryCondition::sg[]  = { alpha, beta, beta } ;
-const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 3.0 } ;
+const double  SixNodeBoundryCondition::wg[]  = { 1.0 / 6.0 } ;
 
 // static Matrix B(NumStressComponents, NumDOFsPerNode) ;
 Matrix SixNodeBoundryCondition::B(NumStressComponents, NumDOFsPerNode) ;

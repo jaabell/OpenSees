@@ -178,7 +178,7 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
 
         // Loop through the Gauss points (assumed 4 in this case)
         for (int gp = 1; gp <= 4; gp++) {
-            int dataIndex = 4 * elementIndex + gp;
+            int dataIndex = 4 * elementIndex + gp - 1;
             if (dataIndex < gaussDataEarlier.size() && dataIndex < gaussDataLater.size()) {
                 // Interpolate the temperature change
                 double t = (time - earlierTime) / (laterTime - earlierTime);
