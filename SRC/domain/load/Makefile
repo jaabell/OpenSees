@@ -19,7 +19,8 @@ OBJS       = Load.o \
 	SurfaceLoader.o \
 	SelfWeight.o \
 	LysmerVelocityLoader.o \
-	ThermalHeatSource.o 
+	ThermalHeatSource.o \
+	ThermalBoundaryConditionTemperature.o 
 
 # Compilation control
 

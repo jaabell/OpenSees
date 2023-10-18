@@ -594,6 +594,7 @@
 #define LOAD_TAG_LysmerVelocityLoader     17 // Jose Abell (UANDES)
 #define LOAD_TAG_IGAFollowerLoad          18 // Jose Abell (UANDES)
 #define LOAD_TAG_ThermalHeatSource        19 // Jose Abell (UANDES)
+#define LOAD_TAG_ThermalBoundaryConditionTemperature 20 // Jose Abell (UANDES)
 
 
 #define MAT_TAG_IsotropicLinElastic         1001

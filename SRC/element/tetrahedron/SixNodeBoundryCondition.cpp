@@ -367,7 +367,7 @@ const Matrix&  SixNodeBoundryCondition::getInitialStiff( )
         jj = 0 ;
         for ( j = 0; j < numberNodes; j++ )
         {
-            temp = shp[stiffIndex][j] * dvol[i] * inp_info[0] * inp_info[3] ;
+            temp = shp[stiffIndex][j] * dvol[i] * inp_info[0]  ;
 
             //node-node mass
             kk = 0 ;
@@ -417,14 +417,13 @@ SixNodeBoundryCondition::addLoad(ElementalLoad *theLoad, double loadFactor)
     int type;
     const Vector &data = theLoad->getData(type, loadFactor);
 
-    if (type == LOAD_TAG_BrickSelfWeight) {
+
+    if (type == LOAD_TAG_ThermalBoundaryConditionTemperature) {
+        double T_inf = data(0);
+        // opserr << "Setting temp @ ele # " << this->getTag() << " from " << inp_info[2] << " to " << T_inf << endln;
+        inp_info[2] = T_inf;
         applyLoad = 1;
-        appliedQ += loadFactor * (inp_info[0] * inp_info[2] + inp_info[1]) ;
-        return 0;
-    } else if (type == LOAD_TAG_SelfWeight) {
-        // added compatibility with selfWeight class implemented for all continuum elements, C.McGann, U.W.
-        applyLoad = 1;
-        appliedQ += loadFactor * data(2) * (inp_info[0] * inp_info[2] + inp_info[1]) ;
+        // appliedQ += loadFactor * (inp_info[0] * inp_info[2] + inp_info[1]) ;
         return 0;
     } else {
         opserr << "SixNodeBoundryCondition::addLoad() - ele with tag: " << this->getTag() << " does not deal with load type: " << type << "\n";
@@ -569,16 +568,14 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
         {
             // resid( jj  ) -= dvol[i] * ( (inp_info[0] * inp_info[2] + inp_info[1]) ) * shp[2][j] ;
             // temp = shp[stiffIndex][j] * dvol[i] * inp_info[0] * inp_info[3] ;
-            temp = shp[stiffIndex][j] * dvol[i] * inp_info[3] ;
+            temp = shp[stiffIndex][j] * dvol[i]  ;
             // inp_info[0] = Beta S
             // inp_info[1] = R
             // inp_info[2] = Tinf
             // inp_info[3] = th (espesor)
 
-            if (applyLoad == 0)
-                resid( jj ) -= temp * (inp_info[0] * inp_info[2] + inp_info[1]) ;
-            else
-                resid( jj ) -= temp * appliedQ ;
+
+            resid( jj ) -= temp * (inp_info[0] * inp_info[2] + inp_info[1]) ;
 
             if ( tangFlag == 1 )
             {
@@ -586,7 +583,7 @@ void   SixNodeBoundryCondition::formResidAndTangent( int tangFlag )
                 kk = 0 ;
                 for ( k = 0; k < numberNodes; k++ )
                 {
-                    stiffJK = temp * shp[stiffIndex][k] ;
+                    stiffJK = temp * shp[stiffIndex][k] * inp_info[0];
                     for ( p = 0; p < ndf; p++ )
                     {
                         stiff( jj + p, kk + p ) += stiffJK ;

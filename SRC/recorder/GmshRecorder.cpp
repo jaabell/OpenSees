@@ -38,7 +38,7 @@
 #include <Channel.h>
 
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
 #include <MachineBroker.h>
 #include <Graph.h>
 #include <Vertex.h>
@@ -46,7 +46,7 @@
 #include <mpi.h>
 #endif
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
 extern MachineBroker *theMachineBroker;
 #endif
 
@@ -292,7 +292,7 @@ GmshRecorder::write_mesh()
     }
     int rank = 0;
     int nproc = 1;
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank = theMachineBroker->getPID();  
     nproc = theMachineBroker->getNP();  
 #endif
@@ -417,7 +417,7 @@ GmshRecorder::write_node_data()
     
     int rank = 0;
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank = theMachineBroker->getPID();  
 #endif
 
@@ -531,7 +531,7 @@ GmshRecorder::write_eleupdatetime_now()
     int rank = 0; 
     int nproc = 1;
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank =theMachineBroker->getPID();  
     nproc =theMachineBroker->getNP();  
 #endif 
@@ -655,7 +655,7 @@ GmshRecorder::write_element_data()
     int rank = 0; 
     int nproc = 1;
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank =theMachineBroker->getPID();  
     nproc =theMachineBroker->getNP();  
 #endif 
@@ -812,7 +812,7 @@ GmshRecorder::write_element_graph()
     int rank = 0; 
     int nproc = 1; 
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank = theMachineBroker->getPID();  
     nproc = theMachineBroker->getNP();  
 
@@ -938,7 +938,7 @@ GmshRecorder::write_element_graph()
 
         int start_tag = maxvertextag;
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
         numvertex_proc[rank] = numvertex;
         // maxvertextag
         int maxvertextag_all;
@@ -1012,7 +1012,7 @@ GmshRecorder::write_update_time_now()
     int nproc = 1; 
     static std::ofstream* theUpdateTimeFilePtr = 0;
 
-#ifdef _PARALLEL_PROCESSING
+#if defined(_PARALLEL_PROCESSING) || defined(_PARALLEL_INTERPRETERS)
     rank = theMachineBroker->getPID();  
     nproc = theMachineBroker->getNP();  
 #endif

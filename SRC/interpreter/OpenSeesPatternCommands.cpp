@@ -64,6 +64,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <InterpolatedGroundMotion.h>
 #include <IGAFollowerLoad.h>
 #include <ThermalHeatSource.h>
+#include <ThermalBoundaryConditionTemperature.h>
 
 void* OPS_LoadPattern();
 void* OPS_UniformExcitationPattern();
@@ -599,7 +600,7 @@ int OPS_ElementalLoad()
 	double data[1] = {0.0};
 	int numdata = OPS_GetNumRemainingInputArgs();
 	if (numdata < 1) {
-	    opserr<<"WARNING eleLoad - ThermalHeatSource want q?\n";
+	    opserr<<"WARNING eleLoad -ThermalHeatSource want q?\n";
 	    return -1;
 	}
     	opserr << "Read numdata =  " << numdata << "" << endln;
@@ -629,7 +630,48 @@ int OPS_ElementalLoad()
 	    eleLoadTag++;
 	}
 	return 0;
+    }//-ThermalBoundaryConditionTemperature
+    // Added: José Luis Larenas and José A. Abell (UANDES, Chile) www.joseabell.com
+    else if ((strcmp(type,"-ThermalBoundaryConditionTemperature") == 0)) {
+
+    	opserr << "Creating ThermalBoundaryConditionTemperature" << endln;
+
+	// xf, yf, zf
+	double factor = 1.;
+	int numdata = OPS_GetNumRemainingInputArgs();
+	if (numdata < 1) {
+	    opserr<<"WARNING eleLoad -ThermalBoundaryConditionTemperature want factor?\n";
+	    return -1;
+	}
+    	opserr << "Read numdata =  " << numdata << "" << endln;
+	if (numdata > 1) numdata = 1;
+	if (OPS_GetDoubleInput(&numdata, &factor) < 0) {
+	    opserr<<"WARNING eleLoad - invalid value for ThermalHeatSource\n";
+	    return -1;
+	}
+	for (int i=0; i<theEleTags.Size(); i++) {
+	    theLoad = new ThermalBoundaryConditionTemperature(eleLoadTag,  theEleTags(i), factor);
+
+	    if (theLoad == 0) {
+		opserr << "WARNING eleLoad - out of memory creating load of type " << type;
+		return -1;
+	    }
+
+	    // get the current pattern tag if no tag given in i/p
+	    int loadPatternTag = theActiveLoadPattern->getTag();
+
+	    // add the load to the domain
+	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+		opserr << theLoad;
+		delete theLoad;
+		return -1;
+	    }
+	    eleLoadTag++;
+	}
+	return 0;
     }
+
     //--Adding identifier for Beam2dThermalAction:[BEGIN] by UoE OpenSees Group--//
     else if (strcmp(type,"-beamThermal") == 0) {
 

@@ -77,6 +77,7 @@
 #include <SurfaceLoader.h>
 #include <SelfWeight.h>
 #include <ThermalHeatSource.h>
+#include <ThermalBoundaryConditionTemperature.h>
 
 
 #include <LoadPattern.h>
@@ -1932,6 +1933,7 @@ int
 TclCommand_addElementalLoad(ClientData clientData, Tcl_Interp *interp, int argc,   
 			 TCL_Char **argv)
 {
+
   // ensure the destructor has not been called - 
   if (theTclBuilder == 0) {
     opserr << "WARNING current builder has been destroyed - eleLoad\n";    
@@ -2551,7 +2553,7 @@ TclCommand_addElementalLoad(ClientData clientData, Tcl_Interp *interp, int argc,
   }
   //-----------------Adding tcl command for shell thermal action, 2013..[End]-----------------------
 
-  else if (strcmp(argv[count], "-ThermalWrapper") == 0 || strcmp(argv[count], "-thermalWrapper") == 0) {
+  else if (strcmp(argv[count], "-ThermalWrapper") == 0 || strcmp(argv[count], "3lWrapper") == 0) {
 
 	  count++;
 	  Vector loc = 0;;
@@ -3276,11 +3278,44 @@ TclCommand_addElementalLoad(ClientData clientData, Tcl_Interp *interp, int argc,
   	// One thermal heat source
   	if (argc - count == 1) {
   		if (Tcl_GetDouble(interp, argv[count], &q) != TCL_OK) {
-  			opserr << "WARNING eleLoad - invalid Ttop1 " << argv[count] << " for -beamTemp\n";
+  			opserr << "WARNING eleLoad - invalid factor " << argv[count] << " for -ThermalHeatSource\n";
   			return TCL_ERROR;
   		}
   		for (int i = 0; i < theEleTags.Size(); i++) {
   			theLoad = new ThermalHeatSource(eleLoadTag, theEleTags(i), q);
+  			if (theLoad == 0) {
+  				opserr << "WARNING eleLoad - out of memory creating load of type " << argv[count] ;
+  				return TCL_ERROR;
+  			}
+  			// get the current pattern tag if no tag given in i/p
+  			int loadPatternTag = theTclLoadPattern->getTag();
+  			// add the load to the domain
+  			if (theTclDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+  				opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+  				opserr << theLoad;
+  				delete theLoad;
+  				return TCL_ERROR;
+  			}
+  			eleLoadTag++;
+  		}
+  		return 0;
+  	}
+  }
+    // Added by José A. Abell  - UANDES
+  else if (strcmp(argv[count], "-ThermalBoundaryConditionTemperature") == 0) {
+
+  	opserr << "Adding ThermalBoundaryConditionTemperature" << endln;
+
+  	count++;
+  	double factor = 1.;
+  	// One thermal heat source
+  	if (argc - count == 1) {
+  		if (Tcl_GetDouble(interp, argv[count], &factor) != TCL_OK) {
+  			opserr << "WARNING eleLoad - invalid factor " << argv[count] << " for -ThermalBoundaryConditionTemperature\n";
+  			return TCL_ERROR;
+  		}
+  		for (int i = 0; i < theEleTags.Size(); i++) {
+  			theLoad = new ThermalBoundaryConditionTemperature(eleLoadTag, theEleTags(i), factor);
   			if (theLoad == 0) {
   				opserr << "WARNING eleLoad - out of memory creating load of type " << argv[count] ;
   				return TCL_ERROR;
