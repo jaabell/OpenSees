@@ -1289,6 +1289,7 @@ DOMAIN_LIBS =  $(FE)/domain/component/DomainComponent.o \
 	$(FE)/domain/load/SurfaceLoader.o \
 	$(FE)/domain/load/ThermalHeatSource.o \
 	$(FE)/domain/load/LysmerVelocityLoader.o \
+	$(FE)/domain/load/ThermalBoundaryConditionTemperature.o .o \
 	$(FE)/domain/load/SelfWeight.o \
 	$(FE)/domain/pattern/LoadPattern.o \
 	$(FE)/domain/pattern/FireLoadPattern.o \
