@@ -46,7 +46,7 @@ class Vector;
 class ThermalVolumetricLoadingPattern : public LoadPattern
 {
   public:
-    ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_);
+    ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_, std::string add_epsilon_filename_);
     virtual ~ThermalVolumetricLoadingPattern();
 
     void setDomain(Domain *theDomain);
@@ -78,9 +78,14 @@ class ThermalVolumetricLoadingPattern : public LoadPattern
     double alpha;
     std::string elements_filename; 
     std::string gausstemps_filename;
+    std::string add_epsilon_filename_;
+    std::string eps;
     double currentTime;
 
     std::vector<int> elementTags ;
+
+    std::vector<double> t_epsilon_add ;
+    std::vector<double> epsilon_add ;
 
 // AddingSensitivity:BEGIN //////////////////////////////////////////
     int parameterID;

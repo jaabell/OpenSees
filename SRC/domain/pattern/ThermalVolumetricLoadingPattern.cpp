@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <sstream>
 
+#include <vector>
 
 /**
  * ThermalVolumetricLoadingPattern constructor.
@@ -59,7 +60,72 @@
  * @param elements_filename_ String, name of the file containing element tags
  * @param gausstemps_filename_ String, name of the file containing Gauss temperature data
  */
-ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_)
+
+
+std::pair<std::vector<double>, std::vector<double>> readTwoColumnFile(const std::string& filename) {
+    std::ifstream file(filename);
+    std::vector<double> column1, column2;
+
+    if (filename.empty() || !file.is_open()) {
+        std::cerr << "Error: Could not open the file or filename is empty." << std::endl;
+        return {{0.0}, {0.0}};
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream iss(line);
+        double value1, value2;
+        if (iss >> value1 >> value2) {
+            column1.push_back(value1);
+            column2.push_back(value2);
+        } else {
+            std::cerr << "Error: Malformed line in the file." << std::endl;
+        }
+    }
+
+    file.close();
+
+    if (column1.empty() || column2.empty()) {
+        return {{0.0}, {0.0}};
+    }
+
+    std::cout << "Read! " << filename << std::endl;
+
+
+    return {column1, column2};
+}
+
+
+double interpolate(const std::vector<double>& times, const std::vector<double>& values, double queryTime) {
+    if (times.size() != values.size() || times.empty()) {
+        throw std::invalid_argument("Invalid input data.");
+    }
+
+    if (queryTime <= times.front()) {
+        return values.front();
+    }
+
+    if (queryTime >= times.back()) {
+        return values.back();
+    }
+
+    for (size_t i = 0; i < times.size() - 1; ++i) {
+        if (queryTime >= times[i] && queryTime <= times[i + 1]) {
+            double t0 = times[i];
+            double t1 = times[i + 1];
+            double v0 = values[i];
+            double v1 = values[i + 1];
+
+            double weight = (queryTime - t0) / (t1 - t0);
+            return v0 + weight * (v1 - v0);
+        }
+    }
+
+    throw std::out_of_range("Query time out of range.");
+}
+
+
+ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_, std::string add_epsilon_filename_)
   :LoadPattern(tag, PATTERN_TAG_ThermalVolumetricLoadingPattern),  
   alpha(alpha_),
   elements_filename(elements_filename_),
@@ -71,6 +137,7 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
   opserr << " alpha               = " << alpha << endln;
   opserr << " elements_filename   = " << elements_filename.c_str() << endln;
   opserr << " gausstemps_filename = " << gausstemps_filename.c_str() << endln;
+  opserr << " add_epsilon_filename = " << add_epsilon_filename_.c_str() << endln;
 
   std::ifstream file(elements_filename);
   if (!file) {
@@ -82,6 +149,17 @@ ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double
                std::istream_iterator<int>());
 
   elementTags = elementTags_ ;
+
+  auto [t_epsilon_add_, epsilon_add_] = readTwoColumnFile(add_epsilon_filename_);
+
+  t_epsilon_add = t_epsilon_add_ ;
+  epsilon_add = epsilon_add_ ;
+
+  opserr << "t_epsilon_add.size() = " << (int) t_epsilon_add.size() << endln;
+  for (int i = 0; i < t_epsilon_add.size(); ++i)
+  {
+      std::cout << t_epsilon_add[i] << " " << epsilon_add[i] << std::endl;
+  }
 }
 
 
@@ -172,9 +250,22 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
     double deltaEpsilon = 0.;
     int elementIndex = 0;
 
+    double  epsilon_add_at_t = 0;
+
+    if((int) t_epsilon_add.size() > 1)
+    {   
+        epsilon_add_at_t = interpolate(t_epsilon_add, epsilon_add, time);
+        opserr << "at time = " << time << "  epsilon_add_at_t =  " <<  epsilon_add_at_t << endln;
+    } else
+    {
+        opserr << "skipping at time = " << time << endln;
+        opserr << "skipping at t_epsilon_add.size() = " << (int) t_epsilon_add.size() << endln;
+    }
+
     // Loop through the element tags
     for (int eleTag : elementTags) {
         Element* theElement = this->getDomain()->getElement(eleTag);
+
 
         // Loop through the Gauss points (assumed 4 in this case)
         for (int gp = 1; gp <= 4; gp++) {
@@ -186,6 +277,10 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
 
                 // Calculate the strain
                 deltaEpsilon = alpha * tempChange;
+
+                //Increment using the additional epsilon
+
+                deltaEpsilon += epsilon_add_at_t;
 
                 // Update the initial normal strain
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
