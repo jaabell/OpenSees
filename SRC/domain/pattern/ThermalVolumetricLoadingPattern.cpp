@@ -251,11 +251,17 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
     int elementIndex = 0;
 
     double  epsilon_add_at_t = 0;
+    double  epsilon_add_at_earlier_t = 0;
+    double  delta_epsilon_add = 0;
 
     if((int) t_epsilon_add.size() > 1)
     {   
         epsilon_add_at_t = interpolate(t_epsilon_add, epsilon_add, time);
+        epsilon_add_at_earlier_t = interpolate(t_epsilon_add, epsilon_add, earlierTime);
+        delta_epsilon_add = epsilon_add_at_t - epsilon_add_at_earlier_t;
         opserr << "at time = " << time << "  epsilon_add_at_t =  " <<  epsilon_add_at_t << endln;
+        opserr << "at earlierTime = " << time << "  epsilon_add_at_earlier_t =  " <<  epsilon_add_at_earlier_t << endln;
+        opserr << "        delta_epsilon_add =  " <<  delta_epsilon_add << endln;
     } else
     {
         opserr << "skipping at time = " << time << endln;
@@ -280,7 +286,7 @@ ThermalVolumetricLoadingPattern::applyLoad(double time)
 
                 //Increment using the additional epsilon
 
-                deltaEpsilon += epsilon_add_at_t;
+                deltaEpsilon += delta_epsilon_add;
 
                 // Update the initial normal strain
                 const char* argv[3] = {"material", std::to_string(gp).c_str(), "initNormalStrain"};
