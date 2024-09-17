@@ -27,6 +27,8 @@
 #include <algorithm>				/*min, max*/
 #include <DummyStream.h>
 
+#include <limits>
+
 using namespace std;
 
 // Read input parameters and build the section
