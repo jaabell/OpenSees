@@ -73,10 +73,9 @@ public:
             result = result / den;
 
         return result;
-
     }
     
-    YIELD_FUNCTION_XI_STAR_H_STAR
+    YIELD_FUNCTION_HARDENING
     {
         double dbl_result = 0.0;
 
@@ -99,19 +98,10 @@ public:
         }
 
         auto df_dalpha = -(s - alpha) / den;
-        dbl_result +=  df_dalpha.dot(GET_INTERNAL_VARIABLE_HARDENING(AlphaHardeningType));
+        VoigtVector hh = GET_INTERNAL_VARIABLE_HARDENING(AlphaHardeningType);
+        dbl_result +=  df_dalpha.dot(hh);
 
         return dbl_result;
-    }
-
-    bool hasCorner() const{
-        return false;
-    }
-
-    bool in_Apex(VoigtVector const& TrialStress)
-    {
-        std::cout<<"von Mises yield surface does not have a corner. This function should never be callled!"<<std::endl;
-        return false;
     }
 
     using internal_variables_t = std::tuple<AlphaHardeningType, KHardeningType>;

@@ -65,40 +65,6 @@
 #include <fstream>
 
 #define ASDPlasticMaterial3D_MAXITER_BRENT 50
-#define TOLERANCE1 1e-6
-/*
-
-YieldFunctionType, ElasticityType, PlasticFlowType, HardeningLawType are the user-defined classes
-that provide the different components of this elastoplastic model. Called Base Elastoplastic Template
-Classes (BET Classes)
-
-* All BET Classes  must provide:
-
-C++ "Rule of 5"
- + An empty constructor (default constructor)
- + A copy constructor
- + A copy assignment operator
- + A move constructor
- + A move assign operator
-...and
- + A name member function that returns a std::string. For example.
-    SomeYieldFunctionType yf(...parameters...);
-    std::string name = yf.name();
- + A getObjectSize() function. Returnig size in bytes of the object in memory.
-
-
-* YieldFunctionType must additionally provide
-
-
-
-* ElasticityType must additionally provide
-
-
-
-* PlasticFlowType must additionally provide
-
-*/
-
 
 
 using namespace ASDPlasticMaterial3DGlobals;
@@ -275,20 +241,6 @@ public:
     {
 
         int exitflag = -1;
-
-        double max_component = 0.0;
-        for (int i = 0; i < 6; ++i)
-            if (max_component < abs(strain_increment(i)))
-            {
-                max_component = abs(strain_increment(i));
-            }
-
-        if (max_component == 0)
-        {
-            exitflag = 0;
-            return exitflag;
-        }
-        // ==========================================
 
         switch (INT_OPT_constitutive_integration_method[this->getTag()])
         {
@@ -731,7 +683,7 @@ public:
             INT_OPT_n_max_iterations[tag] = n_max_iterations ;
             INT_OPT_return_to_yield_surface[tag] = return_to_yield_surface ;
 
-            cout << "set_constitutive_integration_method:" << endl;
+            cout << "set_constitutive_integration_method tag = " << tag << " ::: " << endl;
             cout << "   method = " << method << endl;
             cout << "   f_relative_tol = " << f_relative_tol << endl;
             cout << "   stress_relative_tol = " << stress_relative_tol << endl;
@@ -838,7 +790,8 @@ private:
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-                double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, TOLERANCE1 );
+            	double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
                 intersection_factor = intersection_factor > 1 ? 1 : intersection_factor;
@@ -1056,7 +1009,8 @@ private:
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-                double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, TOLERANCE1 );
+            	double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
                 intersection_factor = intersection_factor > 1 ? 1 : intersection_factor;

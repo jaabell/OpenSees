@@ -9,7 +9,7 @@ EL = [
 YF = [
     "VonMises_YF",
     "DruckerPrager_YF",
-    # "RoundedMohrCoulomb_YF",
+    "MohrCoulomb_YF",
 ]
 
 PF = [
@@ -22,13 +22,13 @@ IV_YF = {}
 
 IV_YF["VonMises_YF"] = [
     "BackStress<TensorLinearHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
-    # "BackStress<ArmstrongFrederickHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
+    "BackStress<ArmstrongFrederickHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
 ]
 
 IV_YF["DruckerPrager_YF"] = IV_YF["VonMises_YF"] 
 
-IV_YF["RoundedMohrCoulomb_YF"] = [
-    "ScalarInternalVariable<ScalarLinearHardeningFunction>"
+IV_YF["MohrCoulomb_YF"] = [
+    "ScalarInternalVariable<NullHardeningScalarFunction>"
 ]
 
 
@@ -41,7 +41,7 @@ IV_PF = {
     "DruckerPrager_PF":
     [
     "BackStress<TensorLinearHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
-    # "BackStress<ArmstrongFrederickHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
+    "BackStress<ArmstrongFrederickHardeningFunction>,VonMisesRadius<ScalarLinearHardeningFunction>",
     ]
 }
 

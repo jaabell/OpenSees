@@ -65,7 +65,7 @@ struct yf_has_internal_variables_t<T, typename std::enable_if<!std::is_same<type
         const IVStorageType& internal_variables_storage, \
         const ParameterStorageType& parameters_storage)
 
-#define YIELD_FUNCTION_XI_STAR_H_STAR template <typename IVStorageType, typename ParameterStorageType> \
+#define YIELD_FUNCTION_HARDENING template <typename IVStorageType, typename ParameterStorageType> \
     double hardening(const VoigtVector& depsilon, \
         const VoigtVector& m, \
         const VoigtVector& sigma,\
@@ -99,7 +99,7 @@ public:
         return static_cast<T*>(this)->df_dsigma_ij(sigma, internal_variables_storage, parameters_storage);
     }
 
-    YIELD_FUNCTION_XI_STAR_H_STAR
+    YIELD_FUNCTION_HARDENING
     {
         return static_cast<T*>(this)->df_dxi_star_h_star(depsilon, m , sigma, internal_variables_storage, parameters_storage);
     }

@@ -39,7 +39,7 @@ struct LinearHardeningForTensorPolicy {
     HARDENING_FUNCTION_DEFINITION
     {
         double H = GET_PARAMETER_VALUE(TensorLinearHardeningParameter);
-        auto h = H * m.deviator();
+        VoigtVector h = H * m.deviator();  // best not to use 'auto' here
         return h;
     }
     using parameters_t = tuple<TensorLinearHardeningParameter>;
@@ -56,7 +56,27 @@ struct LinearHardeningForScalarPolicy {
     using parameters_t = tuple<ScalarLinearHardeningParameter>;
 };
 
-// struct ScalarExponentialLinear {
+struct NullHardeningScalarPolicy {
+    static constexpr const char* NAME = "NullHardeningScalarFunction";
+    HARDENING_FUNCTION_DEFINITION 
+    {
+        double zero=0;
+        return zero;
+    }
+    using parameters_t = tuple<>;
+};
+
+struct NullHardeningVectorPolicy {
+    static constexpr const char* NAME = "NullHardeningVectorFunction";
+    HARDENING_FUNCTION_DEFINITION 
+    {
+        VoigtVector zero;
+        return zero;
+    }
+    using parameters_t = tuple<>;
+};
+
+// struct ExponentialHardeningForScalarPolicy {
 //     static constexpr const char* NAME = "ScalarExponentialLinear";
 //     HARDENING_FUNCTION_DEFINITION 
 //     {
@@ -103,7 +123,10 @@ struct ArmstrongFrederickPolicy {
 // Aliases for HardeningFunction with specific hardening policies
 using TensorLinearHardeningFunction = HardeningFunction<VoigtVector, LinearHardeningForTensorPolicy>;
 using ScalarLinearHardeningFunction = HardeningFunction<VoigtScalar, LinearHardeningForScalarPolicy>;
+// using ScalarExponentialHardeningFunction = HardeningFunction<VoigtScalar, ExponentialHardeningForScalarPolicy>;
 using ArmstrongFrederickHardeningFunction = HardeningFunction<VoigtVector, ArmstrongFrederickPolicy>;
+using NullHardeningScalarFunction = HardeningFunction<VoigtScalar, NullHardeningScalarPolicy>;
+using NullHardeningTensorFunction = HardeningFunction<VoigtVector, NullHardeningVectorPolicy>;
 
 
 #endif //not defined _AllASDHardeningFunctions
