@@ -63,14 +63,14 @@ struct yf_has_internal_variables_t<T, typename std::enable_if<!std::is_same<type
 #define YIELD_FUNCTION_STRESS_DERIVATIVE template <typename IVStorageType, typename ParameterStorageType> \
     const VoigtVector& df_dsigma_ij(const VoigtVector& sigma, \
         const IVStorageType& internal_variables_storage, \
-        const ParameterStorageType& parameters_storage)
+        const ParameterStorageType& parameters_storage) const
 
 #define YIELD_FUNCTION_HARDENING template <typename IVStorageType, typename ParameterStorageType> \
     double hardening(const VoigtVector& depsilon, \
         const VoigtVector& m, \
         const VoigtVector& sigma,\
         const IVStorageType& internal_variables_storage,\
-        const ParameterStorageType& parameters_storage)
+        const ParameterStorageType& parameters_storage) const
 
 #define GET_INTERNAL_VARIABLE_HARDENING(type) \
     internal_variables_storage.template get<type> ().hardening_function(depsilon, m, sigma, parameters_storage)

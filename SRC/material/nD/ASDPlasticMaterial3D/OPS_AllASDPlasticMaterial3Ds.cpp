@@ -72,6 +72,7 @@ void print_usage(void)
        "    n_max_iterations (int value)\\ \n"
        "    return_to_yield_surface (0 or 1)\\ \n"
        "    method (string) : Forward_Euler | Runge_Kutta_45_Error_Control\\ \n"
+       "    tangent (string) : Elastic | Numerical_Algorithmic\\ \n"
        "End_Integration_Options \\ \n"
        "\n";
 }
@@ -380,6 +381,8 @@ void populate_ASDPlasticMaterial3D(T* instance)
                         tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Continuum;
                     else if (std::strcmp(tangent_type_name, "Secant") == 0)
                         tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Secant;
+                    else if (std::strcmp(tangent_type_name, "Numerical_Algorithmic") == 0)
+                        tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic;
                     else
                     {
                         cout << "WARNING! Unrecognised ASDPlasticMaterial3D_Tangent_Operator_Type name " << tangent_type_name << endl;

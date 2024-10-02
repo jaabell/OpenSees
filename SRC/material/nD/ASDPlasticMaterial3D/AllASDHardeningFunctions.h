@@ -106,12 +106,42 @@ struct ArmstrongFrederickPolicy {
         double cr = GET_PARAMETER_VALUE(AF_cr);
 
         auto alpha = current_value;
+        auto alpha_dev = alpha.deviator();
 
+
+        auto eq_norm = [](VoigtVector v){  return sqrt((2./3.)*v.squaredNorm());};
 
         auto mdev = m.deviator();
-        
+        double mdev_eq = eq_norm(mdev);
+        auto dEPS_dev = depsilon.deviator();
+        double dEPS_dev_eq = eq_norm(dEPS_dev);
+        double alpha_norm = eq_norm(alpha_dev);
+        // double alpha_norm = alpha_dev.norm();
+        // double alpha_limit = sqrt(2. / 3.) * ha / cr;
+        double alpha_limit =  ha / cr;
+
+        cout << "depsilon    = " << depsilon.transpose() << endl;
+        cout << "m           = " << m.transpose() << endl;
+        cout << "mdev        = " << mdev.transpose() << endl;
+        cout << "alpha       = " << alpha.transpose() << endl;
+        cout << "alpha_norm  = " << alpha_norm << "  <= alpha_limit = " << alpha_limit <<  endl;
+        VoigtVector derivative;
+
         //Compute the derivative (hardening function)
-        auto derivative =  (2. / 3.) * ha * mdev - cr * sqrt((2. / 3.) * mdev.dot(mdev)) * alpha;
+        if (alpha_norm >= alpha_limit)
+        {
+            cout << "Saturation!" << endl;
+            derivative *= 0;  // Take care of the saturation limit in case of overshooting
+        }
+        else
+        {
+            derivative =   ha * mdev - cr * mdev_eq * alpha_dev;
+            // derivative =  (2. / 3.) * ha * mdev - cr * sqrt((2. / 3.) * mdev.dot(mdev)) * alpha_dev;
+            // derivative =  (2. / 3.) * ha * mdev - cr * sqrt((2. / 3.) * mdev.dot(mdev)) * alpha;
+            // derivative =  (2. / 3.) * ha * mdev - cr * sqrt((2. / 3.) * mdev.dot(mdev)) * alpha;
+            // derivative =  ha * dEPS_dev - cr * dEPS_dev_eq * alpha_dev;
+        }
+        cout << "----> derivative = " << derivative.transpose() << endl;
 
         return derivative;
 

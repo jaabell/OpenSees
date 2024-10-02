@@ -389,6 +389,10 @@ public:
             VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
             Stiffness = Eelastic;
         }
+        else if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic)
+        {
+            compute_numerical_tangent(TrialStrain-CommitStrain, Stiffness);
+        }
         // else if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Continuum)
         // {
 
@@ -418,6 +422,162 @@ public:
         //     Stiffness = (Econtinuum + Eelastic)/2;
         // }
     }
+
+    int compute_local_stress(
+        const VoigtVector& local_stress, const VoigtVector& local_strain,
+        const VoigtVector& strain_incr, VoigtVector& stress_incr) const
+    {
+        using namespace ASDPlasticMaterial3DGlobals;
+
+        // Initialize local variables for stress and strain increments
+        VoigtVector depsilon = strain_incr;  // Strain increment (perturbation)
+        VoigtVector dsigma = VoigtVector();  // Stress increment
+        VoigtVector trial_stress = VoigtVector();  // Trial stress
+
+        // Compute elastic stiffness matrix based on the local stress and parameters
+        VoigtMatrix Eelastic = et(local_stress, parameters_storage);  // Elasticity tensor
+        
+        // Compute the elastic stress increment: dsigma = E * depsilon
+        dsigma = Eelastic * depsilon;
+        
+        // Compute the trial stress
+        trial_stress = local_stress + dsigma;
+
+        // // Evaluate the yield function for the current stress and trial stress
+        double yf_val_start = yf(local_stress, iv_storage, parameters_storage);
+        double yf_val_end = yf(trial_stress, iv_storage, parameters_storage);
+
+        // Check if the material response is elastic or plastic
+        if ((yf_val_start <= 0.0 && yf_val_end <= 0.0) || yf_val_start > yf_val_end) {
+            // Elastic response: no plastic correction
+            stress_incr = dsigma;  // Stress increment is purely elastic
+        } else {
+            // Plastic response: need to apply plastic correction
+            // Compute plastic correction by finding the intersection of the yield surface
+            VoigtVector intersection_stress = local_stress;
+            VoigtVector intersection_strain = local_strain;
+            depsilon_elpl = strain_incr;
+
+            if (yf_val_start < 0) {
+                // Find the intersection of the yield surface between the start and trial stress
+                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double intersection_factor = compute_yf_crossing(
+                    local_stress, trial_stress, 0.0, 1.0, tol_yf);
+                
+                // Ensure the intersection factor is within valid bounds [0, 1]
+                intersection_factor = std::max(0.0, std::min(1.0, intersection_factor));
+
+                // Compute the intersection stress and strain
+                intersection_stress = local_stress * (1 - intersection_factor) +
+                                      trial_stress * intersection_factor;
+                intersection_strain = local_strain + depsilon * intersection_factor;
+                depsilon_elpl = (1 - intersection_factor) * strain_incr;
+            }
+
+            // The trial stress is updated based on the intersection
+            // stress_incr = intersection_stress - local_stress;
+            trial_stress = intersection_stress;
+
+            Eelastic = et(intersection_stress, parameters_storage);
+            trial_stress  += Eelastic * depsilon_elpl;
+
+            //Compute normal to YF (n) and Plastic Flow direction (m)
+            const VoigtVector& n = yf.df_dsigma_ij(intersection_stress, iv_storage, parameters_storage);
+            const VoigtVector& m = pf(depsilon_elpl, intersection_stress, iv_storage, parameters_storage);
+
+            double hardening = yf.hardening( depsilon_elpl, m,  intersection_stress, iv_storage, parameters_storage);
+            double den = n.transpose() * Eelastic * m - hardening;
+
+            //Compute the plastic multiplier
+            if (abs(den) < MACHINE_EPSILON)
+            {
+                cout << "CEP - den = 0\n";
+                cout << "yf_val_start = " << yf_val_start << endl;
+                cout << "yf_val_end = " << yf_val_end << endl;
+                printTensor1("m", m);
+                printTensor1("n", n);
+                cout << "hardening = " << hardening << endl;
+                cout << "den = " << den << endl;
+                printTensor1("depsilon_elpl", depsilon_elpl);
+                return -1;
+            }
+
+            double dLambda =  n.transpose() * Eelastic * depsilon_elpl;
+            dLambda /= den;
+
+            if (dLambda <= 0)
+            {
+                cout << "CEP - dLambda = " << dLambda << " <= 0\n";
+                printTensor1("m", m);
+                printTensor1("n", n);
+                cout << "hardening = " << hardening << endl;
+                cout << "den = " << den << endl;
+                printTensor1("depsilon_elpl", depsilon_elpl);
+            }
+
+            trial_stress = trial_stress - dLambda * Eelastic * m;
+        }
+
+        stress_incr = trial_stress - CommitStress;
+
+        return 0;  // Return success
+    }
+
+
+
+int compute_numerical_tangent(
+    const VoigtVector& strain_incr, VoigtMatrix& tangent_matrix, double epsilon_ref = 1e-6, double delta_min = 1e-12)
+{
+    using namespace ASDPlasticMaterial3DGlobals;
+
+    // cout << "strain_incr = " << strain_incr.transpose() << endl;
+    // cout << "epsilon_ref = " << epsilon_ref << endl;
+    // cout << "delta_min = " << delta_min << endl;
+
+    // Number of strain and stress components (Voigt notation in 3D: 6 components)
+    const int n = 6;
+
+    // Initialize the local copies of stress and strain
+    VoigtVector local_stress = CommitStress;
+    VoigtVector local_strain = CommitStrain;
+
+    // Allocate memory for perturbed stress and strain
+    VoigtVector perturbed_stress;
+    VoigtVector perturbed_strain;
+
+    // Compute initial stress increment for the given strain increment (unperturbed)
+    VoigtVector initial_stress_incr;
+    compute_local_stress(local_stress, local_strain, strain_incr, initial_stress_incr);
+
+    // cout << "local_stress = " << local_stress.transpose() << endl;
+    // cout << "initial_stress_incr = " << initial_stress_incr.transpose() << endl;
+    double delta = std::max(epsilon_ref * strain_incr.norm(), delta_min);
+    // cout << "delta = " << delta << endl;
+
+    // Loop over each strain component to compute the tangent matrix via finite differences
+    for (int i = 0; i < n; ++i) {
+        // Compute adaptive delta based on the current strain component
+
+        // Perturb the i-th strain component by the adaptive delta
+        VoigtVector strain_incr_perturbed = strain_incr;
+        strain_incr_perturbed(i) += delta;
+
+        // Compute the local stress for the perturbed strain increment
+        compute_local_stress(local_stress, local_strain, strain_incr_perturbed, perturbed_stress);
+
+        // cout << "        strain_incr_perturbed = " << strain_incr_perturbed.transpose() << endl;
+        // cout << "        perturbed_stress = " << perturbed_stress.transpose() << endl;
+        // Finite difference approximation of the tangent matrix (column i)
+        for (int j = 0; j < n; ++j) {
+            tangent_matrix(j, i) = (perturbed_stress(j) - initial_stress_incr(j)) / delta;
+        }
+    }
+
+    // cout << "tangent_matrix = \n" << tangent_matrix << endl;
+
+    return 0; // Return success
+}
+
 
     const Matrix& getTangent()
     {
@@ -685,6 +845,7 @@ public:
 
             cout << "set_constitutive_integration_method tag = " << tag << " ::: " << endl;
             cout << "   method = " << method << endl;
+            cout << "   tanget_type = " << tangent << endl;
             cout << "   f_relative_tol = " << f_relative_tol << endl;
             cout << "   stress_relative_tol = " << stress_relative_tol << endl;
             cout << "   n_max_iterations = " << n_max_iterations << endl;
@@ -790,7 +951,7 @@ private:
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-            	double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
                 double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
@@ -1009,7 +1170,7 @@ private:
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-            	double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
                 double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
