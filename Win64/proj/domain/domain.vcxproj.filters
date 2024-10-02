@@ -306,6 +306,9 @@
     <ClCompile Include="..\..\..\SRC\domain\load\ThermalActionWrapper.cpp">
       <Filter>load</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\domain\load\ThermalHeatSource.cpp">
+      <Filter>load</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\domain\load\ShellThermalAction.cpp">
       <Filter>load\shell</Filter>
     </ClCompile>
@@ -332,6 +335,9 @@
     </ClCompile>
     <ClCompile Include="..\..\..\SRC\domain\pattern\MPAccSeries.cpp">
       <Filter>timeSeries</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\domain\pattern\ThermalVolumetricLoadingPattern.cpp">
+      <Filter>pattern</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -590,6 +596,9 @@
     <ClInclude Include="..\..\..\SRC\domain\load\ThermalActionWrapper.h">
       <Filter>load</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\SRC\domain\load\ThermalHeatSource.h">
+      <Filter>load</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\load\ShellThermalAction.h">
       <Filter>load\shell</Filter>
     </ClInclude>
@@ -613,6 +622,9 @@
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\pattern\RampSeries.h">
       <Filter>timeSeries</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\domain\pattern\ThermalVolumetricLoadingPattern.h">
+      <Filter>pattern</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

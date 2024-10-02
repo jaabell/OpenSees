@@ -21,6 +21,8 @@ target_sources(OPS_Domain
     SurfaceLoader.cpp
     SelfWeight.cpp
     LysmerVelocityLoader.cpp
+    ThermalHeatSource.cpp
+    ThermalBoundaryConditionTemperature.cpp
     PUBLIC
     Load.h
     #ElementalLoad.h
@@ -36,6 +38,8 @@ target_sources(OPS_Domain
     SurfaceLoader.h
     SelfWeight.h
     LysmerVelocityLoader.h
+    ThermalHeatSource.h
+    ThermalBoundaryConditionTemperature.h
 )
 
 target_sources(OPS_Thermal

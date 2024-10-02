@@ -54,6 +54,7 @@
 #include <PathTimeSeries.h>
 #include <PathSeries.h>
 #include <UniformExcitation.h>
+#include <ThermalVolumetricLoadingPattern.h>
 #include <MultiSupportPattern.h>
 #include <GroundMotion.h>
 #include <GroundMotionRecord.h>
@@ -98,7 +99,7 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
   if (argc < 4) {
     opserr << "WARNING invalid command - want: pattern type ";
     opserr << " <type args> {list of load and sp constraints commands}\n";
-    opserr << "           valid types: Plain, UniformExcitation, MultiSupport\n";
+    opserr << "           valid types: Plain, UniformExcitation, MultiSupport, ThermalVolumetricLoadingPattern\n";
     return TCL_ERROR;
   } 
 
@@ -588,6 +589,40 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
     }
 #endif
 
+else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0) 
+{
+    if (argc != 7)
+    {
+        opserr << "WARNING: Incorrect number of arguments.\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename epsilon_add_filename\n";
+        return TCL_ERROR;
+    }
+
+    int tag = 0;
+    if (Tcl_GetInt(interp, argv[2], &tag) != TCL_OK) 
+    {
+        opserr << "WARNING: Unable to interpret argument 3 (tag) as an integer.\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename epsilon_add_filename\n";
+        return TCL_ERROR;
+    }
+
+    double alpha = 1.0;
+    if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK) 
+    {
+        opserr << "WARNING: Unable to interpret argument 4 (alpha) as a double.\n";
+        opserr << "Expected: pattern ThermalVolumetricLoadingPattern tag alpha elements_filename gausstemps_filename epsilon_add_filename\n";
+        return TCL_ERROR;
+    }
+
+    std::string elements_filename = argv[4];
+    std::string gausstemps_filename = argv[5];
+    std::string add_epsilon_filename = argv[6];
+
+    thePattern = new ThermalVolumetricLoadingPattern(tag, alpha, elements_filename, gausstemps_filename, add_epsilon_filename);
+
+    theDomain->addLoadPattern(thePattern);
+    return TCL_OK;
+}
   //////// //////// ///////// ////////// /////  // DRMLoadPattern add BEGIN
   else if (strcmp(argv[1],"DRMLoadPattern") == 0) {
     TCL_Char * InputDataFileName = 0;

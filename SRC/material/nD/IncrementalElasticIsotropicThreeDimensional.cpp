@@ -23,6 +23,7 @@
 #include <OPS_Globals.h>
 #include <elementAPI.h>
 #include <MaterialResponse.h>
+#include <Parameter.h>
 
 bool IncrementalElasticIsotropicThreeDimensional::printnow = true;
 // Vector IncrementalElasticIsotropicThreeDimensional::sigma(6);
@@ -33,6 +34,7 @@ void *OPS_IncrementalElasticIsotropicThreeDimensional(void)
   NDMaterial *theMaterial = 0;
   
   int numArgs = OPS_GetNumRemainingInputArgs();
+  opserr << "Using IncrementalElasticIsotropicThreeDimensional" << endln ;
   
 
   if (numArgs < 3) {
@@ -223,20 +225,23 @@ const Vector&
 IncrementalElasticIsotropicThreeDimensional::getStress (void)
 {	
   static Vector depsilon(6);
+  static Vector depsilon_internal(6);
   depsilon.Zero();
+  depsilon_internal.Zero();
   
   sigma = sigma_n;
 
   depsilon = epsilon - epsilon_n;
+  depsilon_internal = epsilon_internal - epsilon_internal_n;
 
   double mu2 = E/(1.0+v);
   double lam = v*mu2/(1.0-2.0*v);
   double mu = 0.50*mu2;
   mu2 += lam;
 
-  double deps0 = depsilon(0);
-  double deps1 = depsilon(1);
-  double deps2 = depsilon(2);
+  double deps0 = depsilon(0) - depsilon_internal(0); // Δε
+  double deps1 = depsilon(1) - depsilon_internal(1); // Δε
+  double deps2 = depsilon(2) - depsilon_internal(2); // Δε
 
   D(0,0) = D(1,1) = D(2,2) = mu2;
   D(0,1) = D(1,0) = D(0,2) = D(2,0) = D(1,2) = D(2,1) = lam;
@@ -271,6 +276,7 @@ int
 IncrementalElasticIsotropicThreeDimensional::commitState (void)
 {
   epsilon_n=epsilon;
+  epsilon_internal_n=epsilon_internal;
   sigma_n=sigma;
   // printnow = true;
   return 0;
@@ -326,6 +332,71 @@ IncrementalElasticIsotropicThreeDimensional::getOrder (void) const
 {
   return 6;
 }
+
+// ***********************************************************
+
+int IncrementalElasticIsotropicThreeDimensional::setParameter(const char** argv, int argc, Parameter& param)
+{
+
+  // opserr << "IncrementalElasticIsotropicThreeDimensional" << endln ;
+  // 1000 - elasticity & mass
+  if (strcmp(argv[0], "E") == 0) {
+    param.setValue(E);
+    return param.addObject(1000, this);
+  }
+  if (strcmp(argv[0], "v") == 0) {
+    param.setValue(v);
+    return param.addObject(1001, this);
+  }
+  if (strcmp(argv[0], "rho") == 0) {
+    param.setValue(rho);
+    return param.addObject(1002, this);
+  }
+
+  // 4000 - init strain
+  if (strcmp(argv[0], "initNormalStrain") == 0) {
+    double initNormalStrain = epsilon_internal(0) ;
+    param.setValue(initNormalStrain);
+    // opserr << "InitStrain (setParameter)= " << initNormalStrain << endln ;
+    return param.addObject(4001, this);
+  }
+
+  // default
+  return -1;
+}
+
+int IncrementalElasticIsotropicThreeDimensional::updateParameter(int parameterID, Information& info)
+{
+  switch (parameterID) {
+    // 1000 - elasticity & mass
+  case 1000:
+    E = info.theDouble;
+    return 0;
+  case 1001:
+    v = info.theDouble;
+    return 0;
+  case 1002:
+    rho = info.theDouble;
+    return 0;
+
+  case 4001:
+  {
+    double initNormalStrain = info.theDouble;
+    epsilon_internal.Zero();
+    epsilon_internal(0) = initNormalStrain;
+    epsilon_internal(1) = initNormalStrain;
+    epsilon_internal(2) = initNormalStrain;
+    // opserr << "InitStrain (updateParameter) = " << initNormalStrain << endln ;
+    return 0;
+  }
+
+    // default
+  default:
+    return -1;
+  }
+}
+
+// ************************************************* **********
 
 int 
 IncrementalElasticIsotropicThreeDimensional::sendSelf(int commitTag, Channel &theChannel)

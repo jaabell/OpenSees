@@ -83,6 +83,7 @@ void* OPS_VonPapaDamage();
 void* OPS_ConcreteMcftNonlinear5();
 void* OPS_ConcreteMcftNonlinear7();
 void* OPS_ASDConcrete3DMaterial();
+void* OPS_TimeVaryingMaterial();
 void* OPS_OrthotropicRotatingAngleConcreteT2DMaterial01();	// M. J. Nunez - UChile
 void* OPS_SmearedSteelDoubleLayerT2DMaterial01();			// M. J. Nunez - UChile
 #ifdef _EIGEN3
@@ -209,6 +210,7 @@ namespace {
 	nDMaterialsMap.insert(std::make_pair("ConcreteMcftNonlinear5", &OPS_ConcreteMcftNonlinear5));
 	nDMaterialsMap.insert(std::make_pair("ConcreteMcftNonlinear7", &OPS_ConcreteMcftNonlinear7));
 	nDMaterialsMap.insert(std::make_pair("ASDConcrete3D", &OPS_ASDConcrete3DMaterial));
+	nDMaterialsMap.insert(std::make_pair("TimeVarying", &OPS_TimeVaryingMaterial));
 	nDMaterialsMap.insert(std::make_pair("OrthotropicRAConcrete", &OPS_OrthotropicRotatingAngleConcreteT2DMaterial01));
 	nDMaterialsMap.insert(std::make_pair("SmearedSteelDoubleLayer", &OPS_SmearedSteelDoubleLayerT2DMaterial01));
 #ifdef _EIGEN3

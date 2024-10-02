@@ -116,6 +116,7 @@ extern void* OPS_UVCmultiaxial(void);
 extern void* OPS_UVCplanestress(void);
 extern  void *OPS_SAniSandMSMaterial(void);
 extern void* OPS_OrthotropicMaterial(void);
+extern void* OPS_TimeVaryingMaterial(void);
 extern void* OPS_Series3DMaterial(void);
 extern void* OPS_Parallel3DMaterial(void);
 extern void* OPS_ASDConcrete3DMaterial(void);
@@ -1229,7 +1230,14 @@ TclModelBuilderNDMaterialCommand (ClientData clientData, Tcl_Interp *interp, int
 		else 
 			return TCL_ERROR;
 	}
-
+  else if(strcmp(argv[1], "TimeVarying") == 0) {
+    void *theMat = OPS_TimeVaryingMaterial();
+    if (theMat != 0)  {
+      theMaterial = (NDMaterial *)theMat;
+    }
+    else 
+      return TCL_ERROR;
+  }
 	else if(strcmp(argv[1], "Series3D") == 0) {
 		void *theMat = OPS_Series3DMaterial();
 		if (theMat != 0)  {

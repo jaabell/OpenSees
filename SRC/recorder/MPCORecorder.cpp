@@ -4039,6 +4039,28 @@ namespace mpco {
 					int_type = ElementIntegrationRuleType::Tetrahedron_GaussLegendre_2;
 				}
 				/*
+				10-node tetrahedron thermal with 1x1x1 gp
+				*/
+				else if (
+					// ./tetrahedron
+					elem_class_tag == ELE_TAG_TenNodeTetrahedronThermal
+					)
+				{
+					geom_type = ElementGeometryType::Tetrahedron_10N;
+					int_type = ElementIntegrationRuleType::Tetrahedron_GaussLegendre_2;
+				}
+				/*
+				6-node LST Boundry Conditions with 1x1x1 gp
+				*/
+				else if (
+					// ./tetrahedron
+					elem_class_tag == ELE_TAG_SixNodeBoundryCondition
+					)
+				{
+					geom_type = ElementGeometryType::Triangle_6N;
+					int_type = ElementIntegrationRuleType::Triangle_GaussLegendre_2;
+				}
+				/*
 				8-node hexahedron with 1x1x1 gp
 				*/
 				else if (
@@ -5179,8 +5201,19 @@ int MPCORecorder::writeModelElements()
 						it4 != elem_by_custom_rule.items.end(); ++it4) {
 						Element *elem = *it4;
 						buffer[offset] = elem->getTag();
+
+
+						int classTag = elem->getClassTag();
+
 						for (size_t j = 0; j < elem_by_tag.num_nodes; j++)
 							buffer[j + 1 + offset] = elem->getExternalNodes()((int)j);
+
+						// Changes nodes 9 & 10 for 10nt & 10nt-thermal
+						// if (classTag == ELE_TAG_TenNodeTetrahedron || classTag == ELE_TAG_TenNodeTetrahedronThermal){
+						// 	int aux = buffer[8 + 1 + offset] ;
+						// 	buffer[8 + 1 + offset] = buffer[9 + 1 + offset] ;
+						// 	buffer[9 + 1 + offset] = aux ;
+						// }
 						offset += (1 + elem_by_tag.num_nodes);
 					}
 					hid_t dset_id = h5::dataset::createAndWrite(h_gp_elements, elem_by_custom_rule.name.c_str(), buffer, elem_by_custom_rule.items.size(), (hsize_t)(1 + elem_by_tag.num_nodes));

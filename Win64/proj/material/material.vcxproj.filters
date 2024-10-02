@@ -673,6 +673,9 @@
     <ClCompile Include="..\..\..\SRC\material\nD\OrthotropicMaterial.cpp">
       <Filter>nD\wrappers</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\material\nD\TimeVaryingMaterial.cpp">
+      <Filter>nD\wrappers</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\material\nD\Series3DMaterial.cpp">
       <Filter>nD\wrappers</Filter>
     </ClCompile>
@@ -2069,6 +2072,9 @@
       <Filter>nD\wrappers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\material\nD\OrthotropicMaterial.h">
+      <Filter>nD\wrappers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\material\nD\TimeVaryingMaterial.h">
       <Filter>nD\wrappers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\material\nD\Series3DMaterial.h">

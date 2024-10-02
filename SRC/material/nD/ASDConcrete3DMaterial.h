@@ -431,6 +431,8 @@ private:
 	double xt_max_commit = 0.0;
 	double xc_max = 0.0;
 	double xc_max_commit = 0.0;
+
+	Vector m_init_strain = Vector(6);
 };
 
 #endif

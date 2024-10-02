@@ -56,6 +56,7 @@ OBJS       = NDMaterial.o \
 	J2BeamFiber3d.o \
 	J2ThreeDimensional.o \
 	OrthotropicMaterial.o \
+	TimeVaryingMaterial.o \
 	Series3DMaterial.o \
 	Parallel3DMaterial.o \
 	PlaneStrainMaterial.o \
@@ -99,6 +100,7 @@ OBJS       = NDMaterial.o \
 	ElasticPlaneStress.o \
 	ElasticOrthotropicPlaneStress.o \
 	VonPapaDamage.o \
+	TimeVaryingMaterial.o \
 	ASDConcrete3DMaterial.o
 
 

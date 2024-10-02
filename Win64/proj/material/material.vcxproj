@@ -564,6 +564,7 @@
     <ClCompile Include="..\..\..\SRC\material\nD\ASDConcrete3DMaterial.cpp" />
     <ClCompile Include="..\..\..\SRC\material\nD\BeamFiberMaterial.cpp" />
     <ClCompile Include="..\..\..\SRC\material\nD\OrthotropicMaterial.cpp" />
+    <ClCompile Include="..\..\..\SRC\material\nD\TimeVaryingMaterial.cpp" />
     <ClCompile Include="..\..\..\SRC\material\nD\Series3DMaterial.cpp" />
     <ClCompile Include="..\..\..\SRC\material\nD\Parallel3DMaterial.cpp" />
     <ClCompile Include="..\..\..\SRC\material\nD\PlaneStrainMaterial.cpp" />
@@ -997,6 +998,7 @@
     <ClInclude Include="..\..\..\SRC\material\nD\ASDConcrete3DMaterial.h" />
     <ClInclude Include="..\..\..\SRC\material\nD\BeamFiberMaterial.h" />
     <ClInclude Include="..\..\..\SRC\material\nD\OrthotropicMaterial.h" />
+    <ClInclude Include="..\..\..\SRC\material\nD\TimeVaryingMaterial.h" />
     <ClInclude Include="..\..\..\SRC\material\nD\Series3DMaterial.h" />
     <ClInclude Include="..\..\..\SRC\material\nD\Parallel3DMaterial.h" />
     <ClInclude Include="..\..\..\SRC\material\nD\PlaneStrainMaterial.h" />

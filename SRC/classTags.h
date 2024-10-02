@@ -479,6 +479,7 @@
 #define ND_TAG_OrthotropicMaterial		2006
 #define ND_TAG_Series3DMaterial		2007
 #define ND_TAG_Parallel3DMaterial		2008
+#define ND_TAG_TimeVaryingMaterial      2009
 #define ND_TAG_CompressibleFluid		3001
 #define ND_TAG_GeneralizedPlasticity 3002
 #define ND_TAG_J2Plasticity02  3003
@@ -609,6 +610,7 @@
 #define PATTERN_TAG_PBowlLoading          4
 #define PATTERN_TAG_DRMLoadPattern        5
 #define PATTERN_TAG_H5DRM                 6
+#define PATTERN_TAG_ThermalVolumetricLoadingPattern     7
 
 #define LOAD_TAG_Beam2dUniformLoad        3
 #define LOAD_TAG_Beam2dPointLoad          4
@@ -627,6 +629,8 @@
 #define LOAD_TAG_ThermalActionWrapper     16 //L.Jiang [ SIF ]
 #define LOAD_TAG_LysmerVelocityLoader      17  //Jose Abell (UANDES)
 #define LOAD_TAG_IGAFollowerLoad      18  //Jose Abell (UANDES)
+#define LOAD_TAG_ThermalHeatSource        19 // Jose Abell (UANDES)
+#define LOAD_TAG_ThermalBoundaryConditionTemperature 20 // Jose Abell (UANDES)
 
 
 #define MAT_TAG_IsotropicLinElastic         1001
@@ -893,6 +897,8 @@
 #define ELE_TAG_ShellNLDKGTThermal		   268 // Giovanni Rinaldin
 #define ELE_TAG_Pipe                      269
 #define ELE_TAG_CurvedPipe                      270
+#define ELE_TAG_TenNodeTetrahedronThermal        271 //by jaabell and j0selarenas (UANDES)
+#define ELE_TAG_SixNodeBoundryCondition        272 //by jaabell and j0selarenas (UANDES)
 
 
 #define FRN_TAG_Coulomb            1

@@ -8,6 +8,7 @@ target_sources(OPS_Domain
     PRIVATE
         ConstantSeries.cpp
         EarthquakePattern.cpp
+        ThermalVolumetricLoadingPattern.cpp
         LinearSeries.cpp
         LoadPattern.cpp
         LoadPatternIter.cpp
@@ -28,6 +29,7 @@ target_sources(OPS_Domain
     PUBLIC
         ConstantSeries.h
         EarthquakePattern.h
+        ThermalVolumetricLoadingPattern.h
         LinearSeries.h
         LoadPattern.h
         LoadPatternIter.h
