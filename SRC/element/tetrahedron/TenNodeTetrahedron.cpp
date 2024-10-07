@@ -1905,7 +1905,7 @@ TenNodeTetrahedron::setParameter(const char **argv, int argc, Parameter &param)
         }
 
         int pointNum = atoi(argv[1]);
-        if (pointNum > 0 && pointNum <= 1)
+        if (pointNum > 0 && pointNum <= 4)
         {
             return materialPointers[pointNum - 1]->setParameter(&argv[2], argc - 2, param);
         }
@@ -1925,7 +1925,7 @@ TenNodeTetrahedron::setParameter(const char **argv, int argc, Parameter &param)
     else // otherwise it could be just a forall material parameter
     {
         int matRes = res;
-        for (int i = 0; i < 1; i++)
+        for (int i = 0; i < 3; i++)
         {
             matRes =  materialPointers[i]->setParameter(argv, argc, param);
             if (matRes != -1)
