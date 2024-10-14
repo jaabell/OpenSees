@@ -48,8 +48,6 @@ NDMaterial* createASDPlasticMaterial3D(int instance_tag, const char* yf_type, co
 void print_usage(void)
 {
     opserr <<
-       "nDMaterial ASDPlasticMaterial3D Error: Few arguments \n"
-       "\n"
        "SYNTAX:\n"
        "nDMaterial ASDPlasticMaterial3D $tag \\ \n"
        "    YF_type \\ \n"
@@ -82,14 +80,15 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
     // some kudos
     static bool first_done = false;
     if (!first_done) {
-        opserr << "Using ASDPlasticMaterial3D - Developed by: Jose Abell (UANDES), Massimo Petracca and Guido Camata (ASDEA Software Technology)\n";
+        opserr << "\n\nUsing ASDPlasticMaterial3D - Developed by: Jose Abell (UANDES), Massimo Petracca and Guido Camata (ASDEA Software Technology)\n\n";
         first_done = true;
     }
 
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
-        opserr << "numArgs = " << numArgs << endln;
-    if (numArgs < 2) {
+    if (numArgs < 3) {
+        "nDMaterial ASDPlasticMaterial3D Error: Few arguments \n";
+        opserr << "    numArgs = " << numArgs << endln << endln;
         print_usage();
         return nullptr;
     }
@@ -128,6 +127,26 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
 
     NDMaterial* instance = ASDPlasticMaterial3DFactory(tag, yf_type, pf_type, el_type, iv_type, available_models);
 
+    if(std::strcmp(yf_type, "list")==0)
+    {
+        cout << "Available models for YF = " << pf_type << endln;
+        for(model_spec_t &model : available_models)
+        {
+            std::string model_yf_type = std::get<0>(model);
+            std::string model_pf_type = std::get<1>(model);
+            std::string model_el_type = std::get<2>(model);
+            std::string model_iv_type = std::get<3>(model);
+            
+            if (std::strcmp(pf_type, model_yf_type.c_str())==0)
+            {
+                cout << "  PF = " << model_pf_type << endl;
+                cout << "  EL = " << model_el_type << endl;
+                cout << "  IV = " << model_iv_type << endl << endln;
+            }
+        }
+            
+    }
+
     if(instance==nullptr)
     {
 
@@ -150,15 +169,18 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
                 matches_el = true;
         }
 
-        cout << endl;
-        print_usage();
-        cout << endl;
 
-        cout << "ASDPlasticMaterial3D -- Material not found for input specification:\n";
+        cout << "\n";
+        cout << "ASDPlasticMaterial3D -- ERROR! Material not found for input specification:\n";
         cout << "yf_type = " << yf_type << (matches_yf ? " :) " : " ") <<"\n";
         cout << "pf_type = " << pf_type << (matches_pf ? " :) " : " ") <<"\n";
         cout << "el_type = " << el_type << (matches_el ? " :) " : " ") <<"\n";
         cout << "iv_type = " << iv_type  <<"\n";
+        cout << "\n";
+
+        cout << endl;
+        print_usage();
+        cout << endl;
 
     }
 

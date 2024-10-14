@@ -66,8 +66,8 @@ struct NullHardeningScalarPolicy {
     using parameters_t = tuple<>;
 };
 
-struct NullHardeningVectorPolicy {
-    static constexpr const char* NAME = "NullHardeningVectorFunction";
+struct NullHardeningTensorPolicy {
+    static constexpr const char* NAME = "NullHardeningTensorFunction";
     HARDENING_FUNCTION_DEFINITION 
     {
         VoigtVector zero;
@@ -156,7 +156,7 @@ using ScalarLinearHardeningFunction = HardeningFunction<VoigtScalar, LinearHarde
 // using ScalarExponentialHardeningFunction = HardeningFunction<VoigtScalar, ExponentialHardeningForScalarPolicy>;
 using ArmstrongFrederickHardeningFunction = HardeningFunction<VoigtVector, ArmstrongFrederickPolicy>;
 using NullHardeningScalarFunction = HardeningFunction<VoigtScalar, NullHardeningScalarPolicy>;
-using NullHardeningTensorFunction = HardeningFunction<VoigtVector, NullHardeningVectorPolicy>;
+using NullHardeningTensorFunction = HardeningFunction<VoigtVector, NullHardeningTensorPolicy>;
 
 
 #endif //not defined _AllASDHardeningFunctions

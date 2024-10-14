@@ -47,26 +47,33 @@ public:
 
     YIELD_FUNCTION 
     {
+        using namespace std;
 
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
 
-        auto ss = sigma.principalStresses();
+        // VoigtVector geo_sigma = -sigma;
 
-        double sigma1 = -ss(2);
-        double sigma3 = -ss(0);
+        double rThresh = c * cos(phi);
+        double I1 = sigma.getI1();
+        double J2 = sigma.getJ2();
+        double lode_angle = sigma.lodeAngle();
 
-        double tau_max = (sigma1 - sigma3) / 2.0;
-        double sigma_avg = (sigma1 + sigma3) / 2.0;
-        double f = tau_max - sigma_avg * tan(phi) - c;
+        double rEquivalentStress = (std::cos(lode_angle) - std::sin(lode_angle) * std::sin(phi) / std::sqrt(3.0)) * std::sqrt(J2) +
+            I1 * std::sin(phi) / 3.0;
 
-        if(f != f)
-        {
-            std::cout << "MohrCoulomb_YF - NaN detected! \n";
-            std::cout << "  sigma = " << sigma.transpose() << " \n";
-        }
+        double yf = rEquivalentStress - rThresh;
 
-        return f;
+        cout << "\n\nCALL YF" << endl;
+        cout << "    phi = " << phi << endl;
+        cout << "    c = " << c << endl;
+        cout << "    I1 = " << I1 << endl;
+        cout << "    J2 = " << J2 << endl;
+        cout << "    lode_angle = " << lode_angle << endl;
+        cout << "    rEquivalentStress = " << rEquivalentStress << endl;
+        cout << "    yf = " << yf << endl;
+
+        return yf;
     }
 
     YIELD_FUNCTION_STRESS_DERIVATIVE
@@ -74,21 +81,43 @@ public:
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
 
-        auto ss = sigma.principalStresses();
-        
-        double s0 = ss(0);
-        double s1 = ss(1);
-        double s2 = ss(2);
-        double s3 = ss(3);
-        double s4 = ss(4);
-        double s5 = ss(5);
+        using namespace std;
 
-        // vv_out(0) = 
-        // vv_out(1) = 
-        // vv_out(2) = 
-        // vv_out(3) = 
-        // vv_out(4) = 
-        // vv_out(5) = 
+        // VoigtVector geo_sigma = -sigma;
+
+
+        VoigtVector first_vector = calculate_first_vector();
+        VoigtVector second_vector = calculate_second_vector(sigma);
+        VoigtVector third_vector = calculate_third_vector(sigma);
+
+        double J2 = sigma.getJ2();
+        double J3 = sigma.getJ3();
+        double lode_angle = sigma.lodeAngle();
+
+        double c1, c3, c2;
+        double checker = std::abs(lode_angle * 180.0 / M_PI);
+
+        if (std::abs(checker) < 29.0) { // If it is not the edge
+            c1 = std::sin(phi) / 3.0;
+            c3 = (std::sqrt(3.0) * std::sin(lode_angle) + std::sin(phi) * std::cos(lode_angle)) /
+                (2.0 * J2 * std::cos(3.0 * lode_angle));
+            c2 = 0.5 * std::cos(lode_angle)*(1.0 + std::tan(lode_angle) * std::sin(3.0 * lode_angle) +
+                std::sin(phi) * (std::tan(3.0 * lode_angle) - std::tan(lode_angle)) / std::sqrt(3.0));
+        } else { // smoothing with drucker-prager
+            c1 = 3.0 * (2.0 * std::sin(phi) / (std::sqrt(3.0) * (3.0 - std::sin(phi))));
+            c2 = 1.0;
+            c3 = 0.0;
+        }
+
+        cout << "    J2 = " << J2 << endl;
+        cout << "    J3 = " << J3 << endl;
+        cout << "    c1 = " << c1 << endl;
+        cout << "    c2 = " << c2 << endl;
+        cout << "    c3 = " << c3 << endl;
+        cout << "    checker = " << checker << endl;
+
+
+        vv_out = c1 * first_vector + c2 * second_vector + c3 * third_vector;
 
         return vv_out;
     }

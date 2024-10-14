@@ -28,13 +28,14 @@ IV_YF["VonMises_YF"] = [
 IV_YF["DruckerPrager_YF"] = IV_YF["VonMises_YF"] 
 
 IV_YF["MohrCoulomb_YF"] = [
-    "ScalarInternalVariable<NullHardeningScalarFunction>"
+    "BackStress<NullHardeningTensorFunction>"
 ]
 
 
 #Options for PF variables depend on the model
 IV_PF = {
     "VonMises_PF": [
+    "BackStress<NullHardeningTensorFunction>",
     "BackStress<TensorLinearHardeningFunction>",
     "BackStress<ArmstrongFrederickHardeningFunction>",
     ],
