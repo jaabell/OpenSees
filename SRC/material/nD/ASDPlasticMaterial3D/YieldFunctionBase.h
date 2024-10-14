@@ -80,6 +80,8 @@ struct yf_has_internal_variables_t<T, typename std::enable_if<!std::is_same<type
 
 #define GET_PARAMETER_VALUE(type) parameters_storage.template get<type> ().value
 
+#define YF(SIGMA) (this)->operator()(SIGMA, internal_variables_storage, parameters_storage)
+
 template <class T>
 class YieldFunctionBase
 {

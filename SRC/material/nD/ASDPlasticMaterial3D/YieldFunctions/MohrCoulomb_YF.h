@@ -49,6 +49,8 @@ public:
     {
         using namespace std;
 
+
+
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
 
@@ -59,19 +61,22 @@ public:
         double J2 = sigma.getJ2();
         double lode_angle = sigma.lodeAngle();
 
-        double rEquivalentStress = (std::cos(lode_angle) - std::sin(lode_angle) * std::sin(phi) / std::sqrt(3.0)) * std::sqrt(J2) +
+        double rEquivalentStress = (std::cos(lode_angle) - std::sin(lode_angle) * std::sin(phi) / std::sqrt(3.0))  * std::sqrt(J2) +
             I1 * std::sin(phi) / 3.0;
 
         double yf = rEquivalentStress - rThresh;
 
-        cout << "\n\nCALL YF" << endl;
-        cout << "    phi = " << phi << endl;
-        cout << "    c = " << c << endl;
-        cout << "    I1 = " << I1 << endl;
-        cout << "    J2 = " << J2 << endl;
-        cout << "    lode_angle = " << lode_angle << endl;
-        cout << "    rEquivalentStress = " << rEquivalentStress << endl;
-        cout << "    yf = " << yf << endl;
+        // cout << "\n\nCALL YF" << endl;
+        // cout << "    phi = " << phi << endl;
+        // cout << "    c = " << c << endl;
+        // cout << "    I1 = " << I1 << endl;
+        // cout << "    J2 = " << J2 << endl;
+        // cout << "    lode_angle = " << lode_angle << endl;
+        // cout << "    rEquivalentStress = " << rEquivalentStress << endl;
+        // cout << "    yf = " << yf << endl;
+        cout << " MC YF sigma = " << sigma.transpose() << "  yf = " << yf << "  rEq = " << rEquivalentStress << " rThr = " << rThresh << " J2 = " << J2 << endl;
+        cout << "    std::cos(lode_angle) =  " << std::cos(lode_angle) << "    std::sin(lode_angle) =  " << std::sin(lode_angle)  << endl;
+        cout << "    phi =  " << phi << "    std::sin(phi) =  " << std::sin(phi)  << endl;
 
         return yf;
     }
@@ -85,6 +90,38 @@ public:
 
         // VoigtVector geo_sigma = -sigma;
 
+        // double ds = std::sqrt(sigma.dot(sigma));
+
+
+        // cout << "CaLL derivative"  << endl;
+        // cout << "    sigma = " << sigma.transpose() << endl;
+
+
+        // const double DL = 1e-8;
+
+        // // Define a small perturbation value for numerical differentiation
+        // double ds = DL;
+
+        // // Compute the yield function at the original stress state
+        // double yf0 = YF(sigma);
+        // cout << "  yf0  = " << yf0 << endl;
+        
+        // for (int i = 0; i < 6; ++i) {
+        //     VoigtVector SIG = sigma;
+            
+        //     // Increment SIG at index i by a small amount for numerical differentiation
+        //     SIG(i) += ds;
+
+        //     // Compute the yield function at the perturbed state
+        //     double yf1 = YF(SIG);
+
+        //     cout << "    SIG = " << SIG.transpose() << endl;
+        //     cout << "    yf1 = " << yf1 << endl;
+
+
+        //     // Calculate the derivative
+        //     vv_out(i) = (yf1 - yf0) / ds;
+        // }
 
         VoigtVector first_vector = calculate_first_vector();
         VoigtVector second_vector = calculate_second_vector(sigma);
@@ -108,16 +145,20 @@ public:
             c2 = 1.0;
             c3 = 0.0;
         }
+        // VoigtVector n2 = c1 * first_vector + c2 * second_vector + c3 * third_vector;
 
-        cout << "    J2 = " << J2 << endl;
-        cout << "    J3 = " << J3 << endl;
-        cout << "    c1 = " << c1 << endl;
-        cout << "    c2 = " << c2 << endl;
-        cout << "    c3 = " << c3 << endl;
-        cout << "    checker = " << checker << endl;
-
+        // cout << "    c1 = " << c1 << endl;
+        // cout << "    c2 = " << c2 << endl;
+        // cout << "    c3 = " << c3 << endl;
+        // cout << "    checker = " << checker << endl;
+        // cout << "    n  = " << vv_out.transpose() << endl;
+        // cout << "    n2  = " << n2.transpose() << endl;
 
         vv_out = c1 * first_vector + c2 * second_vector + c3 * third_vector;
+
+
+
+
 
         return vv_out;
     }

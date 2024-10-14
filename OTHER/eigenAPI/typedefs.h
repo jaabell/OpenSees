@@ -278,23 +278,46 @@ public:
         return std::sqrt(0.5 * J2);
     }
 
+    // double lodeAngle() const {
+    //     Eigen::Vector3d principal_stresses = this->principalStresses();
+    //     double s1 = principal_stresses(0);
+    //     double s2 = principal_stresses(1);
+    //     double s3 = principal_stresses(2);
+
+    //     double num = std::sqrt(3) * (s1 - s3) ;
+    //     double den = 2 * (s2 - s3) - (s1 - s3);
+    //     if (abs(den) < 1e-20 )
+    //     {
+    //         return 0;
+    //     }
+    //     else
+    //     {
+    //         return std::atan( num / den );
+    //     }
+    // }
+
+
     double lodeAngle() const {
         Eigen::Vector3d principal_stresses = this->principalStresses();
         double s1 = principal_stresses(0);
         double s2 = principal_stresses(1);
         double s3 = principal_stresses(2);
 
-        double num = std::sqrt(3) * (s1 - s3) ;
-        double den = 2 * (s2 - s3) - (s1 - s3);
-        if (abs(den) < 1e-20 )
-        {
-            return 0;
-        }
-        else
-        {
-            return std::atan( num / den );
-        }
+        // Sort principal stresses to ensure s1 >= s2 >= s3
+        // if (s1 < s3) std::swap(s1, s3);
+        // if (s1 < s2) std::swap(s1, s2);
+        // if (s2 < s3) std::swap(s2, s3);
+
+        // Calculate the numerator and denominator for the Lode angle
+        double num = std::sqrt(3.0) * (s2 - s3);
+        double den = 2.0 * (s2 - s3) - (s1 - s3);
+
+        // Use atan2 for better numerical stability
+        double lode_angle = std::atan2(num, den);
+
+        return lode_angle;
     }
+
 
     #include <cmath>
 
