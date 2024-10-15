@@ -74,9 +74,9 @@ public:
         // cout << "    lode_angle = " << lode_angle << endl;
         // cout << "    rEquivalentStress = " << rEquivalentStress << endl;
         // cout << "    yf = " << yf << endl;
-        cout << " MC YF sigma = " << sigma.transpose() << "  yf = " << yf << "  rEq = " << rEquivalentStress << " rThr = " << rThresh << " J2 = " << J2 << endl;
-        cout << "    std::cos(lode_angle) =  " << std::cos(lode_angle) << "    std::sin(lode_angle) =  " << std::sin(lode_angle)  << endl;
-        cout << "    phi =  " << phi << "    std::sin(phi) =  " << std::sin(phi)  << endl;
+        // cout << " MC YF sigma = " << sigma.transpose() << "  yf = " << yf << "  rEq = " << rEquivalentStress << " rThr = " << rThresh << " J2 = " << J2 << endl;
+        // cout << "    std::cos(lode_angle) =  " << std::cos(lode_angle) << "    std::sin(lode_angle) =  " << std::sin(lode_angle)  << endl;
+        // cout << "    phi =  " << phi << "    std::sin(phi) =  " << std::sin(phi)  << endl;
 
         return yf;
     }

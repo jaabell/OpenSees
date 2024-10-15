@@ -297,26 +297,51 @@ public:
     // }
 
 
+    // double lodeAngle() const {
+    //     Eigen::Vector3d principal_stresses = this->principalStresses();
+    //     double s1 = principal_stresses(0);
+    //     double s2 = principal_stresses(1);
+    //     double s3 = principal_stresses(2);
+
+    //     // Sort principal stresses to ensure s1 >= s2 >= s3
+    //     // if (s1 < s3) std::swap(s1, s3);
+    //     // if (s1 < s2) std::swap(s1, s2);
+    //     // if (s2 < s3) std::swap(s2, s3);
+
+    //     // Calculate the numerator and denominator for the Lode angle
+    //     double num = std::sqrt(3.0) * (s2 - s3);
+    //     double den = 2.0 * (s2 - s3) - (s1 - s3);
+
+    //     // Use atan2 for better numerical stability
+    //     double lode_angle = std::atan2(num, den);
+
+    //     return lode_angle;
+    // }
+
     double lodeAngle() const {
-        Eigen::Vector3d principal_stresses = this->principalStresses();
-        double s1 = principal_stresses(0);
-        double s2 = principal_stresses(1);
-        double s3 = principal_stresses(2);
+        // Eigen::Vector3d principal_stresses = this->principalStresses();
+        // double s1 = principal_stresses(0);
+        // double s2 = principal_stresses(1);
+        // double s3 = principal_stresses(2);
+        double J2 = this->getJ2();
+        double J3 = this->getJ3();
 
-        // Sort principal stresses to ensure s1 >= s2 >= s3
-        // if (s1 < s3) std::swap(s1, s3);
-        // if (s1 < s2) std::swap(s1, s2);
-        // if (s2 < s3) std::swap(s2, s3);
+        double rLodeAngle;
 
-        // Calculate the numerator and denominator for the Lode angle
-        double num = std::sqrt(3.0) * (s2 - s3);
-        double den = 2.0 * (s2 - s3) - (s1 - s3);
+        if (J2 > std::numeric_limits<double>::epsilon()) {
+            double sint3 = (-3.0 * std::sqrt(3.0) * J3) / (2.0 * J2 * std::sqrt(J2));
+            if (sint3 < -0.95)
+                sint3 = -1.0;
+            else if (sint3 > 0.95)
+                sint3 = 1.0;
+            rLodeAngle = std::asin(sint3) / 3.0;
+        } else {
+            rLodeAngle = 0.0;
+        }
 
-        // Use atan2 for better numerical stability
-        double lode_angle = std::atan2(num, den);
-
-        return lode_angle;
+        return rLodeAngle;
     }
+
 
 
     #include <cmath>
