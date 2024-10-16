@@ -1396,38 +1396,38 @@ private:
             TrialPlastic_Strain = next_EpsilonPl;
             iv_storage = next_iv_storage;
 
-           // //Return to Yield
-           // if (INT_OPT_return_to_yield_surface[this->getTag()])
-           //  {
-           //      // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
-           //      // Make surface the internal variables are already updated. And then, return to the yield surface.
-           //      double yf_val_after_corrector;
-           //      int iter =0;
-           //      // double TOL = 10*this->INT_OPT_stress_relative_tol[this->getTag()];
-           //      // double NITER = this->INT_OPT_n_max_iterations[this->getTag()];
-           //      // do
-           //      {
-           //          yf_val_after_corrector = yf(TrialStress, iv_storage, parameters_storage);
-           //          const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
-           //          const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
-           //          // In the function below, depsilon_elpl is actually not used at all in hardening
-           //          // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
-           //          double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
-           //          double dLambda_after_corrector = yf_val_after_corrector / (
-           //                                               n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
-           //                                           );
-           //          TrialStress = TrialStress - dLambda_after_corrector * Eelastic * m_after_corrector;
-           //          TrialPlastic_Strain += dLambda_after_corrector * m_after_corrector;
+           //Return to Yield
+            if (INT_OPT_return_to_yield_surface[this->getTag()] == 1)  // Return to yield in one step
+            {
+                // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
+                // Make surface the internal variables are already updated. And then, return to the yield surface.
+                double yf_val_after_corrector;
+                int iter =0;
+                // double TOL = 10*this->INT_OPT_stress_relative_tol[this->getTag()];
+                // double NITER = this->INT_OPT_n_max_iterations[this->getTag()];
+                // do
+                {
+                    yf_val_after_corrector = yf(TrialStress, iv_storage, parameters_storage);
+                    const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
+                    const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
+                    // In the function below, depsilon_elpl is actually not used at all in hardening
+                    // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
+                    double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
+                    double dLambda_after_corrector = yf_val_after_corrector / (
+                                                         n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
+                                                     );
+                    TrialStress = TrialStress - dLambda_after_corrector * Eelastic * m_after_corrector;
+                    TrialPlastic_Strain += dLambda_after_corrector * m_after_corrector;
 
-           //          // iter++;
-           //      }
-           //      // while(yf_val_after_corrector > TOL && iter < NITER);
-           //  }
+                    // iter++;
+                }
+                // while(yf_val_after_corrector > TOL && iter < NITER);
+            }
 
 
            //Return to Yield with bisection
-           if (INT_OPT_return_to_yield_surface[this->getTag()])
-            {
+           else if (INT_OPT_return_to_yield_surface[this->getTag()] == 2)  // Return to yield with iterations
+           {
                 // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
                 // Make surface the internal variables are already updated. And then, return to the yield surface.
                 double y0  = yf(TrialStress, iv_storage, parameters_storage) ;
@@ -1453,7 +1453,7 @@ private:
                     double y1 = yf(TS, iv_storage, parameters_storage);
 
                     //Try to bracket solution
-                    cout << "   y0 = " << y0 << "  dL =" << dL << "   y1 =" << y1 << endl;
+                    // cout << "   y0 = " << y0 << "  dL =" << dL << "   y1 =" << y1 << endl;
                     while( y1 > 0 && iter < NITER)
                     {
                         dL = dL * 1.1;
@@ -1461,7 +1461,7 @@ private:
                         y1 = yf(TS, iv_storage, parameters_storage);
                         iter ++;
 
-                        cout << "   iter = " << iter << "  dL =" << dL << "   y1 =" << y1 << endl;
+                        // cout << "   iter = " << iter << "  dL =" << dL << "   y1 =" << y1 << endl;
                     }
 
                     iter = 0;
@@ -1476,11 +1476,11 @@ private:
                         VoigtVector TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
                         double y_mid = yf(TS2, iv_storage, parameters_storage);
 
-                        cout << "   y_mid = " << y_mid << "  dL_min =" << dL_min << "   dL_mid =" << dL_mid << "   dL_max =" << dL_max << endl;
+                        // cout << "   y_mid = " << y_mid << "  dL_min =" << dL_min << "   dL_mid =" << dL_mid << "   dL_max =" << dL_max << endl;
                         
                         while(abs(y_mid) > TOL && iter < NITER)
                         {
-                            cout << "   iter = " << iter << "   y_mid = " << y_mid << "  dL_min =" << dL_min << "   dL_mid =" << dL_mid << "   dL_max =" << dL_max << endl;
+                            // cout << "   iter = " << iter << "   y_mid = " << y_mid << "  dL_min =" << dL_min << "   dL_mid =" << dL_mid << "   dL_max =" << dL_max << endl;
                             if (y_mid  > 0)
                             {
                                 dL_min = dL_mid;

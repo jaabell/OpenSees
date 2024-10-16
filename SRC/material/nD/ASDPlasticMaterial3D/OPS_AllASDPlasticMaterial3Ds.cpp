@@ -373,7 +373,17 @@ void populate_ASDPlasticMaterial3D(T* instance)
                 
                 if (std::strcmp(param_name, "return_to_yield_surface") == 0)
                 {
-                    OPS_GetInt(&get_one_value, &return_to_yield_surface);
+                    // OPS_GetInt(&get_one_value, &return_to_yield_surface);
+                    const char *method_name = OPS_GetString();
+                    if (std::strcmp(method_name, "Disabled") == 0)
+                        return_to_yield_surface = 0;
+                    else if (std::strcmp(method_name, "One_Step_Return") == 0)
+                        return_to_yield_surface = 1;
+                    else if (std::strcmp(method_name, "Iterative_Return") == 0)
+                        return_to_yield_surface = 2;
+                    else
+                    	return_to_yield_surface = 1;
+
                     cout << "   Setting return_to_yield_surface = " << return_to_yield_surface << endl;
                 }
 
