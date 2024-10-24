@@ -837,17 +837,143 @@ SSPquad::Print(OPS_Stream &s, int flag)
 }
 
 Response*
-SSPquad::setResponse(const char **argv, int argc, OPS_Stream &eleInfo)
+SSPquad::setResponse(const char **argv, int argc, OPS_Stream &output)
 {
 	// no special recorders for this element, call the method in the material class
-	return theMaterial->setResponse(argv, argc, eleInfo);
+	// return theMaterial->setResponse(argv, argc, eleInfo);
+
+	Response *theResponse =0;
+
+  output.tag("ElementOutput");
+  output.attr("eleType","SSPquad");
+  output.attr("eleTag",this->getTag());
+  output.attr("node1",mExternalNodes[0]);
+  output.attr("node2",mExternalNodes[1]);
+  output.attr("node3",mExternalNodes[2]);
+  output.attr("node4",mExternalNodes[3]);
+
+  char dataOut[10];
+  if (strcmp(argv[0],"force") == 0 || strcmp(argv[0],"forces") == 0) {
+
+    for (int i=1; i<=1; i++) {
+      sprintf(dataOut,"P1_%d",i);
+      output.tag("ResponseType",dataOut);
+      sprintf(dataOut,"P2_%d",i);
+      output.tag("ResponseType",dataOut);
+    }
+    
+    theResponse =  new ElementResponse(this, 1, mInternalForces);
+  }   
+
+  else if (strcmp(argv[0],"material") == 0 || strcmp(argv[0],"integrPoint") == 0) {
+    
+    int pointNum = atoi(argv[1]);
+    if (pointNum > 0 && pointNum <= 1) {
+      
+      output.tag("GaussPoint");
+      output.attr("number",pointNum);
+      output.attr("eta",0.5);
+      output.attr("neta",0.5);
+
+      theResponse =  theMaterial->setResponse(&argv[2], argc-2, output);
+      
+      output.endTag();
+
+    }
+  }
+  else if ((strcmp(argv[0],"stresses") ==0) || (strcmp(argv[0],"stress") ==0)) {
+    for (int i=0; i<1; i++) {
+      output.tag("GaussPoint");
+      output.attr("number",i+1);
+      output.attr("eta",0.5);
+      output.attr("neta",0.5);
+
+      output.tag("NdMaterialOutput");
+      output.attr("classType", theMaterial->getClassTag());
+      output.attr("tag", theMaterial->getTag());
+      
+      output.tag("ResponseType","sigma11");
+      output.tag("ResponseType","sigma22");
+      output.tag("ResponseType","sigma12");
+      
+      output.endTag(); // GaussPoint
+      output.endTag(); // NdMaterialOutput
+      }
+    theResponse =  new ElementResponse(this, 3, Vector(3));
+  }
+
+  else if ((strcmp(argv[0],"strain") ==0) || (strcmp(argv[0],"strains") ==0)) {
+    for (int i=0; i<1; i++) {
+      output.tag("GaussPoint");
+      output.attr("number",i+1);
+      output.attr("eta",0.5);
+      output.attr("neta",0.5);
+
+      output.tag("NdMaterialOutput");
+      output.attr("classType", theMaterial->getClassTag());
+      output.attr("tag", theMaterial->getTag());
+      
+      output.tag("ResponseType","eta11");
+      output.tag("ResponseType","eta22");
+      output.tag("ResponseType","eta12");
+      
+      output.endTag(); // GaussPoint
+      output.endTag(); // NdMaterialOutput
+      }
+    theResponse =  new ElementResponse(this, 4, Vector(3));
+  }
+
+  output.endTag(); // ElementOutput
+
+  return theResponse;
 }
 
 int
 SSPquad::getResponse(int responseID, Information &eleInfo)
 {
 	// no special recorders for this element, call the method in the material class
-	return theMaterial->getResponse(responseID, eleInfo);
+	// return theMaterial->getResponse(responseID, eleInfo);
+
+
+	if (responseID == 1) {
+
+		return eleInfo.setVector(this->getResistingForce());
+
+	} else if (responseID == 3) {
+
+		// Loop over the integration points
+		static Vector stresses(3);
+		int cnt = 0;
+		for (int i = 0; i < 1; i++) {
+
+			// Get material stress response
+			const Vector &sigma = theMaterial->getStress();
+			stresses(cnt) = sigma(0);
+			stresses(cnt+1) = sigma(1);
+			stresses(cnt+2) = sigma(2);
+			cnt += 3;
+		}
+
+		return eleInfo.setVector(stresses);
+
+	} else if (responseID == 4) {
+
+		// Loop over the integration points
+		static Vector strains(3);
+		int cnt = 0;
+		for (int i = 0; i < 4; i++) {
+			// Get material stress response
+			const Vector &sigma = theMaterial->getStrain();
+			strains(cnt) = sigma(0);
+			strains(cnt+1) = sigma(1);
+			strains(cnt+2) = sigma(2);
+			cnt += 3;
+		}
+
+		return eleInfo.setVector(strains);
+	} 
+
+	return -1;
 }
 
 int

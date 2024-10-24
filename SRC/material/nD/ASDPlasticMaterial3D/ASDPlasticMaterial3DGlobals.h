@@ -66,7 +66,8 @@ enum struct ASDPlasticMaterial3D_Tangent_Operator_Type : int
     Continuum,
     Secant,
     Algorithmic,
-    Numerical_Algorithmic,
+    Numerical_Algorithmic_FirstOrder,
+    Numerical_Algorithmic_SecondOrder,
 
 };
 

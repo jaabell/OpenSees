@@ -10,13 +10,17 @@ YF = [
     "VonMises_YF",
     "DruckerPrager_YF",
     "MohrCoulomb_YF",
+    "TensionCutoff_YF",
 ]
 
 PF = [
     "VonMises_PF",
     "DruckerPrager_PF",
-    "ConstantDilatancy_PF"
+    "ConstantDilatancy_PF",
+    "MohrCoulomb_PF"
 ]
+
+# Possible combinations of IV with YFs
 
 IV_YF = {}
 
@@ -31,7 +35,11 @@ IV_YF["MohrCoulomb_YF"] = [
     "BackStress<NullHardeningTensorFunction>"
 ]
 
+IV_YF["TensionCutoff_YF"] = [
+    "BackStress<NullHardeningTensorFunction>"
+]
 
+# Possible combinations of IV with PFs
 #Options for PF variables depend on the model
 IV_PF = {
     "VonMises_PF": [
@@ -48,7 +56,9 @@ IV_PF = {
 
 IV_PF["ConstantDilatancy_PF"] = IV_PF["VonMises_PF"]
 
-
+IV_PF["MohrCoulomb_PF"] = [
+    "BackStress<NullHardeningTensorFunction>"
+]
 
 
 

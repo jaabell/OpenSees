@@ -206,16 +206,43 @@ public:
 
 
 public:
-    Eigen::Vector3d principalStresses() const {
+    // Eigen::Vector3d principalStresses() const {
+    //     // Convert Voigt vector to a stress tensor.
+    //     Eigen::Matrix3d stress_tensor;
+    //     stress_tensor << v11(), v12(), v13(),
+    //                      v12(), v22(), v23(),
+    //                      v13(), v23(), v33();
+
+    //     // Compute the eigenvalues (principal stresses).
+    //     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver(stress_tensor);
+    //     Eigen::Vector3d eigenvalues = eigen_solver.eigenvalues();
+
+    //     // Sort the eigenvalues in ascending order.
+    //     std::sort(eigenvalues.data(), eigenvalues.data() + eigenvalues.size());
+
+    //     return eigenvalues;
+    // }
+
+    std::tuple<double, double, double> principalStresses() const {
         // Convert Voigt vector to a stress tensor.
         Eigen::Matrix3d stress_tensor;
         stress_tensor << v11(), v12(), v13(),
-                      v12(), v22(), v23(),
-                      v13(), v23(), v33();
+                         v12(), v22(), v23(),
+                         v13(), v23(), v33();
 
         // Compute the eigenvalues (principal stresses).
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver(stress_tensor);
-        return eigen_solver.eigenvalues();
+        Eigen::Vector3d eigenvalues = eigen_solver.eigenvalues();
+
+        // Sort the eigenvalues in ascending order.
+        std::sort(eigenvalues.data(), eigenvalues.data() + eigenvalues.size());
+
+        double s1, s2, s3;
+        s1 = eigenvalues[0];
+        s2 = eigenvalues[1];
+        s3 = eigenvalues[2];
+
+        return std::make_tuple(s1,s2,s3);
     }
 
 

@@ -69,7 +69,7 @@
 
 using namespace ASDPlasticMaterial3DGlobals;
 
-
+#define ASDP_TAG this->getTag()
 
 template <
     class ElasticityType,
@@ -242,7 +242,7 @@ public:
 
         int exitflag = -1;
 
-        switch (INT_OPT_constitutive_integration_method[this->getTag()])
+        switch (INT_OPT_constitutive_integration_method[ASDP_TAG])
         {
         case ASDPlasticMaterial3D_Constitutive_Integration_Method::Not_Set :
             exitflag = -1;
@@ -251,9 +251,9 @@ public:
         case ASDPlasticMaterial3D_Constitutive_Integration_Method::Forward_Euler :
             exitflag = this->Forward_Euler(strain_increment);
             break;
-        // case ASDPlasticMaterial3D_Constitutive_Integration_Method::Forward_Euler_Subincrement :
-        //     exitflag = this->Forward_Euler_Subincrement(strain_increment);
-        //     break;
+        case ASDPlasticMaterial3D_Constitutive_Integration_Method::Forward_Euler_Subincrement :
+            exitflag = this->Forward_Euler_Subincrement(strain_increment);
+            break;
         // case ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler :
         //     exitflag = this->Backward_Euler(strain_increment);;
         //     break;
@@ -300,6 +300,8 @@ public:
         return result;
     }
 
+
+
     const Vector &getStrain(void)
     {
         static Vector result(6);
@@ -311,6 +313,46 @@ public:
     {
         static Vector result(6);
         TrialPlastic_Strain.toStress(result);
+        return result;
+    }
+
+    const Vector &getEQPstrain(void)
+    {
+        static Vector result(1);
+        result(0) = std::sqrt(2./3.*TrialPlastic_Strain.squaredNorm());
+        // opserr << "JOSE: getEQPstrain(void) result = " << result << endln;
+        return result;
+    }
+
+    const Vector &getPStress(void)
+    {
+        static Vector result(1);
+        result(0) = TrialStress.meanStress();
+        // opserr << "JOSE: getPStress(void) result = " << result << endln;
+        return result;
+    }
+
+    const Vector &getJ2Stress(void)
+    {
+        static Vector result(1);
+        result(0) = TrialStress.getJ2();
+        // opserr << "JOSE: getJ2Stress(void) result = " << result << endln;
+        return result;
+    }
+
+    const Vector &getVolStrain(void)
+    {
+        static Vector result(1);
+        result(0) = TrialStrain.getI1();
+        // opserr << "JOSE: getVolStrain(void) result = " << result << endln;
+        return result;
+    }
+
+    const Vector &getJ2Strain(void)
+    {
+        static Vector result(1);
+        result(0) = TrialStrain.getJ2();
+        // opserr << "JOSE: getJ2Strain(void) result = " << result << endln;
         return result;
     }
 
@@ -384,43 +426,48 @@ public:
 
     void ComputeTangentStiffness()
     {
-        if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Elastic)
+        if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Elastic)
         {
             VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
             Stiffness = Eelastic;
         }
-        else if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic)
+        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_FirstOrder)
         {
-            compute_numerical_tangent(TrialStrain-CommitStrain, Stiffness);
+            compute_numerical_tangent_firstorder(TrialStrain-CommitStrain, Stiffness);
         }
-        // else if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Continuum)
-        // {
+        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_SecondOrder)
+        {
+            compute_numerical_tangent_secondorder(TrialStrain-CommitStrain, Stiffness);
+        }
+        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::
+            Continuum)
+        {
 
-        //     VoigtMatrix Eelastic = et(TrialStress, parameters_storage);
-        //     const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
-        //     const VoigtVector& m = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
+            VoigtMatrix Eelastic = et(TrialStress, parameters_storage);
+            const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
+            const VoigtVector& m = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
 
-        //     double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
+            double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
 
-        //     double den_after_corrector = n.transpose() * Eelastic * m - hardening;
+            double den_after_corrector = n.transpose() * Eelastic * m - hardening;
 
-        //     VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
-        //     Stiffness = Econtinuum;
-        // }
-        // else if (INT_OPT_tangent_operator_type[this->getTag()] == ASDPlasticMaterial3D_Tangent_Operator_Type::Secant)
-        // {
+            VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
+            Stiffness = Econtinuum;
+        }
+        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Secant)
+        {
 
-        //     VoigtMatrix Eelastic = et(TrialStress, parameters_storage);
-        //     const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
-        //     const VoigtVector& m = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
+            VoigtMatrix Eelastic = et(TrialStress, parameters_storage);
+            const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
+            const VoigtVector& m = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
 
-        //     double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
+            double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
 
-        //     double den_after_corrector = n.transpose() * Eelastic * m - hardening;
+            double den_after_corrector = n.transpose() * Eelastic * m - hardening;
 
-        //     VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
-        //     Stiffness = (Econtinuum + Eelastic)/2;
-        // }
+            VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
+            Stiffness = (Econtinuum + Eelastic)/2;
+        }
     }
 
     int compute_local_stress(
@@ -460,7 +507,7 @@ public:
 
             if (yf_val_start < 0) {
                 // Find the intersection of the yield surface between the start and trial stress
-                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double tol_yf = DOUBLE_OPT_f_absolute_tol[ASDP_TAG];
                 double intersection_factor = compute_yf_crossing(
                     local_stress, trial_stress, 0.0, 1.0, tol_yf);
                 
@@ -507,12 +554,13 @@ public:
 
             if (dLambda <= 0)
             {
-                cout << "CEP - dLambda = " << dLambda << " <= 0\n";
-                printTensor1("m", m);
-                printTensor1("n", n);
-                cout << "hardening = " << hardening << endl;
-                cout << "den = " << den << endl;
-                printTensor1("depsilon_elpl", depsilon_elpl);
+                // cout << "CEP - dLambda = " << dLambda << " <= 0\n";
+                // printTensor1("m", m);
+                // printTensor1("n", n);
+                // cout << "hardening = " << hardening << endl;
+                // cout << "den = " << den << endl;
+                // printTensor1("depsilon_elpl", depsilon_elpl);
+                dLambda = 0;
             }
 
             trial_stress = trial_stress - dLambda * Eelastic * m;
@@ -525,59 +573,117 @@ public:
 
 
 
-int compute_numerical_tangent(
-    const VoigtVector& strain_incr, VoigtMatrix& tangent_matrix, double epsilon_ref = 1e-6, double delta_min = 1e-12)
-{
-    using namespace ASDPlasticMaterial3DGlobals;
+    int compute_numerical_tangent_firstorder(
+        const VoigtVector& strain_incr, VoigtMatrix& tangent_matrix, double epsilon_ref = 1e-8, double delta_min = 1e-12)
+    {
+        using namespace ASDPlasticMaterial3DGlobals;
 
-    // cout << "strain_incr = " << strain_incr.transpose() << endl;
-    // cout << "epsilon_ref = " << epsilon_ref << endl;
-    // cout << "delta_min = " << delta_min << endl;
+        // cout << "strain_incr = " << strain_incr.transpose() << endl;
+        // cout << "epsilon_ref = " << epsilon_ref << endl;
+        // cout << "delta_min = " << delta_min << endl;
 
-    // Number of strain and stress components (Voigt notation in 3D: 6 components)
-    const int n = 6;
+        // Number of strain and stress components (Voigt notation in 3D: 6 components)
+        const int n = 6;
 
-    // Initialize the local copies of stress and strain
-    VoigtVector local_stress = CommitStress;
-    VoigtVector local_strain = CommitStrain;
+        // Initialize the local copies of stress and strain
+        VoigtVector local_stress = CommitStress;
+        VoigtVector local_strain = CommitStrain;
 
-    // Allocate memory for perturbed stress and strain
-    VoigtVector perturbed_stress;
-    VoigtVector perturbed_strain;
+        // Allocate memory for perturbed stress and strain
+        VoigtVector perturbed_stress;
+        VoigtVector perturbed_strain;
 
-    // Compute initial stress increment for the given strain increment (unperturbed)
-    VoigtVector initial_stress_incr;
-    compute_local_stress(local_stress, local_strain, strain_incr, initial_stress_incr);
+        // Compute initial stress increment for the given strain increment (unperturbed)
+        VoigtVector initial_stress_incr;
+        compute_local_stress(local_stress, local_strain, strain_incr, initial_stress_incr);
 
-    // cout << "local_stress = " << local_stress.transpose() << endl;
-    // cout << "initial_stress_incr = " << initial_stress_incr.transpose() << endl;
-    double delta = std::max(epsilon_ref * strain_incr.norm(), delta_min);
-    // cout << "delta = " << delta << endl;
+        // cout << "local_stress = " << local_stress.transpose() << endl;
+        // cout << "initial_stress_incr = " << initial_stress_incr.transpose() << endl;
+        double delta = std::max(epsilon_ref * strain_incr.norm(), delta_min);
+        // cout << "delta = " << delta << endl;
 
-    // Loop over each strain component to compute the tangent matrix via finite differences
-    for (int i = 0; i < n; ++i) {
-        // Compute adaptive delta based on the current strain component
+        // Loop over each strain component to compute the tangent matrix via finite differences
+        for (int i = 0; i < n; ++i) {
+            // Compute adaptive delta based on the current strain component
 
-        // Perturb the i-th strain component by the adaptive delta
-        VoigtVector strain_incr_perturbed = strain_incr;
-        strain_incr_perturbed(i) += delta;
+            // Perturb the i-th strain component by the adaptive delta
+            VoigtVector strain_incr_perturbed = strain_incr;
+            strain_incr_perturbed(i) += delta;
 
-        // Compute the local stress for the perturbed strain increment
-        compute_local_stress(local_stress, local_strain, strain_incr_perturbed, perturbed_stress);
+            // Compute the local stress for the perturbed strain increment
+            compute_local_stress(local_stress, local_strain, strain_incr_perturbed, perturbed_stress);
 
-        // cout << "        strain_incr_perturbed = " << strain_incr_perturbed.transpose() << endl;
-        // cout << "        perturbed_stress = " << perturbed_stress.transpose() << endl;
-        // Finite difference approximation of the tangent matrix (column i)
-        for (int j = 0; j < n; ++j) {
-            tangent_matrix(j, i) = (perturbed_stress(j) - initial_stress_incr(j)) / delta;
+            // cout << "        strain_incr_perturbed = " << strain_incr_perturbed.transpose() << endl;
+            // cout << "        perturbed_stress = " << perturbed_stress.transpose() << endl;
+            // Finite difference approximation of the tangent matrix (column i)
+            for (int j = 0; j < n; ++j) {
+                tangent_matrix(j, i) = (perturbed_stress(j) - initial_stress_incr(j)) / delta;
+            }
         }
+
+        // cout << "tangent_matrix = \n" << tangent_matrix << endl;
+
+        return 0; // Return success
     }
 
-    // cout << "tangent_matrix = \n" << tangent_matrix << endl;
 
-    return 0; // Return success
-}
 
+    int compute_numerical_tangent_secondorder(
+        const VoigtVector& strain_incr, VoigtMatrix& tangent_matrix, double epsilon_ref = 1e-8, double delta_min = 1e-12)
+    {
+        using namespace ASDPlasticMaterial3DGlobals;
+
+        // cout << "strain_incr = " << strain_incr.transpose() << endl;
+        // cout << "epsilon_ref = " << epsilon_ref << endl;
+        // cout << "delta_min = " << delta_min << endl;
+
+        // Number of strain and stress components (Voigt notation in 3D: 6 components)
+        const int n = 6;
+
+        // Initialize the local copies of stress and strain
+        VoigtVector local_stress = CommitStress;
+        VoigtVector local_strain = CommitStrain;
+
+        // Allocate memory for perturbed stress and strain
+        VoigtVector perturbed_stress1;
+        VoigtVector perturbed_stress2;
+        VoigtVector perturbed_strain;
+
+        // Compute initial stress increment for the given strain increment (unperturbed)
+        // VoigtVector initial_stress_incr;
+        // compute_local_stress(local_stress, local_strain, strain_incr, initial_stress_incr);
+
+        // cout << "local_stress = " << local_stress.transpose() << endl;
+        // cout << "initial_stress_incr = " << initial_stress_incr.transpose() << endl;
+        double delta = std::max(epsilon_ref * strain_incr.norm(), delta_min);
+        // cout << "delta = " << delta << endl;
+
+        // Loop over each strain component to compute the tangent matrix via finite differences
+        for (int i = 0; i < n; ++i) {
+            // Compute adaptive delta based on the current strain component
+
+            // Perturb the i-th strain component by the adaptive delta
+            VoigtVector strain_incr_perturbed1 = strain_incr;
+            VoigtVector strain_incr_perturbed2 = strain_incr;
+            strain_incr_perturbed1(i) += delta;
+            strain_incr_perturbed2(i) -= delta;
+
+            // Compute the local stress for the perturbed strain increment
+            compute_local_stress(local_stress, local_strain, strain_incr_perturbed1, perturbed_stress1);
+            compute_local_stress(local_stress, local_strain, strain_incr_perturbed2, perturbed_stress2);
+
+            // cout << "        strain_incr_perturbed = " << strain_incr_perturbed.transpose() << endl;
+            // cout << "        perturbed_stress = " << perturbed_stress.transpose() << endl;
+            // Finite difference approximation of the tangent matrix (column i)
+            for (int j = 0; j < n; ++j) {
+                tangent_matrix(j, i) = (perturbed_stress1(j) - perturbed_stress2(j)) / (2*delta);
+            }
+        }
+
+        // cout << "tangent_matrix = \n" << tangent_matrix << endl;
+
+        return 0; // Return success
+    }
 
     const Matrix& getTangent()
     {
@@ -622,6 +728,13 @@ int compute_numerical_tangent(
             first_step = false;
         }
 
+        if (GLOBAL_INT_max_iter[ASDP_TAG] > 0 || GLOBAL_DBL_max_error[ASDP_TAG] > 0.)
+        {
+            cout << "  () ASDP Integration Info. Tag = " << ASDP_TAG << " max_iter = " << GLOBAL_INT_max_iter[ASDP_TAG] << " max_error = " << GLOBAL_DBL_max_error[ASDP_TAG] << endl;
+            GLOBAL_INT_max_iter[ASDP_TAG] = 0;
+            GLOBAL_DBL_max_error[ASDP_TAG] = 0.;
+        }
+
         return 0;
     }
 
@@ -653,7 +766,7 @@ int compute_numerical_tangent(
                            thisClassTag> *newmaterial = new ASDPlasticMaterial3D<ElasticityType,
         YieldFunctionType,
         PlasticFlowType,
-        thisClassTag>(this->getTag());
+        thisClassTag>(ASDP_TAG);
         newmaterial->TrialStrain = this->TrialStrain;
         newmaterial->TrialStress = this->TrialStress;
         newmaterial->TrialPlastic_Strain = this->TrialPlastic_Strain;
@@ -675,7 +788,7 @@ int compute_numerical_tangent(
                                thisClassTag> *newmaterial = new ASDPlasticMaterial3D<ElasticityType,
             YieldFunctionType,
             PlasticFlowType,
-            thisClassTag>(this->getTag());
+            thisClassTag>(ASDP_TAG);
             newmaterial->TrialStrain = this->TrialStrain;
             newmaterial->TrialStress = this->TrialStress;
             newmaterial->TrialPlastic_Strain = this->TrialPlastic_Strain;
@@ -706,6 +819,16 @@ int compute_numerical_tangent(
             return new MaterialResponse(this, 2, this->getStrain());
         else if (strcmp(argv[0], "pstrain") == 0 || strcmp(argv[0], "pstrains") == 0)
             return new MaterialResponse(this, 3, this->getPstrain());
+        else if (strcmp(argv[0], "eqpstrain") == 0 )
+            return new MaterialResponse(this, 4, this->getEQPstrain());        
+        else if (strcmp(argv[0], "PStress") == 0 )
+            return new MaterialResponse(this, 5, this->getPStress());        
+        else if (strcmp(argv[0], "J2Stress") == 0 )
+            return new MaterialResponse(this, 6, this->getJ2Stress());        
+        else if (strcmp(argv[0], "VolStrain") == 0 )
+            return new MaterialResponse(this, 7, this->getVolStrain());        
+        else if (strcmp(argv[0], "J2Strain") == 0 )
+            return new MaterialResponse(this, 8, this->getJ2Strain());
         else
         {
             const char *iv_name = argv[0];
@@ -739,6 +862,16 @@ int compute_numerical_tangent(
             *(matInformation.theVector) = getStrain();
         else if (responseID == 3)
             *(matInformation.theVector) = getPstrain();
+        else if (responseID == 4)
+            *(matInformation.theVector) = getEQPstrain();        
+        else if (responseID == 5)
+            *(matInformation.theVector) = getPStress();        
+        else if (responseID == 6)
+            *(matInformation.theVector) = getJ2Stress();        
+        else if (responseID == 7)
+            *(matInformation.theVector) = getVolStrain();        
+        else if (responseID == 8)
+            *(matInformation.theVector) = getJ2Strain();
         else if (responseID >= 1000)
         {
             int pos = responseID - 1000;
@@ -820,7 +953,7 @@ int compute_numerical_tangent(
         TrialStress = stress;
     }
 
-    bool set_constitutive_integration_method(int method, int tangent, double f_relative_tol, double stress_relative_tol, int n_max_iterations, int return_to_yield_surface)
+    bool set_constitutive_integration_method(int method, int tangent, double f_absolute_tol, double stress_absolute_tol, int n_max_iterations, int return_to_yield_surface, int rk45_niter_max, double rk45_dT_min)
     {
         if ( method == (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Not_Set
                 || method == (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Forward_Euler
@@ -835,21 +968,27 @@ int compute_numerical_tangent(
                 || method == (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler_ddlambda_Subincrement
                 || method == (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Full_Backward_Euler)
         {
-            int tag = this->getTag();
-            INT_OPT_constitutive_integration_method[tag] = (ASDPlasticMaterial3D_Constitutive_Integration_Method) method ;
-            INT_OPT_tangent_operator_type[tag] = (ASDPlasticMaterial3D_Tangent_Operator_Type) tangent ;
-            INT_OPT_f_relative_tol[tag] = f_relative_tol ;
-            INT_OPT_stress_relative_tol[tag] = stress_relative_tol ;
-            INT_OPT_n_max_iterations[tag] = n_max_iterations ;
-            INT_OPT_return_to_yield_surface[tag] = return_to_yield_surface ;
+            INT_OPT_constitutive_integration_method[ASDP_TAG] = (ASDPlasticMaterial3D_Constitutive_Integration_Method) method ;
+            INT_OPT_tangent_operator_type[ASDP_TAG] = (ASDPlasticMaterial3D_Tangent_Operator_Type) tangent ;
+            DOUBLE_OPT_f_absolute_tol[ASDP_TAG] = f_absolute_tol ;
+            DBL_OPT_stress_absolute_tol[ASDP_TAG] = stress_absolute_tol ;
+            INT_OPT_n_max_iterations[ASDP_TAG] = n_max_iterations ;
+            INT_OPT_return_to_yield_surface[ASDP_TAG] = return_to_yield_surface ;
+            DBL_OPT_RK45_dT_min[ASDP_TAG] = rk45_dT_min ;
+            INT_OPT_RK45_niter_max[ASDP_TAG] = rk45_niter_max ;
 
-            cout << "set_constitutive_integration_method tag = " << tag << " ::: " << endl;
+            GLOBAL_INT_max_iter[ASDP_TAG] = 0;
+            GLOBAL_DBL_max_error[ASDP_TAG] = 0.;
+
+            cout << "set_constitutive_integration_method tag = " << ASDP_TAG << " ::: " << endl;
             cout << "   method = " << method << endl;
             cout << "   tanget_type = " << tangent << endl;
-            cout << "   f_relative_tol = " << f_relative_tol << endl;
-            cout << "   stress_relative_tol = " << stress_relative_tol << endl;
+            cout << "   f_absolute_tol = " << f_absolute_tol << endl;
+            cout << "   stress_absolute_tol = " << stress_absolute_tol << endl;
             cout << "   n_max_iterations = " << n_max_iterations << endl;
             cout << "   return_to_yield_surface = " << return_to_yield_surface << endl;
+            cout << "   rk45_niter_max = " << rk45_niter_max << endl;
+            cout << "   rk45_dT_min = " << rk45_dT_min << endl;
 
             return true;
         }
@@ -945,13 +1084,14 @@ private:
         if ((yf_val_start <= 0.0 && yf_val_end <= 0.0) || yf_val_start > yf_val_end) //Elasticity
         {
             Stiffness = Eelastic;
+            return 0;
         }
         else  //Plasticity
         {
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double tol_yf = DOUBLE_OPT_f_absolute_tol[ASDP_TAG];
                 double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
@@ -993,12 +1133,13 @@ private:
 
             if (dLambda <= 0)
             {
-                cout << "CEP - dLambda = " << dLambda << " <= 0\n";
-                printTensor1("m", m);
-                printTensor1("n", n);
-                cout << "hardening = " << hardening << endl;
-                cout << "den = " << den << endl;
-                printTensor1("depsilon_elpl", depsilon_elpl);
+                // cout << "CEP - dLambda = " << dLambda << " <= 0\n";
+                // printTensor1("m", m);
+                // printTensor1("n", n);
+                // cout << "hardening = " << hardening << endl;
+                // cout << "den = " << den << endl;
+                // printTensor1("depsilon_elpl", depsilon_elpl);
+                dLambda = 0;
             }
 
             // Update the trial plastic strain.
@@ -1023,7 +1164,7 @@ private:
 
 
             // Returning to Yield surface as recommended by Crisfield...
-            if (INT_OPT_return_to_yield_surface[this->getTag()])
+            if (INT_OPT_return_to_yield_surface[ASDP_TAG])
             {
                 double yf_val_corr = yf(TrialStress, iv_storage, parameters_storage);
                 const VoigtVector& n_corr = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
@@ -1046,27 +1187,27 @@ private:
             double norm_trial_stress = TrialStress.transpose() * TrialStress;
             if (norm_trial_stress != norm_trial_stress) //check for nan
             {
-                cout << "Numeric error!\n";
-                printTensor1("TrialStress = " , TrialStress);
-                printTensor1("CommitStress = " , CommitStress);
-                printTensor1("depsilon = " , depsilon);
-                printTensor1("dsigma   = " , dsigma);
-                printTensor1("intersection_stress = " , intersection_stress);
-                printTensor2("Eelastic = " , Eelastic);
-                printTensor2("Stiffness = " , Stiffness);
-                cout << "yf_val_start = " << yf_val_start << endl;
-                cout << "yf_val_end = " << yf_val_end << endl;
-                printTensor1("n = " , n );
-                printTensor1("m = " , m );
-                cout << "hardening  = " << hardening << endl;
-                cout << "den = " << den << endl;
-                cout << "dLambda = " << dLambda << endl;
+                // cout << "Numeric error!\n";
+                // printTensor1("TrialStress = " , TrialStress);
+                // printTensor1("CommitStress = " , CommitStress);
+                // printTensor1("depsilon = " , depsilon);
+                // printTensor1("dsigma   = " , dsigma);
+                // printTensor1("intersection_stress = " , intersection_stress);
+                // printTensor2("Eelastic = " , Eelastic);
+                // printTensor2("Stiffness = " , Stiffness);
+                // cout << "yf_val_start = " << yf_val_start << endl;
+                // cout << "yf_val_end = " << yf_val_end << endl;
+                // printTensor1("n = " , n );
+                // printTensor1("m = " , m );
+                // cout << "hardening  = " << hardening << endl;
+                // cout << "den = " << den << endl;
+                // cout << "dLambda = " << dLambda << endl;
 
-                errorcode = -1;
+                return -1;
             }
             else
             {
-                errorcode = 0;
+                return 0;
             }
 
             ComputeTangentStiffness();
@@ -1081,10 +1222,166 @@ private:
     // int Forward_Euler_Subincrement(const VoigtVector &strain_incr, bool const& with_return2yield_surface)
     int Forward_Euler_Subincrement(const VoigtVector & strain_incr)
     {
-        using namespace ASDPlasticMaterial3DGlobals;
+       using namespace ASDPlasticMaterial3DGlobals;
+
+
+
         int errorcode = -1;
 
+        static VoigtVector depsilon;
+        depsilon *= 0;
+        depsilon = strain_incr;
 
+        const VoigtVector& sigma = CommitStress;
+        const VoigtVector& epsilon = CommitStrain;
+
+        iv_storage.revert_all();
+
+        dsigma *= 0;
+        intersection_stress *= 0;
+        intersection_strain *= 0;
+
+        VoigtMatrix Eelastic = et(sigma, parameters_storage);
+
+        dsigma = Eelastic * depsilon;
+
+        TrialStress = sigma + dsigma;
+        TrialStrain = CommitStrain + depsilon;
+        TrialPlastic_Strain = CommitPlastic_Strain;
+
+        double yf_val_start = yf(sigma, iv_storage, parameters_storage);
+        double yf_val_end = yf(TrialStress, iv_storage, parameters_storage);
+
+        VoigtVector start_stress = CommitStress;
+        VoigtVector end_stress = TrialStress;
+
+        intersection_stress = start_stress;
+
+        if ((yf_val_start <= 0.0 && yf_val_end <= 0.0) || yf_val_start > yf_val_end) //Elasticity
+        {
+            Stiffness = Eelastic;
+            return 0;
+        }
+        else  //Plasticity
+        {
+            depsilon_elpl = depsilon;
+            if (yf_val_start < 0)
+            {
+                double tol_yf = DOUBLE_OPT_f_absolute_tol[ASDP_TAG];
+                double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
+
+                intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
+                intersection_factor = intersection_factor > 1 ? 1 : intersection_factor;
+
+                intersection_stress = start_stress * (1 - intersection_factor) + end_stress * intersection_factor;
+                intersection_strain = epsilon  + depsilon * intersection_factor;
+                depsilon_elpl = (1 - intersection_factor) * depsilon;
+            }
+
+            TrialStress = intersection_stress;
+
+            int Nsubsteps = INT_OPT_n_max_iterations[ASDP_TAG];
+            depsilon_elpl = depsilon_elpl/Nsubsteps;
+
+            for (int substep = 0; substep < Nsubsteps; ++substep)
+            {
+          
+                Eelastic = et(intersection_stress, parameters_storage);
+                TrialStress  += Eelastic * depsilon_elpl;
+
+                //Compute normal to YF (n) and Plastic Flow direction (m)
+                const VoigtVector& n = yf.df_dsigma_ij(intersection_stress, iv_storage, parameters_storage);
+                const VoigtVector& m = pf(depsilon_elpl, intersection_stress, iv_storage, parameters_storage);
+
+                double hardening = yf.hardening( depsilon_elpl, m,  intersection_stress, iv_storage, parameters_storage);
+                double den = n.transpose() * Eelastic * m - hardening;
+
+                //Compute the plastic multiplier
+                if (abs(den) < MACHINE_EPSILON)
+                {
+                    cout << "CEP - den = 0\n";
+                    cout << "yf_val_start = " << yf_val_start << endl;
+                    cout << "yf_val_end = " << yf_val_end << endl;
+                    printTensor1("m", m);
+                    printTensor1("n", n);
+                    cout << "hardening = " << hardening << endl;
+                    cout << "den = " << den << endl;
+                    printTensor1("depsilon_elpl", depsilon_elpl);
+                    return -1;
+                }
+
+                double dLambda =  n.transpose() * Eelastic * depsilon_elpl;
+                dLambda /= den;
+
+                if (dLambda <= 0)
+                {
+                    dLambda = 0;
+                }
+
+                // Update the trial plastic strain.
+                TrialPlastic_Strain += dLambda * m;
+
+                // This code iterates internal variables and updates the trial values
+                iv_storage.apply([&m, &dLambda, this](auto & internal_variable)
+                {
+                    auto h = internal_variable.hardening_function(depsilon_elpl, m, intersection_stress, parameters_storage);
+                    internal_variable.trial_value += dLambda * h;
+                });
+
+                //Correct the trial stress
+                TrialStress = TrialStress - dLambda * Eelastic * m;
+            }
+
+            // Returning to Yield surface as recommended by Crisfield...
+            if (INT_OPT_return_to_yield_surface[ASDP_TAG])
+            {
+                double yf_val_corr = yf(TrialStress, iv_storage, parameters_storage);
+                const VoigtVector& n_corr = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
+                const VoigtVector& m_corr = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
+
+                double hardening_corr = yf.hardening( depsilon_elpl, m_corr,  TrialStress, iv_storage, parameters_storage);
+                double dLambda_corr = yf_val_corr / (
+                                                     n_corr.transpose() * Eelastic * m_corr - hardening_corr
+                                                 );
+                TrialStress = TrialStress - dLambda_corr * Eelastic * m_corr;
+                TrialPlastic_Strain += dLambda_corr * m_corr;
+            }
+            else
+            {
+                // Do nothing
+            }
+            // ============================================================================================
+            // ============================================================================================
+
+            double norm_trial_stress = TrialStress.transpose() * TrialStress;
+            if (norm_trial_stress != norm_trial_stress) //check for nan
+            {
+                // cout << "Numeric error!\n";
+                // printTensor1("TrialStress = " , TrialStress);
+                // printTensor1("CommitStress = " , CommitStress);
+                // printTensor1("depsilon = " , depsilon);
+                // printTensor1("dsigma   = " , dsigma);
+                // printTensor1("intersection_stress = " , intersection_stress);
+                // printTensor2("Eelastic = " , Eelastic);
+                // printTensor2("Stiffness = " , Stiffness);
+                // cout << "yf_val_start = " << yf_val_start << endl;
+                // cout << "yf_val_end = " << yf_val_end << endl;
+                // printTensor1("n = " , n );
+                // printTensor1("m = " , m );13
+                // cout << "hardening  = " << hardening << endl;
+                // cout << "den = " << den << endl;
+                // cout << "dLambda = " << dLambda << endl;
+
+                return -1;
+            }
+            else
+            {
+                return 0;
+            }
+
+            ComputeTangentStiffness();
+
+        }
 
         return errorcode;
     }
@@ -1170,7 +1467,7 @@ private:
             depsilon_elpl = depsilon;
             if (yf_val_start < 0)
             {
-                double tol_yf = INT_OPT_f_relative_tol[this->getTag()];
+                double tol_yf = DOUBLE_OPT_f_absolute_tol[ASDP_TAG];
                 double intersection_factor = compute_yf_crossing( start_stress, end_stress, 0.0, 1.0, tol_yf );
 
                 intersection_factor = intersection_factor < 0 ? 0 : intersection_factor;
@@ -1182,7 +1479,7 @@ private:
             }
 
             TrialStress = intersection_stress;
-            double T = 0.0, dT = 1.0, dT_min = 1e-3, TolE = this->INT_OPT_stress_relative_tol[this->getTag()];
+            double T = 0.0, dT = 1.0, dT_min = this->DBL_OPT_RK45_dT_min[ASDP_TAG], TolE = this->DBL_OPT_stress_absolute_tol[ASDP_TAG];
 
 
             VoigtVector next_Sigma = TrialStress;
@@ -1359,6 +1656,8 @@ private:
                 if (stressNorm >= 0.5) { curStepError1 /= (2 * stressNorm); }
                 //Internal variables norm and internal variables error (TODO)
 
+                // double curStepError = curStepError1; //fmax(curStepError1, curStepError2);
+                // double curStepError = curStepError1/stressNorm; //fmax(curStepError1, curStepError2);
                 double curStepError = curStepError1; //fmax(curStepError1, curStepError2);
 
                 //Check convergence and adjust integration timestep
@@ -1390,21 +1689,31 @@ private:
                     maxStepError = max(maxStepError, curStepError);
                 }
 
+                if (niter > this->INT_OPT_RK45_niter_max[ASDP_TAG])
+                {
+                    cout << "ASDPlasticMaterial3D - tag = " << ASDP_TAG << " exceeded number of iterations. niter = " << niter << " niter_max = " <<this->INT_OPT_RK45_niter_max[ASDP_TAG] << " T= " << T << " dT = " << dT << endl;
+                    // throw std::runtime_error("ASDPLasticMaterial3D - Unable to find a valid bracket in compute_yf_crossing");
+                    return -1;
+                }
+
             }
+
+            GLOBAL_INT_max_iter[ASDP_TAG] = std::max(GLOBAL_INT_max_iter[ASDP_TAG], niter);
+            GLOBAL_DBL_max_error[ASDP_TAG] = std::max(GLOBAL_DBL_max_error[ASDP_TAG], maxStepError);
 
             TrialStress = next_Sigma;
             TrialPlastic_Strain = next_EpsilonPl;
             iv_storage = next_iv_storage;
 
            //Return to Yield
-            if (INT_OPT_return_to_yield_surface[this->getTag()] == 1)  // Return to yield in one step
+            if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 1)  // Return to yield in one step
             {
                 // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
                 // Make surface the internal variables are already updated. And then, return to the yield surface.
                 double yf_val_after_corrector;
                 int iter =0;
-                // double TOL = 10*this->INT_OPT_stress_relative_tol[this->getTag()];
-                // double NITER = this->INT_OPT_n_max_iterations[this->getTag()];
+                // double TOL = 10*this->DBL_OPT_stress_absolute_tol[ASDP_TAG];
+                // double NITER = this->INT_OPT_n_max_iterations[ASDP_TAG];
                 // do
                 {
                     yf_val_after_corrector = yf(TrialStress, iv_storage, parameters_storage);
@@ -1426,14 +1735,14 @@ private:
 
 
            //Return to Yield with bisection
-           else if (INT_OPT_return_to_yield_surface[this->getTag()] == 2)  // Return to yield with iterations
+           else if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 2)  // Return to yield with iterations
            {
                 // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
                 // Make surface the internal variables are already updated. And then, return to the yield surface.
                 double y0  = yf(TrialStress, iv_storage, parameters_storage) ;
                 int iter = 0;
-                double TOL = this->INT_OPT_f_relative_tol[this->getTag()];
-                double NITER = this->INT_OPT_n_max_iterations[this->getTag()];
+                double TOL = this->DOUBLE_OPT_f_absolute_tol[ASDP_TAG];
+                double NITER = this->INT_OPT_n_max_iterations[ASDP_TAG];
                 // do
                 if(y0 > 0 && iter < NITER)
                 {
@@ -1583,7 +1892,7 @@ private:
 
         // Brent's Method Implementation
         if ((fb * fa) > 0.0) {
-            throw std::runtime_error("Unable to find a valid bracket in compute_yf_crossing");
+            throw std::runtime_error("ASDPLasticMaterial3D - Unable to find a valid bracket in compute_yf_crossing");
         }
 
         for (int iter = 1; iter <= ASDPlasticMaterial3D_MAXITER_BRENT; iter++) {
@@ -1684,10 +1993,15 @@ protected:
 
     static std::map<int, ASDPlasticMaterial3D_Constitutive_Integration_Method> INT_OPT_constitutive_integration_method;     //
     static std::map<int, ASDPlasticMaterial3D_Tangent_Operator_Type> INT_OPT_tangent_operator_type;     //
-    static std::map<int, double> INT_OPT_f_relative_tol;
-    static std::map<int, double> INT_OPT_stress_relative_tol;
+    static std::map<int, double> DOUBLE_OPT_f_absolute_tol;
+    static std::map<int, double> DBL_OPT_stress_absolute_tol;
     static std::map<int, int> INT_OPT_n_max_iterations;
     static std::map<int, int> INT_OPT_return_to_yield_surface;
+    static std::map<int, double> DBL_OPT_RK45_dT_min;
+    static std::map<int, int> INT_OPT_RK45_niter_max;
+
+    static std::map<int, int> GLOBAL_INT_max_iter; 
+    static std::map<int, double> GLOBAL_DBL_max_error; 
 
     bool first_step;
 
@@ -1705,14 +2019,22 @@ std::map<int, ASDPlasticMaterial3D_Constitutive_Integration_Method> ASDPlasticMa
 template < class E, class Y, class P, int tag>
 std::map<int, ASDPlasticMaterial3D_Tangent_Operator_Type> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_tangent_operator_type;
 template < class E, class Y, class P, int tag>
-std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_f_relative_tol;
+std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DOUBLE_OPT_f_absolute_tol;
 template < class E, class Y, class P, int tag>
-std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_stress_relative_tol;
+std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DBL_OPT_stress_absolute_tol;
 template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_n_max_iterations;
 template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_return_to_yield_surface;
+template < class E, class Y, class P, int tag>
+std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DBL_OPT_RK45_dT_min;
+template < class E, class Y, class P, int tag>
+std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_RK45_niter_max;
 
+template < class E, class Y, class P, int tag>
+std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::GLOBAL_DBL_max_error;
+template < class E, class Y, class P, int tag>
+std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::GLOBAL_INT_max_iter; 
 
 template < class E, class Y, class P, int tag>
 VoigtVector ASDPlasticMaterial3D< E,  Y,  P,  tag>::dsigma;

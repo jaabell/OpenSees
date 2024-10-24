@@ -85,12 +85,13 @@ public:
     {  
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
+        double ds = GET_PARAMETER_VALUE(MC_ds);
 
         using namespace std;
 
         // VoigtVector geo_sigma = -sigma;
 
-        // double ds = std::sqrt(sigma.dot(sigma));
+        double sigma_norm = sigma.norm();
 
 
         // cout << "CaLL derivative"  << endl;
@@ -98,67 +99,74 @@ public:
 
 
         // const double DL = 1e-8;
+        // ds = ds == 0 ? 1e-8 : ds;
+        ds = std::max(ds, ds*sigma_norm);
+        // Define a small perturbation value for numerical differentiation
+        // double ds = DL*sigma_norm;
+        // double ds = DL*sigma_norm;
 
-        // // Define a small perturbation value for numerical differentiation
-        // double ds = DL;
-
-        // // Compute the yield function at the original stress state
+        // Compute the yield function at the original stress state
         // double yf0 = YF(sigma);
         // cout << "  yf0  = " << yf0 << endl;
         
-        // for (int i = 0; i < 6; ++i) {
-        //     VoigtVector SIG = sigma;
-            
-        //     // Increment SIG at index i by a small amount for numerical differentiation
-        //     SIG(i) += ds;
+        // If the perturbation is set greater than zero, use numerical differentiation to get normal to YF
+        if (ds > 0)
+        {
+            for (int i = 0; i < 6; ++i) {
+                VoigtVector SIG1 = sigma;
+                VoigtVector SIG2 = sigma;
+                
+                // Increment SIG at index i by a small amount for numerical differentiation
+                SIG1(i) += ds;
+                SIG2(i) -= ds;
 
-        //     // Compute the yield function at the perturbed state
-        //     double yf1 = YF(SIG);
+                // Compute the yield function at the perturbed state
+                double yf1 = YF(SIG1);
+                double yf2 = YF(SIG2);
 
-        //     cout << "    SIG = " << SIG.transpose() << endl;
-        //     cout << "    yf1 = " << yf1 << endl;
+                // cout << "    SIG = " << SIG.transpose() << endl;
+                // cout << "    yf1 = " << yf1 << endl;
 
 
-        //     // Calculate the derivative
-        //     vv_out(i) = (yf1 - yf0) / ds;
-        // }
+                // Calculate the derivative
+                vv_out(i) = (yf1 - yf2) / (2*ds);
+            }
+        } else // Use analytic solution
+        {
+            VoigtVector first_vector = calculate_first_vector();
+            VoigtVector second_vector = calculate_second_vector(sigma);
+            VoigtVector third_vector = calculate_third_vector(sigma);
 
-        VoigtVector first_vector = calculate_first_vector();
-        VoigtVector second_vector = calculate_second_vector(sigma);
-        VoigtVector third_vector = calculate_third_vector(sigma);
+            double J2 = sigma.getJ2();
+            double J3 = sigma.getJ3();
+            double lode_angle = sigma.lodeAngle();
 
-        double J2 = sigma.getJ2();
-        double J3 = sigma.getJ3();
-        double lode_angle = sigma.lodeAngle();
+            double c1, c3, c2;
+            double checker = std::abs(lode_angle * 180.0 / M_PI);
 
-        double c1, c3, c2;
-        double checker = std::abs(lode_angle * 180.0 / M_PI);
+            if (std::abs(checker) < 29.0) { // If it is not the edge
+                c1 = std::sin(phi) / 3.0;
+                c3 = (std::sqrt(3.0) * std::sin(lode_angle) + std::sin(phi) * std::cos(lode_angle)) /
+                    (2.0 * J2 * std::cos(3.0 * lode_angle));
+                c2 = 0.5 * std::cos(lode_angle)*(1.0 + std::tan(lode_angle) * std::sin(3.0 * lode_angle) +
+                    std::sin(phi) * (std::tan(3.0 * lode_angle) - std::tan(lode_angle)) / std::sqrt(3.0));
+            } else { // smoothing with drucker-prager
+                c1 = 3.0 * (2.0 * std::sin(phi) / (std::sqrt(3.0) * (3.0 - std::sin(phi))));
+                c2 = 1.0;
+                c3 = 0.0;
+            }
+            // VoigtVector n2 = c1 * first_vector + c2 * second_vector + c3 * third_vector;
 
-        if (std::abs(checker) < 29.0) { // If it is not the edge
-            c1 = std::sin(phi) / 3.0;
-            c3 = (std::sqrt(3.0) * std::sin(lode_angle) + std::sin(phi) * std::cos(lode_angle)) /
-                (2.0 * J2 * std::cos(3.0 * lode_angle));
-            c2 = 0.5 * std::cos(lode_angle)*(1.0 + std::tan(lode_angle) * std::sin(3.0 * lode_angle) +
-                std::sin(phi) * (std::tan(3.0 * lode_angle) - std::tan(lode_angle)) / std::sqrt(3.0));
-        } else { // smoothing with drucker-prager
-            c1 = 3.0 * (2.0 * std::sin(phi) / (std::sqrt(3.0) * (3.0 - std::sin(phi))));
-            c2 = 1.0;
-            c3 = 0.0;
+            // cout << "    c1 = " << c1 << endl;
+            // cout << "    c2 = " << c2 << endl;
+            // cout << "    c3 = " << c3 << endl;
+            // cout << "    checker = " << checker << endl;
+            // cout << "    n  = " << vv_out.transpose() << endl;
+            // cout << "    n2  = " << n2.transpose() << endl;
+
+            vv_out = c1 * first_vector + c2 * second_vector + c3 * third_vector;
+
         }
-        // VoigtVector n2 = c1 * first_vector + c2 * second_vector + c3 * third_vector;
-
-        // cout << "    c1 = " << c1 << endl;
-        // cout << "    c2 = " << c2 << endl;
-        // cout << "    c3 = " << c3 << endl;
-        // cout << "    checker = " << checker << endl;
-        // cout << "    n  = " << vv_out.transpose() << endl;
-        // cout << "    n2  = " << n2.transpose() << endl;
-
-        vv_out = c1 * first_vector + c2 * second_vector + c3 * third_vector;
-
-
-
-
 
         return vv_out;
     }
@@ -172,7 +180,7 @@ public:
   
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<MC_phi,MC_c>;
+    using parameters_t = std::tuple<MC_phi,MC_c,MC_ds>;
 
 private:
 
