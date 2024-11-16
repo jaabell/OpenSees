@@ -53,7 +53,7 @@ void* OPS_FourNodeTetrahedron()
     if (OPS_GetNumRemainingInputArgs() < 6) 
     {
       opserr << "WARNING insufficient arguments\n";
-      opserr << "Want: element FourNodeTetrahedron eleTag? Node1? Node2? Node3? Node4? matTag? (doInitDisp?)\n";
+      opserr << "Want: element FourNodeTetrahedron eleTag? Node1? Node2? Node3? Node4? matTag? (-doInitDisp? bool?)\n";
       return 0;
     }
 
@@ -114,7 +114,7 @@ void* OPS_FourNodeTetrahedron()
 
     if (the_new_element_ptr == NULL)
     {
-      opserr << "OPS_TenNodeTetrahedron() - Could not create pointer to new TenNodeTetrahedron object" << endln;
+      opserr << "OPS_FourNodeTetrahedron() - Could not create pointer to new FourNodeTetrahedron object" << endln;
       return 0;
     }
 
