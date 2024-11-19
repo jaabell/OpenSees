@@ -23,14 +23,14 @@ void *OPS_ExplicitBathe(void) {
     }
 
     // Read input parameters
-    double data[5];
+    double data[1];
     if (OPS_GetDoubleInput(&numArgs, data) < 0) {
         opserr << "WARNING: Invalid input for ExplicitBathe integrator.\n";
         return nullptr;
     }
 
     // Create the ExplicitBathe integrator with the provided parameters
-    theIntegrator = new ExplicitBathe(data[0], data[1], data[2], data[3], data[4]);
+    theIntegrator = new ExplicitBathe(data[0]);//, data[1], data[2], data[3], data[4]);
 
     if (theIntegrator == nullptr) {
         opserr << "WARNING - out of memory creating ExplicitBathe integrator\n";
@@ -45,12 +45,17 @@ ExplicitBathe::ExplicitBathe()
       Udot(0), Udotdot(0)
 {}
 
-ExplicitBathe::ExplicitBathe(double _p, double _q0, double _q1, double _q2, double _s)
+ExplicitBathe::ExplicitBathe(double _p)//);, double _q0, double _q1, double _q2, double _s)
     : TransientIntegrator(INTEGRATOR_TAGS_ExplicitBathe),
-      deltaT(0.0), p(_p), q0(_q0), q1(_q1), q2(_q2), s(_s),
+      deltaT(0.0), p(_p),// q0(_q0), q1(_q1), q2(_q2), s(_s),
       Utm1(0), Ut(0), Utdot(0), Utdotdot(0),
       Udot(0), Udotdot(0)
-{}
+{
+    q1 = (1 - 2*p)/(2*p*(1-p));
+    q2 = 0.5 - p*q1;
+    q0 = -q1 -q2 + 0.5;
+    s = -1;
+}
 
 ExplicitBathe::~ExplicitBathe() {
     if (Utm1) delete Utm1;

@@ -44,7 +44,7 @@ class ExplicitBathe : public TransientIntegrator
 public:
     // constructors
     ExplicitBathe();
-    ExplicitBathe(double p, double q0, double q1, double q2, double s);
+    ExplicitBathe(double p);//, double q0, double q1, double q2, double s);
     
     // destructor
     ~ExplicitBathe();
