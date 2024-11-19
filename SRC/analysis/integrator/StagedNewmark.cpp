@@ -105,7 +105,7 @@ StagedNewmark::StagedNewmark()
 
 
 
-StagedNewmark::StagedNewmark(double _gamma, double _beta, bool dispFlag, bool aflag)
+StagedNewmark::StagedNewmark(double _gamma, double _beta, int dispFlag, bool aflag)
     : Newmark( _gamma,  _beta,  dispFlag,  aflag,  INTEGRATOR_TAGS_StagedNewmark)
 {
     

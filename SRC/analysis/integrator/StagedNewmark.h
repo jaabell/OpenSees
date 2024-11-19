@@ -31,7 +31,7 @@ class StagedNewmark : public Newmark
 public:
 
     StagedNewmark();
-    StagedNewmark(double gamma, double beta, bool disp = true, bool aflag=false);
+    StagedNewmark(double gamma, double beta, int disp = 1, bool aflag=false);
 
     int  formTangent(int statusFlag = CURRENT_TANGENT);
 
