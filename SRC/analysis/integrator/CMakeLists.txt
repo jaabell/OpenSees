@@ -85,6 +85,7 @@ target_sources(OPS_Analysis
        WilsonTheta.cpp
        StagedNewmark.cpp
        GimmeMCK.cpp                     # MHS
+       ExplicitBathe.cpp                # JAA
     PUBLIC
        AlphaOS.h
        AlphaOS_TP.h
@@ -129,6 +130,7 @@ target_sources(OPS_Analysis
        WilsonTheta.h
        StagedNewmark.h
        GimmeMCK.h
+       ExplicitBathe.h
 )
 
 target_sources(OPS_PFEM
