@@ -17,8 +17,8 @@ void *OPS_ExplicitBathe(void) {
 
     // Check if enough arguments are provided
     int numArgs = OPS_GetNumRemainingInputArgs();
-    if (numArgs < 5) {
-        opserr << "WARNING: Insufficient arguments for ExplicitBathe integrator. Expected 5 arguments (p, q0, q1, q2, s).\n";
+    if (numArgs < 1) {
+        opserr << "WARNING: Insufficient arguments for ExplicitBathe integrator. Expected 1 arguments (p, q0, q1, q2, s).\n";
         return nullptr;
     }
 
