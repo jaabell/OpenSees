@@ -53,7 +53,7 @@ MPIDiagonalSOE::MPIDiagonalSOE(MPIDiagonalSolver &the_Solver, bool lumped)
   std::map<int, double*> sharedBsToSendMap;
   this->myActualNeighborsBsToSend = sharedBsToSendMap;
 
-  opserr << " MPIDiagonalSOE(" << processID << ") lumpDiagonal =  " << lumpDiagonal << endln;
+  opserr << " MPIDiagonalSOE(" << processID << ") lumpDiagonal =  " << (lumpDiagonal ? "true" : "false") << endln;
 
 }
 
