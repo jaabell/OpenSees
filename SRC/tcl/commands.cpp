@@ -3015,12 +3015,25 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   // Diagonal SOE & SOLVER
   else if (strcmp(argv[1],"Diagonal") == 0) {
 #ifdef _PARALLEL_PROCESSING
+      bool lumpDiag = false;
+      if (argc > 2)
+      {
+        lumpDiag = (bool) atoi(argv[2]);
+      }
+      opserr << "MPIDiagonalSOE lumpDiag = " << lumpDiag << endln;
       DistributedDiagonalSolver    *theSolver = new DistributedDiagonalSolver();   
       theSOE = new DistributedDiagonalSOE(*theSolver);
 #else
+      bool lumpDiag = false;
+      if (argc > 2)
+      {
+        lumpDiag = (bool) atoi(argv[2]);
+      }
+      opserr << "DiagonalSOE lumpDiag = " << lumpDiag << endln;
       DiagonalSolver    *theSolver = new DiagonalDirectSolver();   
-      theSOE = new DiagonalSOE(*theSolver);
+      theSOE = new DiagonalSOE(*theSolver, lumpDiag);
 #endif
+
 
 
   } 

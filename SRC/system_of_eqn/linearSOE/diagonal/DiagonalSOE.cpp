@@ -45,6 +45,7 @@ DiagonalSOE::DiagonalSOE(DiagonalSolver &the_Solver, bool ld)
 :LinearSOE(the_Solver, LinSOE_TAGS_DiagonalSOE), lumpDiagonal(ld),
  size(0), A(0), B(0), X(0), vectX(0), vectB(0), matA(0), isAfactored(false)
 {
+   opserr << " DiagonalSOE lumpDiagonal =  " << ld << endln;
     the_Solver.setLinearSOE(*this);
 }
 

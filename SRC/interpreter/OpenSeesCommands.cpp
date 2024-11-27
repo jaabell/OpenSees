@@ -1372,8 +1372,9 @@ int OPS_System()
 
     } else if (strcmp(type,"MPIDiagonal") == 0) {
 #ifdef _PARALLEL_INTERPRETERS
-        MPIDiagonalSolver* theSolver = new MPIDiagonalSolver();
-        theSOE = new MPIDiagonalSOE(*theSolver);
+        // MPIDiagonalSolver* theSolver = new MPIDiagonalSolver();
+        // theSOE = new MPIDiagonalSOE(*theSolver);
+        theSOE = (LinearSOE*)OPS_MPIDiagonalSolver();
         setMPIDSOEFlag = true;
 #else
 	// Diagonal SOE & SOLVER
