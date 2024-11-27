@@ -3043,7 +3043,10 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       bool lumpDiag = false;
       if (argc > 2)
       {
-        lumpDiag = (bool) atoi(argv[2]);
+        if (strcmp(argv[2],"-lumped") == 0)
+        {
+          lumpDiag = true;
+        }
       }
       opserr << "MPIDiagonal lumpDiag = " << (lumpDiag? "true" : "false") << endln;
       MPIDiagonalSolver    *theSolver = new MPIDiagonalSolver();   
