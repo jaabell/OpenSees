@@ -3029,7 +3029,7 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       {
         lumpDiag = (bool) atoi(argv[2]);
       }
-      opserr << "DiagonalSOE lumpDiag = " << lumpDiag << endln;
+      opserr << "DiagonalSOE lumpDiag = " << (lumpDiag? "true" : "false") << endln;
       DiagonalSolver    *theSolver = new DiagonalDirectSolver();   
       theSOE = new DiagonalSOE(*theSolver, lumpDiag);
 #endif
@@ -3040,8 +3040,14 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   // Diagonal SOE & SOLVER
   else if (strcmp(argv[1],"MPIDiagonal") == 0) {
 #ifdef _PARALLEL_INTERPRETERS
+      bool lumpDiag = false;
+      if (argc > 2)
+      {
+        lumpDiag = (bool) atoi(argv[2]);
+      }
+      opserr << "MPIDiagonal lumpDiag = " << (lumpDiag? "true" : "false") << endln;
       MPIDiagonalSolver    *theSolver = new MPIDiagonalSolver();   
-      theSOE = new MPIDiagonalSOE(*theSolver);
+      theSOE = new MPIDiagonalSOE(*theSolver, lumpDiag);
       setMPIDSOEFlag = true;
 #else
       DiagonalSolver    *theSolver = new DiagonalDirectSolver();   
