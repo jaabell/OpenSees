@@ -28,6 +28,8 @@ void* OPS_MPIDiagonalSolver()
     if (arg == "lumped" || arg == "-lumped")
       lumped = true;
   }
+
+  opserr << "OPS_MPIDiagonalSolver lumped = " << (lumped ? "true" : "false" ) << endln; 
   
   MPIDiagonalSolver *theSolver = new MPIDiagonalSolver();   
   return new MPIDiagonalSOE(*theSolver, lumped);
