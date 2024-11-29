@@ -68,6 +68,8 @@ public:
 
 protected:
 
+    int formRHS_tpdt();
+
 private:
     double deltaT;
 
@@ -79,12 +81,30 @@ private:
     double s;
 
     // State variables
-    Vector *Utm1;                   // Displacement at time t - deltaT
-    Vector *Ut;                     // Displacement at time t
-    Vector *Utdot;                  // Velocity at time t
-    Vector *Utdotdot;               // Acceleration at time t
-    Vector *Udot;                   // Velocity at time t + deltaT
-    Vector *Udotdot;                // Acceleration at time t + deltaT
+    Vector *U_t;                    // Acceleration at time t
+    Vector *V_t;                    // Velocity at time t 
+    Vector *A_t;                    // Acceleration at time t 
+    Vector *R_t;                    // Forces at time t 
+    Vector *U_tpdt;                 // Acceleration at time t + p Dt
+    Vector *V_tpdt;                 // Velocity at time t + p Dt
+    Vector *A_tpdt;                 // Acceleration at time t + p Dt
+    Vector *Rhat_tpdt;              //    Equivalent Forces Hat at time t + p Dt
+    Vector *Rfunnyhat_tpdt;         //    Equivalent Forces Funnyhat time t + p Dt
+    Vector *U_tdt;                  // Acceleration at time t + Dt
+    Vector *V_tdt;                  // Velocity at time t + Dt
+    Vector *A_tdt;                  // Acceleration at time t + Dt
+    Vector *R_tdt;                  // Forces at time t + Dt
+
+    int updateCount;
+
+    double a0;
+    double a1;
+    double a2;
+    double a3;
+    double a4;
+    double a5;
+    double a6;
+    double a7;
 };
 
 #endif
