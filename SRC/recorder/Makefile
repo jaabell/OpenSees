@@ -21,6 +21,7 @@ OBJS       = Recorder.o \
 	EnvelopeDriftRecorder.o \
 	PatternRecorder.o \
 	RemoveRecorder.o \
+	EnergyBalanceRecorder.o \
 	DamageRecorder.o $(GRAPHIC_OBJECTS) \
 	PVDRecorder.o MPCORecorder.o GmshRecorder.o \
 	VTK_Recorder.o

@@ -25,13 +25,31 @@
 #ifndef ExplicitBathe_h
 #define ExplicitBathe_h
 
-// Written: User
-// Created: Date
+// Written: Jose A. Abell (UANDES) & Massimo Petracca (ASDEA)
+// Created: 3 XII 2024
 // Revision: A
 //
 // Description: This file contains the class definition for ExplicitBathe.
 // ExplicitBathe is an algorithmic class for performing a transient analysis
-// using the explicit Bathe time integration scheme.
+// using the explicit Bathe time integration scheme. This algorithm is like a
+// central difference scheme perturbed to introduce numerical damping. 
+// This is is a second-order accurate explicit scheme. Unlike the CentralDifference
+// class, this one only assembles the mass matrix on the right hand side making
+// it much easier to use diagonal matrices. With care, any damping matrix can
+// be used. The time-step required is approximately twice that of 
+// explicit difference. 
+//
+
+// Reference:
+//
+// Gunwoo Noh, Klaus-Jürgen Bathe,
+// An explicit time integration scheme for the analysis of wave propagations,
+// Computers & Structures,
+// Volume 129,
+// 2013,
+// Pages 178-193,
+// ISSN 0045-7949,
+// https://doi.org/10.1016/j.compstruc.2013.06.007.
 
 #include <TransientIntegrator.h>
 
@@ -44,7 +62,7 @@ class ExplicitBathe : public TransientIntegrator
 public:
     // constructors
     ExplicitBathe();
-    ExplicitBathe(double p);//, double q0, double q1, double q2, double s);
+    ExplicitBathe(double p, int compute_critical_timestep_=0);//, double q0, double q1, double q2, double s);
     
     // destructor
     ~ExplicitBathe();
@@ -68,7 +86,6 @@ public:
 
 protected:
 
-    int formRHS_tpdt();
 
 private:
     double deltaT;
@@ -78,18 +95,16 @@ private:
     double q0;
     double q1;
     double q2;
-    double s;
+    // double s;
 
     // State variables
     Vector *U_t;                    // Acceleration at time t
     Vector *V_t;                    // Velocity at time t 
     Vector *A_t;                    // Acceleration at time t 
-    Vector *R_t;                    // Forces at time t 
     Vector *U_tpdt;                 // Acceleration at time t + p Dt
     Vector *V_tpdt;                 // Velocity at time t + p Dt
+    Vector *V_fake;                 // Velocity at time t + p Dt
     Vector *A_tpdt;                 // Acceleration at time t + p Dt
-    Vector *Rhat_tpdt;              //    Equivalent Forces Hat at time t + p Dt
-    Vector *Rfunnyhat_tpdt;         //    Equivalent Forces Funnyhat time t + p Dt
     Vector *U_tdt;                  // Acceleration at time t + Dt
     Vector *V_tdt;                  // Velocity at time t + Dt
     Vector *A_tdt;                  // Acceleration at time t + Dt
@@ -105,6 +120,12 @@ private:
     double a5;
     double a6;
     double a7;
+
+    int compute_critical_timestep;
+    double damped_minimum_critical_timestep;
+    double undamped_minimum_critical_timestep;
+    int damped_critical_element_tag;
+    int undamped_critical_element_tag;
 };
 
 #endif

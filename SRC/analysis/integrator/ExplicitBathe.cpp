@@ -9,11 +9,34 @@
 #include <Channel.h>
 #include <FEM_ObjectBroker.h>
 #include <elementAPI.h>
-#include <math.h>
+#include <cmath>
 #define OPS_Export
 
 #include <NodeIter.h>
 #include <LoadPatternIter.h>
+
+
+#include <Domain.h>
+#include <Element.h>
+#include <ElementIter.h>
+
+#include <limits>
+
+#ifdef _WIN32
+
+extern "C" int DGGEV(char *JOBVL, char *JOBVR, int *N, double *A, int *LDA,
+                     double *B, int *LDB, double *ALPHAR, double *ALPHAI,
+                     double *BETA, double *VL, int *LDVL, double *VR,
+                     int *LDVR, double *WORK, int *LWORK, int *INFO);
+
+#else
+
+extern "C" int dggev_(char *JOBVL, char *JOBVR, int *N, double *A, int *LDA,
+                      double *B, int *LDB, double *ALPHAR, double *ALPHAI,
+                      double *BETA, double *VL, int *LDVL, double *VR,
+                      int *LDVR, double *WORK, int *LWORK, int *INFO);
+
+#endif
 
 void *OPS_ExplicitBathe(void) {
     // Pointer to an integrator that will be returned
@@ -28,13 +51,24 @@ void *OPS_ExplicitBathe(void) {
 
     // Read input parameters
     double p;
+    numArgs = 1;
     if (OPS_GetDoubleInput(&numArgs, &p) < 0) {
-        opserr << "WARNING: Invalid input for ExplicitBathe integrator.\n";
+        opserr << "WARNING: Invalid input for ExplicitBathe integrator. p parameter\n";
         return nullptr;
     }
 
+    int compute_critical_timestep = 0;
+    if (OPS_GetNumRemainingInputArgs() > 0)
+    {
+    	if (OPS_GetIntInput(&numArgs, &compute_critical_timestep) < 0) {
+        	opserr << "WARNING: Invalid input for ExplicitBathe integrator. compute_critical_timestep parameter\n";
+        	return nullptr;
+    	}
+    }
+
+
     // Create the ExplicitBathe integrator with the provided parameters
-    theIntegrator = new ExplicitBathe(p);
+    theIntegrator = new ExplicitBathe(p, compute_critical_timestep);
 
     if (theIntegrator == nullptr) {
         opserr << "WARNING - out of memory creating ExplicitBathe integrator\n";
@@ -44,113 +78,45 @@ void *OPS_ExplicitBathe(void) {
 
 ExplicitBathe::ExplicitBathe()
     : TransientIntegrator(INTEGRATOR_TAGS_ExplicitBathe),
-      deltaT(0.0), p(0.0), q0(0.0), q1(0.0), q2(0.0), s(0.0),
-      U_t(0),V_t(0),A_t(0),R_t(0),
-      U_tpdt(0),V_tpdt(0),A_tpdt(0),Rhat_tpdt(0),Rfunnyhat_tpdt(0),
-      U_tdt(0),V_tdt(0),A_tdt(0),R_tdt(0), updateCount(0),
-      a0(0.),a1(0.),a2(0.),a3(0.),a4(0.),a5(0.),a6(0.),a7(0.)
+      deltaT(0.0), p(0.0), q0(0.0), q1(0.0), q2(0.0), 
+      U_t(0),V_t(0),A_t(0),
+      U_tpdt(0),V_tpdt(0), V_fake(0), A_tpdt(0),
+      U_tdt(0),V_tdt(0),A_tdt(0), updateCount(0),
+      a0(0.),a1(0.),a2(0.),a3(0.),a4(0.),a5(0.),a6(0.),a7(0.),compute_critical_timestep(0)
 {}
 
-ExplicitBathe::ExplicitBathe(double _p)//);, double _q0, double _q1, double _q2, double _s)
+ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_)//);, double _q0, double _q1, double _q2, double _s)
     : TransientIntegrator(INTEGRATOR_TAGS_ExplicitBathe),
-      deltaT(0.0), p(_p),
-      U_t(0),V_t(0),A_t(0),R_t(0),
-      U_tpdt(0),V_tpdt(0),A_tpdt(0),Rhat_tpdt(0),Rfunnyhat_tpdt(0),
-      U_tdt(0),V_tdt(0),A_tdt(0),R_tdt(0), updateCount(0),
-      a0(0.),a1(0.),a2(0.),a3(0.),a4(0.),a5(0.),a6(0.),a7(0.)
+      deltaT(0.0), p(_p), q0(0.0), q1(0.0), q2(0.0), 
+      U_t(0),V_t(0),A_t(0),
+      U_tpdt(0),V_tpdt(0), V_fake(0), A_tpdt(0),
+      U_tdt(0),V_tdt(0),A_tdt(0), updateCount(0),
+      a0(0.),a1(0.),a2(0.),a3(0.),a4(0.),a5(0.),a6(0.),a7(0.),compute_critical_timestep(compute_critical_timestep_)
 {
     // Calculate the integration constants based on p
     q1 = (1 - 2*p)/(2*p*(1-p));
     q2 = 0.5 - p * q1;
     q0 = -q1 -q2 + 0.5;
-    s = -1;
+    // s = -1;
+
+    opserr << "ExplicitBathe - @jaabell p =" << p << " compute_critical_timestep ) " << compute_critical_timestep << endln;
+
 }
 
 ExplicitBathe::~ExplicitBathe() {
     if (U_t) delete U_t;
     if (V_t) delete V_t;
     if (A_t) delete A_t;
-    if (R_t) delete R_t;
-    if (U_tpdt) delete U_tpdt;
+     if (U_tpdt) delete U_tpdt;
     if (V_tpdt) delete V_tpdt;
+    if (V_fake) delete V_fake;
     if (A_tpdt) delete A_tpdt;
-    if (Rhat_tpdt) delete Rhat_tpdt;
-    if (Rfunnyhat_tpdt) delete Rfunnyhat_tpdt;
     if (U_tdt) delete U_tdt;
     if (V_tdt) delete V_tdt;
     if (A_tdt) delete A_tdt;
-    if (R_tdt) delete R_tdt;
 }
 
-int ExplicitBathe::newStep(double _deltaT) {
-    deltaT = _deltaT;
 
-    // A. Initial Calculations
-    a0 = p * deltaT;
-    a1 = 0.5 * pow(p * deltaT,2);
-    a2 = 0.5 * a0;
-    a3 = (1 - p) * deltaT;
-    a4 = 0.5 * pow((1 - p) * deltaT,2);
-    a5 = q0 * a3;
-    a6 = (0.5 + q1) * a3;
-    a7 = q2 * a3;
-
-    // Ensure state variables are initialized
-    // if (!Ut || !Utdot || !Utdotdot) {
-    //     opserr << "ExplicitBathe::newStep() - state variables not initialized\n";
-    //     return -1;
-    // }
-
-    // // Sub-step 1: Calculate intermediate displacement and velocity
-    // // 1. Calculate displacements and effective loads at time t + pΔt
-    // (*U_pdt) = *(U_t) + a0 * (*V_t) + a1 * (*A_t);
-    // // Vector Rhat_pdt = *Ut * a5 + *Udotdot * a6; // Effective loads based on the given constants
-
-
-    // LinearSOE *theLinSOE = this->getLinearSOE();
-    // if (theLinSOE->setB(R_pdt) < 0) {
-    //     opserr << "ExplicitBathe::newStep() - failed to set loads\n";
-    //     return -1;
-    // }
-    // if (theLinSOE->solve() < 0) {
-    //     opserr << "ExplicitBathe::newStep() - failed to solve for accelerations\n";
-    //     return -1;
-    // }
-    // *Udotdot = theLinSOE->getX();
-
-    // // 3. Calculate velocities at time t + pΔt
-    // Vector V_pdt = *Utdot + a2 * (*Udotdot);
-
-    // // Update intermediate state variables
-    // *Utm1 = *Ut;
-    // *Ut = U_pdt;
-    // *Utdot = V_pdt;
-
-    // // C. Second Sub-Step
-    // // 1. Calculate displacements and effective loads at time t + Δt
-    // Vector U_dt = *Ut + a3 * (*Utdot) + a4 * (*Udotdot);
-    // Vector R_dt = *Ut * a5 + *Udotdot * a6 + *Utdot * a7;
-
-    // // Solve for accelerations at t + Δt
-    // if (theLinSOE->setB(R_dt) < 0) {
-    //     opserr << "ExplicitBathe::newStep() - failed to set loads for second sub-step\n";
-    //     return -1;
-    // }
-    // if (theLinSOE->solve() < 0) {
-    //     opserr << "ExplicitBathe::newStep() - failed to solve for accelerations in second sub-step\n";
-    //     return -1;
-    // }
-    // *Udotdot = theLinSOE->getX();
-
-    // // 3. Calculate velocities at time t + Δt
-    // Vector V_dt = *Utdot + a5 * (*Udotdot) + a6 * (*Udotdot);
-
-    // // Update state variables for the final step
-    // *Ut = U_dt;
-    // *Utdot = V_dt;
-
-    return 0;
-}
 
 int ExplicitBathe::domainChanged() {
     AnalysisModel *theModel = this->getAnalysisModel();
@@ -170,145 +136,255 @@ int ExplicitBathe::domainChanged() {
     }
 
     // Allocate memory for state variables
-    // if (!Ut || Ut->Size() != size) {
-    //     if (U_t) delete U_t;
-    //     if (V_t) delete V_t;
-    //     if (A_t) delete A_t;
-    //     if (U_tpdt) delete U_tpdt;
-    //     if (V_tpdt) delete V_tpdt;
-    //     if (A_tpdt) delete A_tpdt;
-    //     if (Rhat_tpdt) delete Rhat_tpdt;
-    //     if (Rfunnyhat_tpdt) delete Rfunnyhat_tpdt;
-    //     if (U_tdt) delete U_tdt;
-    //     if (V_tdt) delete V_tdt;
-    //     if (A_tdt) delete A_tdt;
+    if (!U_t || U_t->Size() != size) {
+        if (U_t) delete U_t;
+        if (V_t) delete V_t;
+        if (A_t) delete A_t;
+        if (U_tpdt) delete U_tpdt;
+        if (V_tpdt) delete V_tpdt;
+        if (V_fake) delete V_fake;
+        if (A_tpdt) delete A_tpdt;
+        if (U_tdt) delete U_tdt;
+        if (V_tdt) delete V_tdt;
+        if (A_tdt) delete A_tdt;
 
-    //     U_t = new Vector(size);
-    //     V_t = new Vector(size);
-    //     A_t = new Vector(size);
-    //     U_tpdt = new Vector(size);
-    //     V_tpdt = new Vector(size);
-    //     A_tpdt = new Vector(size);
-    //     Rhat_tpdt = new Vector(size);
-    //     Rfunnyhat_tpdt = new Vector(size);
-    //     U_tdt = new Vector(size);
-    //     V_tdt = new Vector(size);
-    //     A_tdt = new Vector(size);
+        U_t = new Vector(size);
+        V_t = new Vector(size);
+        A_t = new Vector(size);
+        U_tpdt = new Vector(size);
+        V_tpdt = new Vector(size);
+        V_fake = new Vector(size);
+        A_tpdt = new Vector(size);
+        U_tdt = new Vector(size);
+        V_tdt = new Vector(size);
+        A_tdt = new Vector(size);
 
-    //     if (!U_t || 
-    //         !V_t || 
-    //         !A_t || 
-    //         !U_tpdt || 
-    //         !V_tpdt || 
-    //         !A_tpdt || 
-    //         !Rhat_tpdt || 
-    //         !Rfunnyhat_tpdt || 
-    //         !U_tdt || 
-    //         !V_tdt || 
-    //         !A_tdt || 
-    //         ) {
-    //         opserr << "ExplicitBathe::domainChanged - out of memory\n";
-    //         return -1;
-    //     }
-    // }
+        if (!U_t || 
+            !V_t || 
+            !A_t || 
+            !U_tpdt || 
+            !V_tpdt || 
+            !A_tpdt || 
+            !U_tdt || 
+            !V_tdt || 
+            !A_tdt 
+            ) {
+            opserr << "ExplicitBathe::domainChanged - out of memory\n";
+            return -1;
+        }
+    }
 
-    // // Initialize state variables
-    // DOF_GrpIter &theDOFs = theModel->getDOFs();
-    // DOF_Group *dofPtr;
-    // while ((dofPtr = theDOFs()) != nullptr) {
-    //     const ID &id = dofPtr->getID();
-    //     int idSize = id.Size();
+    // Initialize state variables
+    DOF_GrpIter &theDOFs = theModel->getDOFs();
+    DOF_Group *dofPtr;
+    while ((dofPtr = theDOFs()) != nullptr) {
+        const ID &id = dofPtr->getID();
+        int idSize = id.Size();
 
-    //     const Vector &disp = dofPtr->getCommittedDisp();
-    //     for (int i = 0; i < idSize; ++i) {
-    //         int loc = id(i);
-    //         if (loc >= 0) {
-    //             (*U_t)(loc) = disp(i);
-    //             (*U_tpdt)(loc) = disp(i);  // Assume Ut + pdt = Ut initially
-    //             (*U_tdt)(loc) = disp(i);  // Assume  Ut +  dt = Ut initially
-    //         }
-    //     }
+        const Vector &disp = dofPtr->getCommittedDisp();
+        for (int i = 0; i < idSize; ++i) {
+            int loc = id(i);
+            if (loc >= 0) {
+                (*U_t)(loc) = disp(i);
+                (*U_tpdt)(loc) = disp(i);  // Assume Ut + pdt = Ut initially
+                (*U_tdt)(loc) = disp(i);  // Assume  Ut +  dt = Ut initially
+            }
+        }
 
-    //     const Vector &vel = dofPtr->getCommittedVel();
-    //     for (int i = 0; i < idSize; ++i) {
-    //         int loc = id(i);
-    //         if (loc >= 0) {
-    //             (*V_t)(loc) = vel(i);
-    //         }
-    //     }
+        const Vector &vel = dofPtr->getCommittedVel();
+        for (int i = 0; i < idSize; ++i) {
+            int loc = id(i);
+            if (loc >= 0) {
+                (*V_t)(loc) = vel(i);
+            }
+        }
 
-    //     const Vector &accel = dofPtr->getCommittedAccel();
-    //     for (int i = 0; i < idSize; ++i) {
-    //         int loc = id(i);
-    //         if (loc >= 0) {
-    //             (*A_t)(loc) = accel(i);
-    //         }
-    //     }
-    // }
+        const Vector &accel = dofPtr->getCommittedAccel();
+        for (int i = 0; i < idSize; ++i) {
+            int loc = id(i);
+            if (loc >= 0) {
+                (*A_t)(loc) = accel(i);
+            }
+        }
+    }
 
-    return 0;
-}
+    // *U_t = *U_tdt;
+    // *V_t = *V_tdt;
+    // *A_t = *A_tdt;
+    damped_minimum_critical_timestep = std::numeric_limits<double>::infinity();
+    undamped_minimum_critical_timestep = std::numeric_limits<double>::infinity();
 
-
-
-
-int 
-ExplicitBathe::formRHS_tpdt()
-{
-
-    // Get pointer to the SOE
-    LinearSOE *theSOE = this->getLinearSOE();
-
-    theSOE->zeroB();
-
-
-    // Code copied from Newmark...
-
-
-    // // Get the analysis model
-    // AnalysisModel *theModel = this->getAnalysisModel();
-
-    // // Randomness in external load (including randomness in time series)
-    // // Get domain
-    // Domain *theDomain = theModel->getDomainPtr();
-
-    // // Loop through nodes to zero the unbalaced load
-    // Node *nodePtr;
-    // NodeIter &theNodeIter = theDomain->getNodes();
-    // while ((nodePtr = theNodeIter()) != 0)
-    // nodePtr->zeroUnbalancedLoad();
-
-    // // Loop through load patterns to add external load sensitivity
-    // LoadPattern *loadPatternPtr;
-    // LoadPatternIter &thePatterns = theDomain->getLoadPatterns();
-    // double time;
-    // while((loadPatternPtr = thePatterns()) != 0) {
-    // time = theDomain->getCurrentTime();
-    // loadPatternPtr->applyLoadSensitivity(time);
-    // }
-
-    // // Randomness in element/material contributions
-    // // Loop through FE elements
-    // FE_Element *elePtr;
-    // FE_EleIter &theEles = theModel->getFEs();    
-    // while((elePtr = theEles()) != 0) {
-    // theSOE->addB(  elePtr->getResidual(this),  elePtr->getID()  );
-    // }
-
-    // // Loop through DOF groups (IT IS IMPORTANT THAT THIS IS DONE LAST!)
-    // DOF_Group *dofPtr;
-    // DOF_GrpIter &theDOFs = theModel->getDOFs();
-    // while((dofPtr = theDOFs()) != 0) {
-    // theSOE->addB(  dofPtr->getUnbalance(this),  dofPtr->getID()  );
-    // }
-
-    // // Reset the sensitivity flag
-    // sensitivityFlag = 0;
+    if (compute_critical_timestep ==2)
+    {
+    	compute_critical_timestep = 1;
+    }
 
     return 0;
 }
 
 
+
+
+int ExplicitBathe::newStep(double _deltaT) {
+    deltaT = _deltaT;
+
+    // A. Initial Calculations
+    a0 = p * deltaT;
+    a1 = std::pow(p * deltaT,2)/2;
+    a2 = a0/2;
+    a3 = (1 - p) * deltaT;
+    a4 = std::pow((1 - p) * deltaT,2)/2;
+    a5 = q0 * a3;
+    a6 = (0.5 + q1) * a3;
+    a7 = q2 * a3;
+
+    // Ensure state variables are initialized
+    if (!U_t || !V_t || !A_t) {
+        opserr << "ExplicitBathe::newStep() - state variables not initialized\n";
+        return -1;
+    }
+
+    AnalysisModel *theModel = this->getAnalysisModel();
+
+
+    if(compute_critical_timestep == 1)
+    {
+    	Domain* theDomain = theModel->getDomainPtr();
+    	Element * ele;
+        ElementIter &elements = theDomain->getElements();
+        while ((ele = elements()) != 0)
+        {
+            const Matrix &M = ele->getMass();
+            const Matrix &K = ele->getInitialStiff();
+
+            int n = M.noRows();
+            if (n == 0 || K.noRows() != n) {
+                continue;
+            }
+
+            Matrix Mlumped(n, n);
+            Mlumped.Zero();
+            for (int i = 0; i < n; ++i)
+            {
+                double sum = 0.0;
+                for (int j = 0; j < n; ++j)
+                {
+                    sum += M(i, j);
+                }
+                Mlumped(i, i) = sum;
+            }
+
+            // Convert matrices to column-major format for LAPACK
+            double *M_data = new double[n * n];
+            double *K_data = new double[n * n];
+            for (int i = 0; i < n; ++i) {
+                for (int j = 0; j < n; ++j) {
+                    M_data[j * n + i] = Mlumped(i, j);
+                    K_data[j * n + i] = K(i, j);
+                }
+            }
+
+            // Perform generalized eigenvalue analysis using DGGEV function from LAPACK
+            char jobvl = 'N';
+            char jobvr = 'N';
+            double *alphar = new double[n];
+            double *alphai = new double[n];
+            double *beta = new double[n];
+            double *vl = nullptr;
+            double *vr = nullptr;
+            int lda = n;
+            int ldb = n;
+            int info;
+            int lwork = 8 * n;
+            double *work = new double[lwork];
+
+#ifdef _WIN32
+            DGGEV(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb, alphar, alphai, beta, vl, &lda, vr, &ldb, work, &lwork, &info);
+#else
+            dggev_(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb, alphar, alphai, beta, vl, &lda, vr, &ldb, work, &lwork, &info);
+#endif
+
+            if (info > 0) {
+                opserr << "WARNING: Eigenvalue computation did not converge for element " << ele->getTag() << "\n";
+            }
+
+            // Extract the largest eigenvalue (critical timestep calculation)
+            double maxEigenvalue = 0.0;
+            for (int i = 0; i < n; ++i) {
+                if (beta[i] != 0) {
+                    double lambda = alphar[i] / beta[i];
+                    if (lambda > maxEigenvalue) {
+                        maxEigenvalue = lambda;
+                    }
+                }
+            }
+
+            double w_max = std::sqrt(maxEigenvalue);
+            double alphaM=0.,  betaK=0.,  betaK0=0.,  betaKc=0.;
+            Vector coefs = ele->getRayleighDampingFactors();
+            alphaM = coefs(0);
+            betaK = coefs(1);
+            betaK0 = coefs(2);
+            betaKc = coefs(3);
+
+            double xi = 0.5*(alphaM / w_max + betaK*w_max);
+
+
+            // Compute critical timestep using the largest eigenvalue
+            double undamped_critical_timestep = 2.0 / w_max; 
+            double damped_critical_timestep = 2.0 / w_max * (std::sqrt(1 + xi*xi) - xi); // We can use up to 1.9 times this value!
+            // opserr << "Element " << ele->getTag() << ": Critical timestep = " << critical_timestep << "\n";
+
+            if (damped_minimum_critical_timestep > damped_critical_timestep)
+            {
+            	damped_minimum_critical_timestep = damped_critical_timestep;
+            	damped_critical_element_tag = ele->getTag();
+            }
+            if (undamped_minimum_critical_timestep > undamped_critical_timestep)
+            {
+            	undamped_minimum_critical_timestep = undamped_critical_timestep;
+            	undamped_critical_element_tag = ele->getTag();
+            }
+            // minimum_critical_timestep = std::min(minimum_critical_timestep, critical_timestep);
+
+            // Clean up allocated memory
+            delete[] M_data;
+            delete[] K_data;
+            delete[] alphar;
+            delete[] alphai;
+            delete[] beta;
+            delete[] work;
+        }
+        compute_critical_timestep = 2;
+    	opserr << " Overall UNDAMPED Critical timestep = " << undamped_minimum_critical_timestep << " @ element # " << undamped_critical_element_tag << "\n";
+    	opserr << " Overall  DAMPED  Critical timestep = " << damped_minimum_critical_timestep << " @ element # " << damped_critical_element_tag << "\n";
+    }
+
+
+    // Prepare for first matrix inversion, which occurs after newstep. 
+    *U_tpdt = *U_t;// + a0 * (*V_t) + a1 * (*A_t);
+    U_tpdt->addVector(1.0, *V_t, a0);
+    U_tpdt->addVector(1.0, *A_t, a1);
+    *V_fake = *V_t; // + a0 * (*A_t);
+    V_fake->addVector(1.0, *A_t, a0);
+    A_tpdt->Zero(); //*A_tpdt = *A_t;
+
+    theModel->setResponse(*U_tpdt, *V_fake, *A_tpdt);
+
+    double oldtime = theModel->getCurrentDomainTime();
+    double newtime = oldtime + p*deltaT;
+    // theModel->setCurrentDomainTime(newtime);
+
+    if (theModel->updateDomain(newtime, p*deltaT) < 0)  {
+        opserr << "ExplicitDifference::newStep() - failed to update the domain\n";
+        return -3;
+    }
+
+    // Now the SOE gets solved and we get update called
+
+
+    return 0;
+}
 
 
 
@@ -343,44 +419,49 @@ int ExplicitBathe::update(const Vector &U) {
 
     int size = A_t->Size();
 
+    LinearSOE *theLinSOE = this->getLinearSOE();
+    *A_tpdt = U;//theLinSOE->getX();
 
     // determine the response at t  + p *deltaT
-    double pDt = p * deltaT ;
-
-    // Get displacement at t  + p *deltaT
-    *U_tpdt = *U_t;
-    U_tpdt -> addVector(1.0, *V_t, a0);
-    U_tpdt -> addVector(1.0, *A_t, a1);
-
-
-    this->formRHS_tpdt();   // Agregar aqui las ecuacione sdel RHS
-    
-    // Solve for displacement sensitivity
-    
-    // theSOE->solve(); // solve is private here
-
-    // A_tpdt = theSOE->getX();   // getX is private here
-
-    // Get velocity  at t  + p *deltaT
     *V_tpdt = *V_t;
     V_tpdt -> addVector(1.0, *A_t, a2);
     V_tpdt -> addVector(1.0, *A_tpdt, a2);
 
+    *V_fake = *V_tpdt;
+    V_fake -> addVector(1.0, *A_tpdt, a3);
+
     // Get displacement at t  + deltaT
-    *U_tpdt = *U_tpdt;
-    U_tpdt -> addVector(1.0, *V_tpdt, a3);
-    U_tpdt -> addVector(1.0, *A_tpdt, a4);
+    *U_tdt = *U_tpdt;
+    U_tdt -> addVector(1.0, *V_tpdt, a3);
+    U_tdt -> addVector(1.0, *A_tpdt, a4);
 
-    theModel->setResponse(*U_tpdt, *V_t, *A_t);
+    A_tdt->Zero();
 
-    if (theModel->updateDomain() < 0)  {
-        opserr << "ExplicitBathe::update() - failed to update the domain\n";
-        return -5;
+    theModel->setResponse(*U_tdt, *V_fake, *A_tdt);
+
+    double oldtime = theModel->getCurrentDomainTime();
+    double newtime = oldtime+(1-p)*deltaT;
+
+    if (theModel->updateDomain(newtime, (1-p)*deltaT) < 0)  {
+        opserr << "ExplicitDifference::newStep() - failed to update the domain\n";
+        return -3;
     }
-    // set response at t to be that at t+deltaT of previous step
 
-    // (*Utdotdot) = Udotdot;
-    // (*Utdotdot1) = Udotdot;
+    this->formUnbalance();
+    theLinSOE->solve();
+    *A_tdt = theLinSOE->getX();
+
+    *V_tdt = *V_tpdt;
+    V_tdt->addVector(1.0, *A_t, a5);
+    V_tdt->addVector(1.0, *A_tpdt, a6);
+    V_tdt->addVector(1.0, *A_tdt, a7);
+
+    // set response at t to be that at t+deltaT of previous step
+    theModel->setResponse(*U_tdt,*V_tdt,*A_tdt);
+    if (theModel->updateDomain() < 0)  {
+        opserr << "Newmark::update() - failed to update the domain\n";
+        return -4;
+    }
 
     return 0;
 }
@@ -401,21 +482,28 @@ int ExplicitBathe::formNodTangent(DOF_Group *theDof) {
 }
 
 int ExplicitBathe::commit() {
+
+    updateCount = 0;
+
+    *U_t = *U_tdt;
+    *V_t = *V_tdt;
+    *A_t = *A_tdt;
+
     AnalysisModel *theModel = this->getAnalysisModel();
     if (theModel == nullptr) {
         opserr << "ExplicitBathe::commit() - no AnalysisModel set\n";
         return -1;
     }
 
-    double time = theModel->getCurrentDomainTime();
-    time += deltaT;
-    theModel->setCurrentDomainTime(time);
+    // double time = theModel->getCurrentDomainTime();
+    // time += deltaT;
+    // theModel->setCurrentDomainTime(time);
 
     return theModel->commitDomain();
 }
 
 const Vector &ExplicitBathe::getVel() {
-    // return *Utdot;
+    return *V_t;
 }
 
 int ExplicitBathe::sendSelf(int cTag, Channel &theChannel) {
@@ -443,7 +531,7 @@ int ExplicitBathe::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &the
     q1 = (1 - 2*p)/(2*p*(1-p));
     q2 = 0.5 - p * q1;
     q0 = -q1 -q2 + 0.5;
-    s = -1;
+    // s = -1;
 
     return 0;
 }
@@ -451,5 +539,5 @@ int ExplicitBathe::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &the
 void ExplicitBathe::Print(OPS_Stream &stream, int flag) {
     stream << "Explicit Bathe Method:\n";
     stream << "  Time Step: " << deltaT << "\n";
-    stream << "  p: " << p << ", q0: " << q0 << ", q1: " << q1 << ", q2: " << q2 << ", s: " << s << "\n";
+    stream << "  p: " << p << ", q0: " << q0 << ", q1: " << q1 << ", q2: " << q2 << "\n";
 }

@@ -1776,9 +1776,12 @@ int OPS_Integrator()
 
 	} else if (strcmp(type, "ExplicitDifference") == 0) {
     ti = (TransientIntegrator*)OPS_ExplicitDifference();
-
+    
+    } else if (strcmp(type, "ExplicitBathe") == 0) {
+    ti = (TransientIntegrator*)OPS_ExplicitBathe();
+    
     } else {
-	opserr<<"WARNING unknown integrator type "<<type<<"\n";
+	opserr<<"WARNING unknown integrator:=type "<<type<<"\n";
     }
 
     // set integrator

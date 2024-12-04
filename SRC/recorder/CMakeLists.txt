@@ -27,6 +27,7 @@ target_sources(OPS_Recorder
       Recorder.cpp
       RemoveRecorder.cpp
       VTK_Recorder.cpp
+      EnergyBalanceRecorder.cpp
     PUBLIC
       DamageRecorder.h
       DatastoreRecorder.h
@@ -48,6 +49,7 @@ target_sources(OPS_Recorder
       Recorder.h
       RemoveRecorder.h
       VTK_Recorder.h
+      EnergyBalanceRecorder.h
 )
 
 
