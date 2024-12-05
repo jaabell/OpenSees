@@ -99,7 +99,7 @@ ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_)//);, dou
     q0 = -q1 -q2 + 0.5;
     // s = -1;
 
-    opserr << "ExplicitBathe - @jaabell p =" << p << " compute_critical_timestep ) " << compute_critical_timestep << endln;
+    opserr << "ExplicitBathe - @jaabell p =" << p << " compute_critical_timestep = " << compute_critical_timestep << endln;
 
 }
 
@@ -228,15 +228,6 @@ int ExplicitBathe::domainChanged() {
 int ExplicitBathe::newStep(double _deltaT) {
     deltaT = _deltaT;
 
-    // A. Initial Calculations
-    a0 = p * deltaT;
-    a1 = std::pow(p * deltaT,2)/2;
-    a2 = a0/2;
-    a3 = (1 - p) * deltaT;
-    a4 = std::pow((1 - p) * deltaT,2)/2;
-    a5 = q0 * a3;
-    a6 = (0.5 + q1) * a3;
-    a7 = q2 * a3;
 
     // Ensure state variables are initialized
     if (!U_t || !V_t || !A_t) {
@@ -360,6 +351,23 @@ int ExplicitBathe::newStep(double _deltaT) {
     	opserr << " Overall  DAMPED  Critical timestep = " << damped_minimum_critical_timestep << " @ element # " << damped_critical_element_tag << "\n";
     }
 
+    double dT_factor =deltaT / damped_minimum_critical_timestep;
+
+    opserr << "    ExplicitBathe::newStep()  dt =  " << deltaT << "   dt_crit = " <<  damped_minimum_critical_timestep 
+    << " dT_factor = " << dT_factor 
+    << (dT_factor < 1. ? " Ok!" : " WARNING! dt > dt_crit") << endln;
+
+
+    // A. Initial Calculations
+    a0 = p * deltaT;
+    a1 = std::pow(p * deltaT,2)/2;
+    a2 = a0/2;
+    a3 = (1 - p) * deltaT;
+    a4 = std::pow((1 - p) * deltaT,2)/2;
+    a5 = q0 * a3;
+    a6 = (0.5 + q1) * a3;
+    a7 = q2 * a3;
+
 
     // Prepare for first matrix inversion, which occurs after newstep. 
     *U_tpdt = *U_t;// + a0 * (*V_t) + a1 * (*A_t);
@@ -376,7 +384,7 @@ int ExplicitBathe::newStep(double _deltaT) {
     // theModel->setCurrentDomainTime(newtime);
 
     if (theModel->updateDomain(newtime, p*deltaT) < 0)  {
-        opserr << "ExplicitDifference::newStep() - failed to update the domain\n";
+        opserr << "ExplicitDifference - failed to update the domain\n";
         return -3;
     }
 
@@ -450,6 +458,11 @@ int ExplicitBathe::update(const Vector &U) {
     this->formUnbalance();
     theLinSOE->solve();
     *A_tdt = theLinSOE->getX();
+
+    double A_max = A_tdt->pNorm(0);
+
+    opserr << "    ExplicitBathe::update()  A_max =  " << A_max << endln;
+
 
     *V_tdt = *V_tpdt;
     V_tdt->addVector(1.0, *A_t, a5);
