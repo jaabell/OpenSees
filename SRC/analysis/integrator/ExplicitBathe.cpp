@@ -351,11 +351,15 @@ int ExplicitBathe::newStep(double _deltaT) {
     	opserr << " Overall  DAMPED  Critical timestep = " << damped_minimum_critical_timestep << " @ element # " << damped_critical_element_tag << "\n";
     }
 
-    double dT_factor =deltaT / damped_minimum_critical_timestep;
+    if (compute_critical_timestep > 0)
+    {
+        double dT_factor =deltaT / damped_minimum_critical_timestep;
+        opserr << "    ExplicitBathe::newStep()  dt =  " << deltaT << "   dt_crit = " <<  damped_minimum_critical_timestep 
+        << " dT_factor = " << dT_factor 
+        << (dT_factor < 1. ? " Ok!" : " WARNING! dt > dt_crit") << endln;
+    }
 
-    opserr << "    ExplicitBathe::newStep()  dt =  " << deltaT << "   dt_crit = " <<  damped_minimum_critical_timestep 
-    << " dT_factor = " << dT_factor 
-    << (dT_factor < 1. ? " Ok!" : " WARNING! dt > dt_crit") << endln;
+
 
 
     // A. Initial Calculations
