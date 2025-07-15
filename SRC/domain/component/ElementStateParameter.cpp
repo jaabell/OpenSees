@@ -60,16 +60,16 @@ ElementStateParameter::ElementStateParameter()
 
 ElementStateParameter::~ElementStateParameter()
 {
-  if (fromFree == 0) {
+  if (fromFree==0)
+  {
     if (argc != 0) {
       for (int i=0; i<argc; i++)
-	delete argv[i];
-
+        delete [] argv[i];
       delete [] argv;
-      
-      if (theEleIDs != 0)
-	delete theEleIDs;
     }
+
+    if (theEleIDs != 0)
+      delete theEleIDs;
   }
 }
 
