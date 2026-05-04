@@ -28,3 +28,5 @@
 #include "DruckerPrager_PF.h"
 #include "ConstantDilatancy_PF.h"
 #include "MohrCoulomb_PF.h"
+#include "StiffSoilShear_PF.h"
+#include "StiffSoilCap_PF.h"
