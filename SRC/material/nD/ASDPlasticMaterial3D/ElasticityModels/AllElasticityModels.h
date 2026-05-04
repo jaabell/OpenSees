@@ -26,3 +26,4 @@
 
 #include "LinearIsotropic3D_EL.h"
 #include "DuncanChang_EL.h"
+#include "StiffSoil_EL.h"
