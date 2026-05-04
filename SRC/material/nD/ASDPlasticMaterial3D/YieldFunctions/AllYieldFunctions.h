@@ -29,3 +29,5 @@
 // #include "RoundedMohrCoulomb_YF.h"
 #include "MohrCoulomb_YF.h"
 #include "TensionCutoff_YF.h"
+#include "StiffSoilShear_YF.h"
+#include "StiffSoilCap_YF.h"
