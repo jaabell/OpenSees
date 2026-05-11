@@ -74,7 +74,8 @@ public:
 
         // Get principal stresses (sorted: sigma1 >= sigma2 >= sigma3)
         // Note: In this code, compression is positive
-        auto [sigma3, sigma2, sigma1] = sigma.principalStresses();
+        VoigtVector sigma_geo = -sigma;
+        auto [sigma3, sigma2, sigma1] = sigma_geo.principalStresses();
         
         // The Hoek-Brown criterion in compression is:
         // f = σ₁ - σ₃ - σci * (mb * σ₃/σci + s)^a
