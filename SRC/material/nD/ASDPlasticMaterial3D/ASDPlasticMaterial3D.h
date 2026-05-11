@@ -181,9 +181,7 @@ public:
     //==================================================================================================
     const char *getClassType(void) const
     {
-        std::string name("ASDPlasticMaterial3D");
-
-        return name.c_str();
+        return "ASDPlasticMaterial3D";
     };
 
     double getRho(void)
