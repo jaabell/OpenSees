@@ -38,8 +38,6 @@
 #include <MaterialResponse.h>
 #include <Parameter.h>
 
-#include "ASDPlasticMaterial3DTraits.h"
-
 #include "ASDPlasticMaterial3DGlobals.h"
 
 
@@ -49,7 +47,6 @@
 #include "ElasticityModels/AllElasticityModels.h"
 #include "AllASDModelParameterTypes.h"
 #include "AllASDInternalVariableTypes.h"
-#include "AllASDHardeningFunctions.h"
 
 #include "utuple_storage.h"
 
@@ -59,11 +56,6 @@
 #include <map> // For std::pair
 #include <limits>
 #include <type_traits>
-
-#include "std_tuple_concat.h"
-
-// for debugging printing
-#include <fstream>
 
 #define ASDPlasticMaterial3D_MAXITER_BRENT 50
 
@@ -2765,9 +2757,9 @@ private:
             }
 
 
-           //Return to Yield with bisection
-           else if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 2)  // Return to yield with iterations
-           {
+            //Return to Yield with bisection
+            else if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 2)  // Return to yield with iterations
+            {
                 // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
                 // Make surface the internal variables are already updated. And then, return to the yield surface.
                 double y0  = yf(TrialStress, iv_storage, parameters_storage) ;
@@ -2784,8 +2776,8 @@ private:
                     // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
                     double dL = y0 / (
-                                                         n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
-                                                     );
+                                                        n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
+                                                    );
 
                     
                     VoigtVector TS = TrialStress - dL * Eelastic * m_after_corrector;
