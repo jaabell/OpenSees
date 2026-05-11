@@ -908,7 +908,6 @@ public:
     int updateParameter(int responseID, Information &info)
     {
 
-        cout << "ASDPlasticMaterial3D::updateParameter  responseID = " << responseID << endl;
 
         opserr << " info = "; // << info << endln;
         info.Print(opserr);
