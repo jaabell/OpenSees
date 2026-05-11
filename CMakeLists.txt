@@ -679,19 +679,27 @@ if(MPI_FOUND)
       ${OPS_SRC_DIR}/actor/objectBroker/FEM_ObjectBrokerAllClasses.cpp
       ${OPS_SRC_DIR}/system_of_eqn/linearSOE/diagonal/MPIDiagonalSOE.cpp
       ${OPS_SRC_DIR}/system_of_eqn/linearSOE/diagonal/MPIDiagonalSolver.cpp
-      ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSOE.cpp
-      ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSolver.cpp
-      ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSOE.cpp
-      ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSolver.cpp
       ${OPS_SRC_DIR}/domain/subdomain/ActorSubdomain.cpp
       ${OPS_SRC_DIR}/domain/subdomain/ShadowSubdomain.cpp
     )
 
-    target_include_directories(OpenSeesMP PRIVATE ${MUMPS_DIR}/_deps/mumps-src/include ${MPI_CXX_INCLUDE_DIRS})
+    if (DEFINED MUMPS_DIR)
+      target_sources(OpenSeesMP PRIVATE
+        ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSOE.cpp
+        ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSolver.cpp
+        ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSOE.cpp
+        ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSolver.cpp
+      )
+    endif()
+
+    target_include_directories(OpenSeesMP PRIVATE ${MPI_CXX_INCLUDE_DIRS})
+    if (DEFINED MUMPS_DIR)
+      target_include_directories(OpenSeesMP PRIVATE ${MUMPS_DIR}/_deps/mumps-src/include)
+    endif()
 
     target_compile_options(OpenSeesMP PRIVATE ${MPI_CXX_COMPILE_FLAGS})
 
-    if (NOT DEFINED MUMPS_DIR)
+    if (NOT DEFINED MUMPS_DIR AND TARGET mumps)
         add_dependencies(OpenSeesMP mumps)
     endif()
 
@@ -873,3 +881,4 @@ endif()
 if (OPS_Use_Dev_Directories)
   add_subdirectory("${PROJECT_SOURCE_DIR}/DEVELOPER/")
 endif()
+

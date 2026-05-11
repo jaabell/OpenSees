@@ -34,7 +34,6 @@ target_sources(OPS_PFEM
         PFEMSolver_LumpM.cpp
         PFEMSolver_LumpM.cpp
         PFEMSolver_Umfpack.cpp
-        PFEMSolver_Mumps.cpp	
     PUBLIC
         PFEMCompressibleLinSOE.h
         PFEMCompressibleSolver.h
@@ -48,8 +47,16 @@ target_sources(OPS_PFEM
         PFEMSolver_LumpM.h
         PFEMSolver_LumpM.h
         PFEMSolver_Umfpack.h
-        PFEMSolver_Mumps.h	
 )
+
+if (DEFINED MUMPS_DIR)
+    target_sources(OPS_PFEM
+        PRIVATE
+            PFEMSolver_Mumps.cpp
+        PUBLIC
+            PFEMSolver_Mumps.h
+    )
+endif()
 
 if(MPI_FOUND)
 
@@ -58,15 +65,11 @@ target_sources(OpenSeesMP
         DistributedSuperLU.cpp
         DistributedSparseGenColLinSOE.cpp
         DistributedSparseGenRowLinSOE.cpp
-        PFEMSolver_Mumps.cpp
         PFEMSolver_LumpM.cpp
-        PFEMCompressibleSolver_Mumps.cpp
     PUBLIC
         DistributedSuperLU.h
         DistributedSparseGenColLinSOE.h
         DistributedSparseGenRowLinSOE.h
-        PFEMSolver_Mumps.h
-        PFEMCompressibleSolver_Mumps.h
 )
 
 target_sources(OpenSeesSP
@@ -74,16 +77,32 @@ target_sources(OpenSeesSP
         DistributedSuperLU.cpp
         DistributedSparseGenColLinSOE.cpp
         DistributedSparseGenRowLinSOE.cpp
-        PFEMSolver_Mumps.cpp
         PFEMSolver_LumpM.cpp
-        PFEMCompressibleSolver_Mumps.cpp
     PUBLIC
         DistributedSuperLU.h
         DistributedSparseGenColLinSOE.h
         DistributedSparseGenRowLinSOE.h
-        PFEMSolver_Mumps.h
-        PFEMCompressibleSolver_Mumps.h
 )
+
+if (DEFINED MUMPS_DIR)
+    target_sources(OpenSeesMP
+        PRIVATE
+            PFEMSolver_Mumps.cpp
+            PFEMCompressibleSolver_Mumps.cpp
+        PUBLIC
+            PFEMSolver_Mumps.h
+            PFEMCompressibleSolver_Mumps.h
+    )
+
+    target_sources(OpenSeesSP
+        PRIVATE
+            PFEMSolver_Mumps.cpp
+            PFEMCompressibleSolver_Mumps.cpp
+        PUBLIC
+            PFEMSolver_Mumps.h
+            PFEMCompressibleSolver_Mumps.h
+    )
+endif()
 
 endif()
 
