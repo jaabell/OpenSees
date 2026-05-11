@@ -909,7 +909,7 @@ public:
     {
 
 
-        opserr << " info = "; // << info << endln;
+        // opserr << " info = "; // << info << endln;
         info.Print(opserr);
 
         // State variables (committed values)
