@@ -112,7 +112,7 @@ public:
     ASDPlasticMaterial3D( )
         : NDMaterial(0, thisClassTag)
     {
-
+        stress_set_externally = false;
     }
 
 
@@ -129,6 +129,7 @@ public:
         CommitPlastic_Strain *= 0;
 
         first_step = true;
+        stress_set_externally = false;
     }
 
 
@@ -222,7 +223,7 @@ public:
     int setTrialStrain(const Vector &v)
     {
 
-        if (first_step)
+        if (first_step && !stress_set_externally)
         {
             double p0 = parameters_storage.template get<InitialP0>().value;
             TrialStress(0) = p0;
@@ -788,6 +789,7 @@ public:
         newmaterial->CommitPlastic_Strain = this->CommitPlastic_Strain;
         newmaterial->iv_storage = this->iv_storage;
         newmaterial->parameters_storage = this->parameters_storage;
+        newmaterial->stress_set_externally = this->stress_set_externally;
 
         return newmaterial;
     }
@@ -810,6 +812,7 @@ public:
             newmaterial->CommitPlastic_Strain = this->CommitPlastic_Strain;
             newmaterial->iv_storage = this->iv_storage;
             newmaterial->parameters_storage = this->parameters_storage;
+            newmaterial->stress_set_externally = this->stress_set_externally;
 
             return newmaterial;
         } else
@@ -861,6 +864,45 @@ public:
                 cout << "       ---->  K03D" << endl;
                 return param.addObject(8, this);
             }
+            else if (strcmp(argv[0], "trialStressIncrement") == 0) {
+                return param.addObject(9, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXX") == 0) {
+                return param.addObject(10, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementYY") == 0) {
+                return param.addObject(11, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementZZ") == 0) {
+                return param.addObject(12, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXY") == 0) {
+                return param.addObject(13, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementYZ") == 0) {
+                return param.addObject(14, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXZ") == 0) {
+                return param.addObject(15, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXX") == 0) {
+                return param.addObject(16, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementYY") == 0) {
+                return param.addObject(17, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementZZ") == 0) {
+                return param.addObject(18, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXY") == 0) {
+                return param.addObject(19, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementYZ") == 0) {
+                return param.addObject(20, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXZ") == 0) {
+                return param.addObject(21, this);
+            }
             else {
                 // For all other parameter names, use the parameter system to pass the name
                 // Store the parameter name in the Parameter object (if supported)
@@ -878,6 +920,8 @@ public:
 
         cout << "ASDPlasticMaterial3D::updateParameter  responseID = " << responseID << endl;
 
+        opserr << " info = "; // << info << endln;
+        info.Print(opserr);
 
         // State variables (committed values)
         if (responseID == 1) { // stress
@@ -885,6 +929,7 @@ public:
                 const Vector& newStress = *(info.theVector);
                 CommitStress = VoigtVector::fromStress(newStress);
                 TrialStress = CommitStress;
+                stress_set_externally = true;
             }
             return 0;
         }
@@ -909,6 +954,7 @@ public:
             if (info.theType == VectorType) {
                 const Vector& newTrialStress = *(info.theVector);
                 TrialStress = VoigtVector::fromStress(newTrialStress);
+                stress_set_externally = true;
             }
             return 0;
         }
@@ -933,6 +979,7 @@ public:
                 cout << "ASDPL @ tag = " << this->getTag() << " K02D  K0 = " << K02D << endl;
                 CommitStress(0) = K02D * CommitStress(1);
                 CommitStress(2) = K02D * CommitStress(1);
+                stress_set_externally = true;
             // }
             return 0;
         }
@@ -942,7 +989,77 @@ public:
                 cout << "ASDPL @ tag = " << this->getTag() << " K03D  K0 = " << K03D << endl;
                 CommitStress(0) = K03D * CommitStress(2);
                 CommitStress(1) = K03D * CommitStress(2);
+                stress_set_externally = true;
             // }
+            return 0;
+        }
+        else if (responseID == 9) { // trialStressIncrement
+            if (info.theType == VectorType) {
+                const Vector& newTrialStress = *(info.theVector);
+                opserr << "ASDPL @ tag = " << this->getTag() << "  newTrialStress = " << newTrialStress   << endln;
+                TrialStress += VoigtVector::fromStress(newTrialStress);
+                stress_set_externally = true;
+            }
+            return 0;
+        }
+        else if (responseID == 10) { // trialStressIncrementXX
+            TrialStress(0) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 11) { // trialStressIncrementYY
+            TrialStress(1) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 12) { // trialStressIncrementZZ
+            TrialStress(2) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 13) { // trialStressIncrementXY
+            TrialStress(3) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 14) { // trialStressIncrementYZ
+            TrialStress(4) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 15) { // trialStressIncrementXZ
+            TrialStress(5) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 16) { // commitStressIncrementXX
+            CommitStress(0) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 17) { // commitStressIncrementYY
+            CommitStress(1) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 18) { // commitStressIncrementZZ
+            CommitStress(2) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 19) { // commitStressIncrementXY
+            CommitStress(3) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 20) { // commitStressIncrementYZ
+            CommitStress(4) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 21) { // commitStressIncrementXZ
+            CommitStress(5) += info.theDouble;
+            stress_set_externally = true;
             return 0;
         }
         // Generic parameter update (model parameters and internal variables)
@@ -3818,6 +3935,7 @@ protected:
     static std::map<int, double> GLOBAL_DBL_max_error; 
 
     bool first_step;
+    bool stress_set_externally;
 
     static VoigtVector dsigma;
     static VoigtVector depsilon_elpl;    //Elastoplastic strain increment : For a strain increment that causes first yield, the step is divided into an elastic one (until yield) and an elastoplastic one.

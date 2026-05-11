@@ -30,3 +30,4 @@
 #include "MohrCoulomb_PF.h"
 #include "StiffSoilShear_PF.h"
 #include "StiffSoilCap_PF.h"
+#include "HoekBrown_PF.h"
