@@ -877,9 +877,9 @@ H5DRMLoadPattern::applyLoad(double time)
             if ( theNode == 0 )
                 continue;
 
-            load(0) = DRM_F(3 * local_pos + 0);
-            load(1) = DRM_F(3 * local_pos + 1);
-            load(2) = DRM_F(3 * local_pos + 2);
+            load(0) = cFactor*DRM_F(3 * local_pos + 0);
+            load(1) = cFactor*DRM_F(3 * local_pos + 1);
+            load(2) = cFactor*DRM_F(3 * local_pos + 2);
 
 
             if (DEBUG_WITH_GMSH)
@@ -943,9 +943,70 @@ bool H5DRMLoadPattern::drm_direct_read(double t)
     DRM_D.Zero();
     DRM_A.Zero();
 
-    if (t < tstart || t > tend)
+    if (t < tstart)
     {
-        H5DRMout << "t = " << t << " tstart = " << tstart << " tend = " << tend << " DRM Not computing forces (t < tstart or t > tend)"  << endln;
+        H5DRMout << "t = " << t << " tstart = " << tstart << " tend = " << tend << " DRM Not computing forces (t < tstart)" << endln;
+        return true;
+    }
+
+    // Past end-of-dataset: freeze at final displacement with zero acceleration
+    // so the analysis can continue indefinitely after the DRM record ends.
+    if (t >= tend)
+    {
+        if (MPI_local_rank == 0)
+        {
+            H5DRMout << "t = " << t << " >= tend = " << tend
+                     << " -- holding final displacement, zero acceleration." << endln;
+        }
+
+        const int i_final = N_timesteps - 1;
+
+        ih5_dis_ds = H5Dget_space(ih5_dis);
+
+        for (int n = 0; n < DRM_Nodes.Size(); ++n)
+        {
+            int nodeTag    = DRM_Nodes(n);
+            int station_id = nodetag2station_id[nodeTag];
+            int data_pos   = station_id2data_pos[station_id];
+            int local_pos  = nodetag2local_pos[nodeTag];
+
+            double d_final[3] = {0., 0., 0.};
+
+            hsize_t start[2]  = {(hsize_t) data_pos, (hsize_t) i_final};
+            hsize_t stride[2] = {1, 1};
+            hsize_t count[2]  = {3, 1};
+            hsize_t block[2]  = {1, 1};
+
+            hsize_t rank_one_array = 1;
+            hsize_t one_node_data_dims[1]    = {3};
+            hsize_t one_node_data_maxdims[1] = {3};
+            hid_t memspace = H5Screate_simple(rank_one_array,
+                                              one_node_data_dims,
+                                              one_node_data_maxdims);
+
+            hsize_t mem_start[1]  = {0};
+            hsize_t mem_stride[1] = {1};
+            hsize_t mem_count[1]  = {3};
+            hsize_t mem_block[1]  = {1};
+            H5Sselect_hyperslab(memspace, H5S_SELECT_SET,
+                                mem_start, mem_stride, mem_count, mem_block);
+
+            H5Sselect_hyperslab(ih5_dis_ds, H5S_SELECT_SET,
+                                start, stride, count, block);
+
+            H5Dread(ih5_dis, H5T_NATIVE_DOUBLE,
+                    memspace, ih5_dis_ds, ih5_xfer_plist, d_final);
+            H5Sclose(memspace);
+
+            DRM_D(3 * local_pos + 0) = d_final[0];
+            DRM_D(3 * local_pos + 1) = d_final[1];
+            DRM_D(3 * local_pos + 2) = d_final[2];
+            // DRM_A components remain zero (already zeroed above)
+        }
+
+        H5Sclose(ih5_dis_ds);
+        ih5_dis_ds = -1;
+
         return true;
     }
 
@@ -953,6 +1014,12 @@ bool H5DRMLoadPattern::drm_direct_read(double t)
     int i2 = (int) floor( (t - tstart) / dt) + 1;
     double t1 = i1 * dt + tstart;
     double t2 = i2 * dt + tstart;
+    if (i2 >= N_timesteps - 2) {
+        i2 = N_timesteps - 2;
+        i1 = i2 - 1;
+        t1 = i1 * dt + tstart;  // fix: update outer t1 (was a shadow variable)
+        t2 = i2 * dt + tstart;  // fix: update outer t2 (was a shadow variable)
+    }
     double dtau = (t - t1) / (t2 - t1);
 
     if (MPI_local_rank == 0)
@@ -1078,10 +1145,10 @@ bool H5DRMLoadPattern::drm_direct_read(double t)
             exit(-1);
         }
 
-        d1[2] = -d1[2];
-        d2[2] = -d2[2];
-        a1[2] = -a1[2];
-        a2[2] = -a2[2];
+        // d1[2] = -d1[2];
+        // d2[2] = -d2[2];
+        // a1[2] = -a1[2];
+        // a2[2] = -a2[2];
 
 
         DRM_D(3 * local_pos + 0) = d1[0] * (1 - dtau) + d2[0] * (dtau);
@@ -1091,6 +1158,13 @@ bool H5DRMLoadPattern::drm_direct_read(double t)
         DRM_A(3 * local_pos + 0) = a1[0] * (1 - dtau) + a2[0] * (dtau);
         DRM_A(3 * local_pos + 1) = a1[1] * (1 - dtau) + a2[1] * (dtau);
         DRM_A(3 * local_pos + 2) = a1[2] * (1 - dtau) + a2[2] * (dtau);
+
+        if(i2 == N_timesteps - 2)
+        {
+          DRM_A(3 * local_pos + 0) = 0;
+          DRM_A(3 * local_pos + 1) = 0;
+          DRM_A(3 * local_pos + 2) = 0;
+        }
     }
 
 
@@ -1629,17 +1703,6 @@ void H5DRMLoadPattern::node_matching_BruteForce(double d_tol, const ID & interna
     while ((node_ptr = node_iter()) != 0)
     {
         int tag = node_ptr->getTag();
-        
-        // Skip nodes with more than 6 DOF
-        int numDOF = node_ptr->getNumberDOF();
-        if (numDOF > 6) {
-            if (DEBUG_NODE_MATCHING)
-            {
-                fprintf(fptrdrm, "Node # %05d skipped - has %d DOF (>6)\n", tag, numDOF);
-            }
-            continue;
-        }
-        
         const Vector& node_xyz  =  node_ptr->getCrds();
         double dmin = std::numeric_limits<double>::infinity();
         int ii_station_min = 0;

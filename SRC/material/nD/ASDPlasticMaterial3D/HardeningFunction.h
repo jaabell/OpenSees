@@ -1,3 +1,6 @@
+#ifndef HardeningFunctionBase_H
+#define HardeningFunctionBase_H
+
 
 #define HARDENING_FUNCTION_DEFINITION template <class EVT, class ParameterStorageType> \
     static auto f( \
@@ -29,3 +32,7 @@ std::ostream& operator<<(std::ostream& os, const HardeningFunction<EvolvingVaria
 
 
 #define GET_PARAMETER_VALUE(type) parameters_storage.template get<type> ().value
+
+#endif  //HardeningFunctionBase_H
+
+
