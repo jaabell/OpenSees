@@ -151,7 +151,6 @@ public:
 
         vv_out = computeNumericalFlowDirection(sigma, ds);
 
-        cout << "   CAP vv_out = " << vv_out.transpose() << endl;
         return vv_out;
     }
 

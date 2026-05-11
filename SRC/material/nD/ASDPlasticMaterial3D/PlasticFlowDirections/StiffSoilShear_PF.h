@@ -75,7 +75,9 @@ public:
         using namespace std;
 
         // Convert to geotechnical convention (compression positive)
-        VoigtVector sig_geo = -sigma;
+
+        // VoigtVector sig_geo = -sigma;
+        VoigtVector sig_geo = sigma;
 
         double I1 = sig_geo.getI1();
         double J2 = sig_geo.getJ2();
@@ -137,7 +139,53 @@ public:
 
         return asin(sin_psi_m);
     }
-
+// PLASTIC_FLOW_DIRECTION
+// {
+//     using namespace std;
+//
+//     double phi = GET_PARAMETER_VALUE(MC_phi) * M_PI / 180.0;
+//     double psi = GET_PARAMETER_VALUE(MC_psi) * M_PI / 180.0;
+//     double c = GET_PARAMETER_VALUE(MC_c);
+//
+//         // Compute mobilized dilatancy
+//         double psi_m = computeMobilizedDilatancy(sigma, phi, psi, c);
+//         double sin_psi_m = sin(psi_m);
+//
+//         // Get deviatoric stress direction
+//         VoigtVector s = sigma.deviator();
+//         double J2 = sigma.getJ2();
+//         double sqrt_J2 = sqrt(std::max(J2, 1e-20));
+//
+//         // Deviatoric flow direction (normalized deviatoric stress)
+//         // m_dev = s / (2 * sqrt(J2)) gives ||m_dev|| = sqrt(J2/2)
+//         // We want the deviatoric part to give ε_q^p when contracted
+//         VoigtVector m_dev = s / (2.0 * sqrt_J2);
+//
+//         // Volumetric flow direction
+//         // From Eq. 15.5: ε̇_v^p = sin(ψ_m) * ε̇_q^p
+//         // The volumetric part is (1/3) * sin(ψ_m) * I
+//         // But we need to scale properly with the deviatoric part
+//
+//         // For triaxial: if m_dev gives ε_q = m_1 - m_3, then
+//         // m_vol should give ε_v = sin(ψ_m) * ε_q
+//         // 
+//         // Scale factor: ||s|| / (2*sqrt(J2)) for deviatoric part
+//         // gives proper ε_q scaling
+//
+//         double scale = sqrt(3.0 / 2.0);  // Relates ||s|| to q
+//
+//         // Flow direction: deviatoric + volumetric
+//         vv_out = m_dev;
+//
+//         // Add volumetric component (compression negative in mechanics convention)
+//         // ε_v = ε_11 + ε_22 + ε_33, so add sin(ψ_m)/3 to each diagonal
+//         double vol_contrib = -sin_psi_m / 3.0 * scale;  // negative for dilation
+//         vv_out(0) += vol_contrib;
+//         vv_out(1) += vol_contrib;
+//         vv_out(2) += vol_contrib;
+//
+//         return vv_out;
+//     }
     PLASTIC_FLOW_DIRECTION
     {
         using namespace std;
@@ -164,22 +212,123 @@ public:
             for (int i = 0; i < 6; ++i) {
                 VoigtVector SIG1 = sig;
                 VoigtVector SIG2 = sig;
-                
+
                 SIG1(i) += perturbation;
                 SIG2(i) -= perturbation;
 
                 double g1 = plasticPotential(SIG1, psi_m, c);
                 double g2 = plasticPotential(SIG2, psi_m, c);
 
-                result(i) = -(g1 - g2) / (2.0 * perturbation); // - due to geotechnical convention
+                result(i) = (g1 - g2) / (2.0 * perturbation); 
             }
             return result;
         };
 
         vv_out = computeNumericalFlowDirection(sigma, ds);
-
+        double norm = std::sqrt(tensor_dot_stress_like(vv_out, vv_out));
+        vv_out /= norm;
         return vv_out;
+
+        // return vv_out;
     }
+    //
+    // PLASTIC_FLOW_DIRECTION
+    // {
+    //     using namespace std;
+    //
+    //     double phi = GET_PARAMETER_VALUE(MC_phi) * M_PI / 180.0;
+    //     double psi = GET_PARAMETER_VALUE(MC_psi) * M_PI / 180.0;
+    //     double c = GET_PARAMETER_VALUE(MC_c);
+    //
+    //     // Compute mobilized dilatancy (Rowe's theory)
+    //     double psi_m = computeMobilizedDilatancy(sigma, phi, psi, c);
+    //     // Or use constant dilatancy: double psi_m = psi;
+    //
+    //     double sin_psi_m = sin(psi_m);
+    //
+    //     // Get principal stresses and directions in geotechnical convention
+    //     VoigtVector sig_geo = -sigma;  // Convert to compression positive
+    //
+    //     auto [stresses, directions] = sig_geo.principalStressesAndDirections();
+    //     auto [s1, s2, s3] = stresses;      // s1 <= s2 <= s3 (ascending)
+    //     auto [n1, n2, n3] = directions;    // Corresponding unit eigenvectors
+    //
+    //     // In geotechnical convention with ascending order:
+    //     //   s1 = minor principal (least compressive / most tensile)
+    //     //   s3 = major principal (most compressive)
+    //     // For triaxial compression: s3 = σ_axial, s1 = s2 = σ_lateral
+    //
+    //     // Principal plastic strain rates (PLAXIS-consistent):
+    //     // These satisfy:
+    //     //   m3 - m1 = 1  (gives ε_q = dλ for triaxial definition ε_q = ε_1 - ε_3)
+    //     //   m1 + m2 + m3 = -sin(ψ_m)  (volumetric strain, negative = dilation)
+    //     //
+    //     // For triaxial compression (s3 > s1 = s2):
+    //     //   m3 = major principal strain rate (most compressive, negative)
+    //     //   m1 = minor principal strain rate (least compressive, positive for dilation)
+    //
+    //     double m3_p = -(2.0 + sin_psi_m) / 3.0;  // Major principal (compression, negative)
+    //     double m1_p = -(sin_psi_m - 1.0) / 3.0;  // Minor principal (extension, positive for dilation)
+    //
+    //     // Intermediate principal - smooth interpolation
+    //     double m2_p = -sin_psi_m / 3.0;  // = (m1_p + m3_p) / 2
+    //
+    //     // Alternatively, for Lode-angle dependent intermediate value:
+    //     // double lode = sig_geo.lodeAngle();  // -π/6 to +π/6
+    //     // double t = (lode + M_PI/6.0) / (M_PI/3.0);  // 0 at triax comp, 1 at triax ext
+    //     // double m2_p = (1.0 - t) * m1_p + t * m3_p;
+    //
+    //     // Transform back to Cartesian coordinates
+    //     // m_ij = sum_k( m_k * n_k_i * n_k_j )
+    //     vv_out(0) = m1_p * n1(0) * n1(0) + m2_p * n2(0) * n2(0) + m3_p * n3(0) * n3(0);  // 11
+    //     vv_out(1) = m1_p * n1(1) * n1(1) + m2_p * n2(1) * n2(1) + m3_p * n3(1) * n3(1);  // 22
+    //     vv_out(2) = m1_p * n1(2) * n1(2) + m2_p * n2(2) * n2(2) + m3_p * n3(2) * n3(2);  // 33
+    //     vv_out(3) = m1_p * n1(0) * n1(1) + m2_p * n2(0) * n2(1) + m3_p * n3(0) * n3(1);  // 12
+    //     vv_out(4) = m1_p * n1(1) * n1(2) + m2_p * n2(1) * n2(2) + m3_p * n3(1) * n3(2);  // 23
+    //     vv_out(5) = m1_p * n1(0) * n1(2) + m2_p * n2(0) * n2(2) + m3_p * n3(0) * n3(2);  // 13
+    //
+    //     // Note: vv_out is already in mechanics convention (tension positive) because
+    //     // we applied the negative signs to m1_p, m2_p, m3_p
+    //
+    //     return vv_out;
+    // }
+    // PLASTIC_FLOW_DIRECTION
+    // {
+    //     using namespace std;
+    //
+    //     double phi = GET_PARAMETER_VALUE(MC_phi) * M_PI / 180.0;
+    //     double psi = GET_PARAMETER_VALUE(MC_psi) * M_PI / 180.0;
+    //     double c   = GET_PARAMETER_VALUE(MC_c);
+    //
+    //     // mobilized dilatancy (Rowe) or constant:
+    //     double psi_m = computeMobilizedDilatancy(sigma, phi, psi, c);
+    //     double sin_psi_m = sin(psi_m);
+    //
+    //     // principal stresses of sigma (mechanics convention)
+    //     auto [s3, s2, s1] = sigma.principalStresses(); // ascending
+    //     double denom = s1 - s3;
+    //
+    //     // deviatoric direction
+    //     VoigtVector s = sigma.deviator();
+    //
+    //     vv_out.setZero();
+    //
+    //     if (std::abs(denom) > 1e-14)
+    //     {
+    //         // Normalize so that |m1 - m3| = 1  -> dεq^p = dλ
+    //         vv_out = s / denom;
+    //
+    //         // Add volumetric part so that tr(m) = sin(psi_m)
+    //         double a = sin_psi_m / 3.0;
+    //         vv_out(0) += a;
+    //         vv_out(1) += a;
+    //         vv_out(2) += a;
+    //     }
+    //
+    //     return vv_out;
+    // }
+    //
+
 
     using internal_variables_t = std::tuple<EpsQpShearType>;
 

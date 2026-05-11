@@ -100,7 +100,7 @@ struct SS_beta_Name { static constexpr const char* name = "SS_beta";};    // Cap
 using SS_beta = ModelParameterType<double, SS_beta_Name>;
 
 
-
+#include "HoekBrown_ParameterTypes.h"
 
 
 // ============================================================================

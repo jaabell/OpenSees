@@ -60,7 +60,7 @@ struct StiffSoilShearHardeningPolicy {
     {
         // Extract deviatoric part of plastic flow direction
         VoigtVector m_dev = m.deviator();
-        
+
         // Compute equivalent deviatoric strain increment
         // ||dev(m)||_eq = √(2/3) * √(dev(m) : dev(m))
         // Using stress-like inner product for the deviatoric tensor
@@ -70,11 +70,12 @@ struct StiffSoilShearHardeningPolicy {
                                2.0 * (m_dev.v12() * m_dev.v12() + 
                                       m_dev.v23() * m_dev.v23() + 
                                       m_dev.v13() * m_dev.v13());
-        
+
         // h = √(2/3) * ||dev(m)||
         double h = sqrt(2.0 / 3.0) * sqrt(m_dev_norm_sq);
-        
+
         return h;
+        // return 0;
     }
     
     using parameters_t = tuple<>;  // No additional parameters needed
@@ -122,7 +123,7 @@ struct StiffSoilCapHardeningPolicy {
         
         // Volumetric part of plastic flow direction
         // tr(m) = m_11 + m_22 + m_33
-        double tr_m = m.trace();  // - due to geotech convention
+        double tr_m = m.trace();  
         
         // For the cap, we want compression (tr(m) > 0 in geotechnical convention)
         // to increase p_c. The flow direction from StiffSoilCap_PF gives
@@ -144,9 +145,6 @@ struct StiffSoilCapHardeningPolicy {
             // Tension/expansion in mechanics convention - no cap hardening
             h = 0.0;
         }
-        cout << " PF --> pc = " << pc << endl;
-        cout << " PF --> tr_m = " << tr_m << endl;
-        cout << " PF --> h    = " << h << endl;       
 
         return h;
     }

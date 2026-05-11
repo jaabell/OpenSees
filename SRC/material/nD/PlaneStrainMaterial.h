@@ -90,6 +90,8 @@ class PlaneStrainMaterial: public NDMaterial{
     int recvSelf(int commitTag, Channel &theChannel, FEM_ObjectBroker &theBroker);
 
     int setParameter(const char **argv, int argc, Parameter &param);
+    int updateParameter(int responseID, Information &info);
+
     Response* setResponse(const char** argv, int argc, OPS_Stream& s);
 
 private :

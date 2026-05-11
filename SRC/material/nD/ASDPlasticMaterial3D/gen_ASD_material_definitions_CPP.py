@@ -16,6 +16,7 @@ YF = [
     "VonMises_YF",
     "DruckerPrager_YF",
     "MohrCoulomb_YF",
+    "HoekBrown_YF",
     # "TensionCutoff_YF",
 ]
 
@@ -26,7 +27,8 @@ PF = [
     "VonMises_PF",
     "DruckerPrager_PF",
     # "ConstantDilatancy_PF",
-    "MohrCoulomb_PF"
+    "MohrCoulomb_PF",
+    "HoekBrown_PF"
 ]
 
 # ============================================================================
@@ -45,6 +47,10 @@ IV_YF["DruckerPrager_YF"] = [
 ]
 
 IV_YF["MohrCoulomb_YF"] = [
+    "BackStress<NullHardeningTensorFunction>"
+]
+
+IV_YF["HoekBrown_YF"] = [
     "BackStress<NullHardeningTensorFunction>"
 ]
 
@@ -71,6 +77,10 @@ IV_PF = {
 IV_PF["ConstantDilatancy_PF"] = IV_PF["VonMises_PF"]
 
 IV_PF["MohrCoulomb_PF"] = [
+    "BackStress<NullHardeningTensorFunction>"
+]
+
+IV_PF["HoekBrown_PF"] = [
     "BackStress<NullHardeningTensorFunction>"
 ]
 
@@ -114,7 +124,7 @@ STIFFSOIL_MODELS = [
     # Deviatoric (Shear) mechanism
     {
         "EL": "StiffSoil_EL",
-        "YF": "StiffSoil_YF",
+        "YF": "StiffSoilShear_YF",
         "PF": "StiffSoilShear_PF",
         "IV": "EpsQpShear"
     },
