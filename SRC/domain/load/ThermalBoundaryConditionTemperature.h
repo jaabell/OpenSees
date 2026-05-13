@@ -17,33 +17,38 @@
 **   Filip C. Filippou (filippou@ce.berkeley.edu)                     **
 **                                                                    **
 ** ****************************************************************** */
-                                                                        
-// Original implementation: José Abell (UANDES), Massimo Petracca (ASDEA)
+
+// Written: Jose A. Abell, UANDES
 //
-// ASDPlasticMaterial3D
-//
-// Fully general templated material class for plasticity modeling
+// Purpose, to implement a thermal boundary condition for applying external
+// temperature through boundary condition element such as SixNodeBoundaryCondition
 
-#include "ASDPlasticMaterial3DGlobals.h"
-#include <string>
-#include "InternalVariableType.h"
-#include "AllASDHardeningFunctions.h"
-
-//Definitions of possible internal variables
-struct BackStressName { static constexpr const char* name = "BackStress";};
-template <class HardeningType>
-using BackStress = InternalVariableType<VoigtVector, HardeningType, BackStressName>;
-
-struct YieldStressName { static constexpr const char* name = "YieldStress";};
-template <class HardeningType>
-using YieldStress = InternalVariableType<VoigtScalar, HardeningType, YieldStressName>;
+#ifndef ThermalBoundaryConditionTemperature_h
+#define ThermalBoundaryConditionTemperature_h
 
 
-struct DP_cohesionName { static constexpr const char* name = "DP_cohesion";};
-template <class HardeningType>
-using DP_cohesion = InternalVariableType<VoigtScalar, HardeningType, DP_cohesionName>;
 
-struct ScalarInternalVariableName { static constexpr const char* name = "ScalarInternalVariable";};
-template <class HardeningType>
-using ScalarInternalVariable = InternalVariableType<VoigtScalar, HardeningType, ScalarInternalVariableName>;
+#include <ElementalLoad.h>
+
+class ThermalBoundaryConditionTemperature : public ElementalLoad
+{
+  public:
+    ThermalBoundaryConditionTemperature(int tag, int eleTag, double factor=1.0);
+    ThermalBoundaryConditionTemperature();    
+    ~ThermalBoundaryConditionTemperature();
+
+    const Vector &getData(int &type, double loadFactor);
+
+    int sendSelf(int commitTag, Channel &theChannel);  
+    int recvSelf(int commitTag, Channel &theChannel,  FEM_ObjectBroker &theBroker);
+    void Print(OPS_Stream &s, int flag =0);       
+
+  protected:
+	
+  private:
+    static Vector data;
+    double m_factor;
+};
+
+#endif
 

@@ -909,7 +909,11 @@ public:
     {
 
 
+<<<<<<< HEAD
+        opserr << " info = "; // << info << endln;
+=======
         // opserr << " info = "; // << info << endln;
+>>>>>>> a122be50b7dba29fcb8253982a41bffcf8ac72e2
         info.Print(opserr);
 
         // State variables (committed values)

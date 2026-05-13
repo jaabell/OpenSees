@@ -60,6 +60,8 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <ShellNLDKGQ.h>
 #include <FourNodeTetrahedron.h>
 #include <TenNodeTetrahedron.h>
+#include <TenNodeTetrahedronThermal.h>
+#include <SixNodeBoundryCondition.h>
 
 #include <BeamIntegration.h>
 #include <LobattoBeamIntegration.h>
@@ -238,6 +240,8 @@ void* OPS_KikuchiBearing();
 void* OPS_YamamotoBiaxialHDR();
 void* OPS_FourNodeTetrahedron();
 void* OPS_TenNodeTetrahedron();
+void* OPS_TenNodeTetrahedronThermal();
+void* OPS_SixNodeBoundryCondition();
 void* OPS_CatenaryCableElement();
 void *OPS_ASDEmbeddedNodeElement(void);
 void* OPS_GradientInelasticBeamColumn2d();
@@ -354,6 +358,17 @@ namespace {
 	    return OPS_ElasticBeam3d();
 	}
     }
+
+    static void* OPS_ModElasticBeam()
+    {
+	int ndm = OPS_GetNDM();
+	if(ndm == 2) {
+	    ID info;
+	    return OPS_ModElasticBeam2d();
+	} else {
+	    return OPS_ModElasticBeam3d();
+	}
+    }  
 
     static void* OPS_MVLEM2d3d()
     {
@@ -702,6 +717,8 @@ namespace {
 	functionMap.insert(std::make_pair("componentElement2d", &OPS_ComponentElement));
 	functionMap.insert(std::make_pair("componentElement", &OPS_ComponentElement));	
 	functionMap.insert(std::make_pair("zeroLengthImpact3D", &OPS_ZeroLengthImpact3D));
+	functionMap.insert(std::make_pair("ModElasticBeam", &OPS_ModElasticBeam));
+	functionMap.insert(std::make_pair("modElasticBeam", &OPS_ModElasticBeam));
 	functionMap.insert(std::make_pair("ModElasticBeam2d", &OPS_ModElasticBeam2d));
 	functionMap.insert(std::make_pair("modElasticBeam2d", &OPS_ModElasticBeam2d));
 	functionMap.insert(std::make_pair("ModElasticBeam3d", &OPS_ModElasticBeam3d));
@@ -801,6 +818,8 @@ namespace {
 	functionMap.insert(std::make_pair("zeroLengthND", &OPS_ZeroLengthND));
 	functionMap.insert(std::make_pair("FourNodeTetrahedron", &OPS_FourNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedron", &OPS_TenNodeTetrahedron));
+	functionMap.insert(std::make_pair("TenNodeTetrahedronThermal", &OPS_TenNodeTetrahedronThermal));
+	functionMap.insert(std::make_pair("SixNodeBoundryCondition", &OPS_SixNodeBoundryCondition));
 	functionMap.insert(std::make_pair("CatenaryCable", &OPS_CatenaryCableElement));
 	functionMap.insert(std::make_pair("ASDEmbeddedNodeElement", &OPS_ASDEmbeddedNodeElement));
 	functionMap.insert(std::make_pair("gradientInelasticBeamColumn", &OPS_GradientInelasticBeamColumn));

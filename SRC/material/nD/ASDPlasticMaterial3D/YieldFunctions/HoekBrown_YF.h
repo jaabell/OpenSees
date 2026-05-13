@@ -62,46 +62,79 @@ public:
         YieldFunctionBase<HoekBrown_YF<NO_HARDENING>>::YieldFunctionBase()
     {}
 
+    // YIELD_FUNCTION
+    // {
+    //     using namespace std;
+    //
+    //     // Get Hoek-Brown parameters
+    //     double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);  // Unconfined compressive strength
+    //     double mb = GET_PARAMETER_VALUE(HB_mb);           // Reduced material constant
+    //     double s = GET_PARAMETER_VALUE(HB_s);             // Rock mass parameter s
+    //     double a = GET_PARAMETER_VALUE(HB_a);             // Rock mass parameter a
+    //
+    //     // Get principal stresses (sorted: sigma1 >= sigma2 >= sigma3)
+    //     // Note: In this code, compression is positive
+    //     VoigtVector sigma_geo = -sigma;
+    //     auto [sigma3, sigma2, sigma1] = sigma_geo.principalStresses();
+    //
+    //     // The Hoek-Brown criterion in compression is:
+    //     // f = σ₁ - σ₃ - σci * (mb * σ₃/σci + s)^a
+    //     // 
+    //     // We need to handle the case when mb * σ₃/σci + s < 0
+    //     // which can happen in tension
+    //
+    //     double arg = mb * sigma3 / sigma_ci + s;
+    //
+    //     double yf;
+    //     if (arg > 0) {
+    //         // Standard Hoek-Brown
+    //         yf = sigma1 - sigma3 - sigma_ci * pow(arg, a);
+    //     } else {
+    //         // In tension region - use tension cutoff behavior
+    //         // The tensile strength is: σt = -s * σci / mb (for a = 0.5)
+    //         // For general a, we use the limit as arg -> 0
+    //         // When arg <= 0, we're beyond the tensile cutoff
+    //         // Return a large positive value to indicate yielding
+    //         double sigma_t = -s * sigma_ci / mb;  // Tensile strength (negative)
+    //         yf = sigma1 - sigma3 - sigma_ci * s;  // Essentially tension cutoff
+    //         // Alternative: linear extrapolation beyond tension cutoff
+    //         // yf = sigma1 - sigma3;  // Pure shear criterion
+    //     }
+    //
+    //     return yf;
+    // 
     YIELD_FUNCTION
     {
         using namespace std;
 
-        // Get Hoek-Brown parameters
-        double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);  // Unconfined compressive strength
-        double mb = GET_PARAMETER_VALUE(HB_mb);           // Reduced material constant
-        double s = GET_PARAMETER_VALUE(HB_s);             // Rock mass parameter s
-        double a = GET_PARAMETER_VALUE(HB_a);             // Rock mass parameter a
+        // Hoek–Brown parameters
+        double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
+        double mb       = GET_PARAMETER_VALUE(HB_mb);
+        double s        = GET_PARAMETER_VALUE(HB_s);
+        double a        = GET_PARAMETER_VALUE(HB_a);
 
-        // Get principal stresses (sorted: sigma1 >= sigma2 >= sigma3)
-        // Note: In this code, compression is positive
+        // Compression-positive convention; σ1 ≥ σ2 ≥ σ3
         VoigtVector sigma_geo = -sigma;
         auto [sigma3, sigma2, sigma1] = sigma_geo.principalStresses();
-        
-        // The Hoek-Brown criterion in compression is:
-        // f = σ₁ - σ₃ - σci * (mb * σ₃/σci + s)^a
-        // 
-        // We need to handle the case when mb * σ₃/σci + s < 0
-        // which can happen in tension
-        
-        double arg = mb * sigma3 / sigma_ci + s;
-        
-        double yf;
-        if (arg > 0) {
-            // Standard Hoek-Brown
-            yf = sigma1 - sigma3 - sigma_ci * pow(arg, a);
-        } else {
-            // In tension region - use tension cutoff behavior
-            // The tensile strength is: σt = -s * σci / mb (for a = 0.5)
-            // For general a, we use the limit as arg -> 0
-            // When arg <= 0, we're beyond the tensile cutoff
-            // Return a large positive value to indicate yielding
-            double sigma_t = -s * sigma_ci / mb;  // Tensile strength (negative)
-            yf = sigma1 - sigma3 - sigma_ci * s;  // Essentially tension cutoff
-            // Alternative: linear extrapolation beyond tension cutoff
-            // yf = sigma1 - sigma3;  // Pure shear criterion
-        }
 
-        return yf;
+        // Rock-mass tensile strength (negative in compression-positive sense)
+        double sigma_t = -s * sigma_ci / mb;
+
+        // arg = mb·σ3/σci + s.  arg > 0 ⇔ σ3 > σt (shear regime).
+        // Clamp to 0 before pow() so the negative-arg case doesn't NaN.
+        double arg      = mb * sigma3 / sigma_ci + s;
+        double arg_safe = max(arg, 0.0);
+
+        // Hoek–Brown shear surface
+        double f_shear   = sigma1 - sigma3 - sigma_ci * pow(arg_safe, a);
+
+        // Tension cut-off surface (Rankine-style on σ3)
+        double f_tension = sigma_t - sigma3;
+
+        // Composite: material yields if EITHER surface is violated.
+        // Continuous at the apex: σ3 = σt ⇒ f_shear = σ1 − σt, f_tension = 0,
+        // and on the HB envelope at the apex σ1 = σt so the composite is 0.
+        return max(f_shear, f_tension);
     }
 
     YIELD_FUNCTION_STRESS_DERIVATIVE
@@ -155,54 +188,54 @@ public:
         return 0.0;
     }
 
-    CHECK_APEX_REGION
-    {
-        using namespace std;
+    // CHECK_APEX_REGION
+    // {
+    //     using namespace std;
+    //
+    //     // Get Hoek-Brown parameters
+    //     double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
+    //     double mb = GET_PARAMETER_VALUE(HB_mb);
+    //     double s = GET_PARAMETER_VALUE(HB_s);
+    //     double a = GET_PARAMETER_VALUE(HB_a);
+    //
+    //     // The apex of the Hoek-Brown criterion in principal stress space
+    //     // occurs at the tensile strength point
+    //     // σt = -s * σci / mb (for a = 0.5)
+    //     // For general a, it's approximately the same
+    //
+    //     double sigma_t = -s * sigma_ci / mb;  // Tensile strength (negative value)
+    //
+    //     // Get the mean stress
+    //     double I1 = sigma.getI1();
+    //     double p = I1 / 3.0;  // Mean stress (positive in compression)
+    //
+    //     // Check if we're near the tensile apex
+    //     // The apex is at p = sigma_t (all principal stresses equal to sigma_t)
+    //     if (p < sigma_t * 1.01) {  // Small tolerance
+    //         return true;
+    //     }
+    //
+    //     return false;
+    // }
 
-        // Get Hoek-Brown parameters
-        double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
-        double mb = GET_PARAMETER_VALUE(HB_mb);
-        double s = GET_PARAMETER_VALUE(HB_s);
-        double a = GET_PARAMETER_VALUE(HB_a);
-
-        // The apex of the Hoek-Brown criterion in principal stress space
-        // occurs at the tensile strength point
-        // σt = -s * σci / mb (for a = 0.5)
-        // For general a, it's approximately the same
-        
-        double sigma_t = -s * sigma_ci / mb;  // Tensile strength (negative value)
-        
-        // Get the mean stress
-        double I1 = sigma.getI1();
-        double p = I1 / 3.0;  // Mean stress (positive in compression)
-        
-        // Check if we're near the tensile apex
-        // The apex is at p = sigma_t (all principal stresses equal to sigma_t)
-        if (p < sigma_t * 1.01) {  // Small tolerance
-            return true;
-        }
-
-        return false;
-    }
-
-    APEX_STRESS
-    {
-        using namespace std;
-
-        // Get Hoek-Brown parameters
-        double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
-        double mb = GET_PARAMETER_VALUE(HB_mb);
-        double s = GET_PARAMETER_VALUE(HB_s);
-
-        // Tensile strength (apex stress state - hydrostatic tension)
-        double sigma_t = -s * sigma_ci / mb;
-
-        // Return hydrostatic stress state at tensile strength
-        // (all normal stresses equal, no shear)
-        vv_out = VoigtVector(sigma_t, sigma_t, sigma_t, 0, 0, 0);
-
-        return vv_out;
-    }
+    // APEX_STRESS
+    // {
+    //     using namespace std;
+    //
+    //     // Get Hoek-Brown parameters
+    //     double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
+    //     double mb = GET_PARAMETER_VALUE(HB_mb);
+    //     double s = GET_PARAMETER_VALUE(HB_s);
+    //
+    //     // Tensile strength (apex stress state - hydrostatic tension)
+    //     double sigma_t = -s * sigma_ci / mb;
+    //
+    //     // Return hydrostatic stress state at tensile strength
+    //     // (all normal stresses equal, no shear)
+    //     vv_out = VoigtVector(sigma_t, sigma_t, sigma_t, 0, 0, 0);
+    //
+    //     return vv_out;
+    // }
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
@@ -216,7 +249,7 @@ template <class NO_HARDENING>
 VoigtVector HoekBrown_YF<NO_HARDENING>::vv_out;
 
 // Declares this YF as featuring an apex
-template<class NO_HARDENING>
-struct yf_has_apex<HoekBrown_YF<NO_HARDENING>> : std::true_type {};
-
+// template<class NO_HARDENING>
+// struct yf_has_apex<HoekBrown_YF<NO_HARDENING>> : std::true_type {};
+//
 #endif

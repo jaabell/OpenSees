@@ -17,33 +17,35 @@
 **   Filip C. Filippou (filippou@ce.berkeley.edu)                     **
 **                                                                    **
 ** ****************************************************************** */
-                                                                        
-// Original implementation: José Abell (UANDES), Massimo Petracca (ASDEA)
+
+// Written: José A. Abell.
 //
-// ASDPlasticMaterial3D
-//
-// Fully general templated material class for plasticity modeling
+// Description: Elemental load that specifies a heat source.
 
-#include "ASDPlasticMaterial3DGlobals.h"
-#include <string>
-#include "InternalVariableType.h"
-#include "AllASDHardeningFunctions.h"
+#ifndef ThermalHeatSource_h
+#define ThermalHeatSource_h
 
-//Definitions of possible internal variables
-struct BackStressName { static constexpr const char* name = "BackStress";};
-template <class HardeningType>
-using BackStress = InternalVariableType<VoigtVector, HardeningType, BackStressName>;
+#include <ElementalLoad.h>
 
-struct YieldStressName { static constexpr const char* name = "YieldStress";};
-template <class HardeningType>
-using YieldStress = InternalVariableType<VoigtScalar, HardeningType, YieldStressName>;
+class ThermalHeatSource : public ElementalLoad
+{
+public:
+	ThermalHeatSource(int tag, int eleTag, double q_);
+	ThermalHeatSource();
+	~ThermalHeatSource();
 
+	const Vector &getData(int &type, double loadFactor);
 
-struct DP_cohesionName { static constexpr const char* name = "DP_cohesion";};
-template <class HardeningType>
-using DP_cohesion = InternalVariableType<VoigtScalar, HardeningType, DP_cohesionName>;
+	int sendSelf(int commitTag, Channel &theChannel);
+	int recvSelf(int commitTag, Channel &theChannel, FEM_ObjectBroker &theBroker);
+	void Print(OPS_Stream &s, int flag = 0);
 
-struct ScalarInternalVariableName { static constexpr const char* name = "ScalarInternalVariable";};
-template <class HardeningType>
-using ScalarInternalVariable = InternalVariableType<VoigtScalar, HardeningType, ScalarInternalVariableName>;
+protected:
 
+private:
+	int dir;
+	static Vector data;
+	double q;
+};
+
+#endif

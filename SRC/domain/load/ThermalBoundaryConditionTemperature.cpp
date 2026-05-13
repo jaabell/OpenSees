@@ -17,33 +17,62 @@
 **   Filip C. Filippou (filippou@ce.berkeley.edu)                     **
 **                                                                    **
 ** ****************************************************************** */
+
+// Written: Jose A. Abell, UANDES
+#ifndef ThermalBoundaryConditionTemperature_CPP
+#define ThermalBoundaryConditionTemperature_CPP
+
                                                                         
-// Original implementation: José Abell (UANDES), Massimo Petracca (ASDEA)
-//
-// ASDPlasticMaterial3D
-//
-// Fully general templated material class for plasticity modeling
 
-#include "ASDPlasticMaterial3DGlobals.h"
-#include <string>
-#include "InternalVariableType.h"
-#include "AllASDHardeningFunctions.h"
+#include <ThermalBoundaryConditionTemperature.h>
+#include <Vector.h>
 
-//Definitions of possible internal variables
-struct BackStressName { static constexpr const char* name = "BackStress";};
-template <class HardeningType>
-using BackStress = InternalVariableType<VoigtVector, HardeningType, BackStressName>;
+Vector ThermalBoundaryConditionTemperature::data(1);
 
-struct YieldStressName { static constexpr const char* name = "YieldStress";};
-template <class HardeningType>
-using YieldStress = InternalVariableType<VoigtScalar, HardeningType, YieldStressName>;
+ThermalBoundaryConditionTemperature::ThermalBoundaryConditionTemperature(int tag, int theElementTag, double factor)
+  :ElementalLoad(tag, LOAD_TAG_ThermalBoundaryConditionTemperature, theElementTag), m_factor(factor)
+{
 
+}
 
-struct DP_cohesionName { static constexpr const char* name = "DP_cohesion";};
-template <class HardeningType>
-using DP_cohesion = InternalVariableType<VoigtScalar, HardeningType, DP_cohesionName>;
+ThermalBoundaryConditionTemperature::ThermalBoundaryConditionTemperature()
+  :ElementalLoad(LOAD_TAG_ThermalBoundaryConditionTemperature), m_factor(1.0)
+{
 
-struct ScalarInternalVariableName { static constexpr const char* name = "ScalarInternalVariable";};
-template <class HardeningType>
-using ScalarInternalVariable = InternalVariableType<VoigtScalar, HardeningType, ScalarInternalVariableName>;
+}
+
+ThermalBoundaryConditionTemperature::~ThermalBoundaryConditionTemperature()
+{
+
+}
+
+const Vector &
+ThermalBoundaryConditionTemperature::getData(int &type, double loadFactor)
+{
+  type = LOAD_TAG_ThermalBoundaryConditionTemperature;
+  data(0) = m_factor * loadFactor;
+
+  return data;
+}
+
+int 
+ThermalBoundaryConditionTemperature::sendSelf(int commitTag, Channel &theChannel)
+{
+  return -1;
+}
+
+int 
+ThermalBoundaryConditionTemperature::recvSelf(int commitTag, Channel &theChannel,  FEM_ObjectBroker &theBroker)
+{
+  return -1;
+}
+
+void 
+ThermalBoundaryConditionTemperature::Print(OPS_Stream &s, int flag)
+{
+  s << "ThermalBoundaryConditionTemperature...";
+  s << "  element acted on: " << eleTag << endln;;
+}
+
+#endif
 
