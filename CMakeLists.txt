@@ -212,7 +212,7 @@ add_definitions(-DOPENSEES_VERSION="${GIT_VERSION}")
 #
 
 set_property(CACHE OPS_FINAL_TARGET PROPERTY STRINGS
-    G3 OpenSees OpenSeesMP OpenSeesSP OpenSeesPy)
+    G3 OpenSees OpenSeesMP OpenSeesSP OpenSeesPy OpenSeesPyMP)
 
 #
 # OS Configuration:
@@ -862,6 +862,65 @@ target_link_libraries(OpenSeesPy
    Eigen3::Eigen	
    ${Python_LIBRARIES}
 )
+
+
+#
+# OpenSeesPyMP Module (MPI-enabled Python module)
+#
+
+if(MPI_FOUND)
+
+add_library(OpenSeesPyMP SHARED EXCLUDE_FROM_ALL
+    ${OPS_SRC_DIR}/interpreter/PythonMPIModule.cpp
+    ${OPS_SRC_DIR}/actor/objectBroker/FEM_ObjectBrokerAllClasses.cpp
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/diagonal/MPIDiagonalSOE.cpp
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/diagonal/MPIDiagonalSolver.cpp
+)
+
+set_target_properties(OpenSeesPyMP PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "openseesmp")
+
+target_include_directories(OpenSeesPyMP PUBLIC ${Python_INCLUDE_DIRS})
+target_include_directories(OpenSeesPyMP PRIVATE ${MPI_CXX_INCLUDE_DIRS})
+target_compile_options(OpenSeesPyMP PRIVATE ${MPI_CXX_COMPILE_FLAGS})
+
+target_compile_definitions(OpenSeesPyMP
+    PUBLIC _PARALLEL_INTERPRETERS ${MUMPS_FLAG})
+
+target_link_libraries(OpenSeesPyMP
+   OpenSeesLIB
+   OPS_Reliability
+   OPS_Recorder
+   OPS_Numerics
+   METIS
+   SUPERLU_DIST
+   ${HDF5_LIBRARIES}
+   ${CONAN_LIBS}
+   ${Python_LIBRARIES}
+   ${MPI_CXX_LIBRARIES}
+   ${CMAKE_DL_LIBS}
+)
+
+if (DEFINED OPENMPI)
+    target_compile_definitions(OpenSeesPyMP PUBLIC _OPENMPI)
+endif()
+
+# MUMPS support for OpenSeesPyMP:
+# Requires MUMPS built with -fPIC (shared library compatible).
+# Uncomment if MUMPS was built with -fPIC:
+# if (DEFINED MUMPS_DIR)
+#   target_include_directories(OpenSeesPyMP PRIVATE ${MUMPS_DIR}/_deps/mumps-src/include)
+#   target_sources(OpenSeesPyMP PRIVATE
+#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSOE.cpp
+#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSolver.cpp
+#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSOE.cpp
+#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSolver.cpp
+#   )
+#   target_link_libraries(OpenSeesPyMP PRIVATE ${MUMPS_LIBRARIES})
+# endif()
+
+endif()
 
 
 #

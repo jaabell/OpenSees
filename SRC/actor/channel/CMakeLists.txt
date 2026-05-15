@@ -34,6 +34,13 @@ target_sources(OpenSeesSP
       MPI_Channel.h
 )
 
+target_sources(OpenSeesPyMP
+    PRIVATE
+      MPI_Channel.cpp
+    PUBLIC
+      MPI_Channel.h
+)
+
 endif()
 
 

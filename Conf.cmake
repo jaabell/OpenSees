@@ -14,6 +14,8 @@
 #                           Select Default Executable
 #==============================================================================
 set(OPS_FINAL_TARGET "OpenSees" CACHE STRING "OpenSees final target")
+set_property(CACHE OPS_FINAL_TARGET PROPERTY STRINGS
+    "G3;OpenSees;OpenSeesMP;OpenSeesSP;OpenSeesPy;OpenSeesPyMP")
 
 
 #==============================================================================

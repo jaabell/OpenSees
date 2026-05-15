@@ -85,6 +85,17 @@ target_sources(OpenSeesSP
         PFEMCompressibleSolver_Mumps.h
 )
 
+target_sources(OpenSeesPyMP
+    PRIVATE 
+        DistributedSuperLU.cpp
+        DistributedSparseGenColLinSOE.cpp
+        DistributedSparseGenRowLinSOE.cpp
+        PFEMSolver_LumpM.cpp
+    PUBLIC
+        DistributedSuperLU.h
+        DistributedSparseGenColLinSOE.h
+        DistributedSparseGenRowLinSOE.h
+)
 endif()
 
 

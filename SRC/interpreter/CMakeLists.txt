@@ -28,3 +28,12 @@ target_sources(OpenSeesPy
      PythonWrapper.cpp
      PythonStream.cpp
 )
+
+if(MPI_FOUND)
+target_sources(OpenSeesPyMP
+   PRIVATE
+     PythonMPIModule.cpp
+     PythonWrapper.cpp
+     PythonStream.cpp
+)
+endif()

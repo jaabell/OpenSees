@@ -27,6 +27,13 @@ target_sources(OpenSeesSP
     MPI_ChannelAddress.h
 )
 
+target_sources(OpenSeesPyMP
+  PRIVATE
+    MPI_ChannelAddress.cpp
+  PUBLIC
+    MPI_ChannelAddress.h
+)
+
 endif()
 
 target_include_directories(OPS_Actor PUBLIC ${CMAKE_CURRENT_LIST_DIR})

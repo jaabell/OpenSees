@@ -47,6 +47,13 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <cstring>
 #include <cctype>
 
+#ifndef OPS_PY_MODULE_NAME
+#define OPS_PY_MODULE_NAME "opensees"
+#endif
+#ifndef OPS_PY_INIT_FUNC
+#define OPS_PY_INIT_FUNC PyInit_opensees
+#endif
+
 // define opserr
 static PythonStream sserr;
 OPS_Stream *opserrPtr = &sserr;
@@ -515,7 +522,7 @@ static int opensees_clear(PyObject *m) {
 
 static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
-        "opensees",
+        OPS_PY_MODULE_NAME,
         NULL,
         sizeof(struct module_state),
         getmethodsFunc(),
@@ -528,7 +535,7 @@ static struct PyModuleDef moduledef = {
 #define INITERROR return NULL
 
 PyMODINIT_FUNC
-PyInit_opensees(void)
+OPS_PY_INIT_FUNC(void)
 
 #else
 #define INITERROR return
@@ -549,7 +556,11 @@ initopensees(void)
     struct module_state *st = GETSTATE(pymodule);
 
     // add OpenSeesError
-    st->error = PyErr_NewExceptionWithDoc("opensees.OpenSeesError", "Internal OpenSees errors.", NULL, NULL);
+    {
+        char errname[128];
+        snprintf(errname, sizeof(errname), "%s.OpenSeesError", OPS_PY_MODULE_NAME);
+        st->error = PyErr_NewExceptionWithDoc(errname, "Internal OpenSees errors.", NULL, NULL);
+    }
     if (st->error == NULL) {
         Py_DECREF(pymodule);
         INITERROR;
