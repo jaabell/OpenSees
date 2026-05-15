@@ -116,14 +116,33 @@ MESSAGE("${CMAKE_BINARY_DIR}")
 if(CONAN_EXPORTED)
     message(STATUS "USING CONAN (via Transparent Integration)")
     set(USING_CONAN TRUE)
+elseif(EXISTS "${CMAKE_BINARY_DIR}/conanbuildinfo.cmake")
+    message(STATUS "USING CONAN")
+    include("${CMAKE_BINARY_DIR}/conanbuildinfo.cmake")
+    conan_basic_setup()
+    set(USING_CONAN TRUE)
+    set(CMAKE_MODULE_PATH "${CMAKE_BINARY_DIR}" ${CMAKE_MODULE_PATH})
+    find_package(HDF5 REQUIRED)
+    set(HDF5_VERSION "1.14.0")
+    set(HDF5_LIBRARIES ${HDF5_LIBRARIES})
+    find_package(TCL REQUIRED)
+    set(TCL_INCLUDE_PATH ${TCL_INCLUDE_DIR})
+    set(TCL_LIBRARY ${TCL_LIBRARIES})
+    set(TCL_LIBRARIES ${TCL_LIBRARY})
+    include_directories(${TCL_INCLUDE_DIR})
+    get_filename_component(TCL_LIB_DIR "${TCL_LIBRARY}" DIRECTORY)
+    get_filename_component(TCL_INIT_FILE "${TCL_LIB_DIR}/tcl8.6/init.tcl" ABSOLUTE)
 else()
     message(STATUS "NOT USING CONAN (System Search)")
-    include(OpenSeesFunctions) # Your custom logic
+    set(NOT_USING_CONAN TRUE)
+    set(CONAN_LIBS )
+    find_package(ZLIB REQUIRED)
+    find_package(HDF5 REQUIRED)
+    find_package(TCL REQUIRED)
+    include_directories(${TCL_INCLUDE_DIR})
+    set(TCL_INCLUDE_PATH ${TCL_INCLUDE_DIR})
+    set(TCL_LIBRARY ${TCL_LIBRARIES})
 endif()
-
-find_package(ZLIB REQUIRED)
-find_package(HDF5 REQUIRED)
-find_package(TCL REQUIRED)
 
 if(TARGET tcl::tcl)
 	  
@@ -803,7 +822,9 @@ if(MPI_FOUND)
     target_compile_options(OpenSeesMP PRIVATE ${MPI_CXX_COMPILE_FLAGS})
 
     if (DEFINED MUMPS_DIR)
-        add_dependencies(OpenSeesMP mumps)
+        if(TARGET mumps)
+            add_dependencies(OpenSeesMP mumps)
+        endif()
     endif()
 
     if (DEFINED OPENMPI)
@@ -888,17 +909,21 @@ target_compile_options(OpenSeesPyMP PRIVATE ${MPI_CXX_COMPILE_FLAGS})
 target_compile_definitions(OpenSeesPyMP
     PUBLIC _PARALLEL_INTERPRETERS ${MUMPS_FLAG})
 
-target_link_libraries(OpenSeesPyMP
+target_link_libraries(OpenSeesPyMP PUBLIC
    OpenSeesLIB
    OPS_Reliability
    OPS_Recorder
    OPS_Numerics
+   OPS_SysOfEqnPython
    METIS
    SUPERLU_DIST
    ${HDF5_LIBRARIES}
    ${CONAN_LIBS}
    ${Python_LIBRARIES}
    ${MPI_CXX_LIBRARIES}
+   ${MPI_Fortran_LIBRARIES}
+   ${MPI_CXX_LINK_FLAGS}
+   ${SCALAPACK_LIBRARIES}
    ${CMAKE_DL_LIBS}
 )
 
@@ -906,19 +931,16 @@ if (DEFINED OPENMPI)
     target_compile_definitions(OpenSeesPyMP PUBLIC _OPENMPI)
 endif()
 
-# MUMPS support for OpenSeesPyMP:
-# Requires MUMPS built with -fPIC (shared library compatible).
-# Uncomment if MUMPS was built with -fPIC:
-# if (DEFINED MUMPS_DIR)
-#   target_include_directories(OpenSeesPyMP PRIVATE ${MUMPS_DIR}/_deps/mumps-src/include)
-#   target_sources(OpenSeesPyMP PRIVATE
-#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSOE.cpp
-#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSolver.cpp
-#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSOE.cpp
-#     ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSolver.cpp
-#   )
-#   target_link_libraries(OpenSeesPyMP PRIVATE ${MUMPS_LIBRARIES})
-# endif()
+if (DEFINED MUMPS_DIR)
+  target_include_directories(OpenSeesPyMP PRIVATE ${MUMPS_DIR}/_deps/mumps-src/include)
+  target_sources(OpenSeesPyMP PRIVATE
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSOE.cpp
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsSolver.cpp
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSOE.cpp
+    ${OPS_SRC_DIR}/system_of_eqn/linearSOE/mumps/MumpsParallelSolver.cpp
+  )
+  target_link_libraries(OpenSeesPyMP PRIVATE ${MUMPS_LIBRARIES})
+endif()
 
 endif()
 
