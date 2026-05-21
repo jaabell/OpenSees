@@ -816,13 +816,7 @@ public:
     int setParameter(const char **argv, int argc, Parameter &param)
     {
 
-        cout << "ASDPlasticMaterial3D::setParameter  argv = " << *argv << endl;
 
-        // if (argc < 2)
-        //     return -1;
-        
-        // int theMaterialTag;
-        // theMaterialTag = atoi(argv[1]);
         
         // if (theMaterialTag == this->getTag()) {
         if (true) {
@@ -909,8 +903,6 @@ public:
     {
 
 
-        // opserr << " info = "; // << info << endln;
-        info.Print(opserr);
 
         // State variables (committed values)
         if (responseID == 1) { // stress
