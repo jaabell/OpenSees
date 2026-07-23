@@ -2146,7 +2146,15 @@ TenNodeTetrahedron::shp3d( const double zeta[4], double &xsj, double shp[4][NumN
     double Jdet = (t1*(t5*t9-t6*t8) - t2*(t4*t9-t6*t7) + t3*(t4*t8-t5*t7))/6.0;
 
     // Saving the Jacobians Determinant
-    xsj = Jdet;
+    // BUGFIX: Jdet above already carries the tetrahedral 1/6 factor (it is the
+    // element VOLUME, not the raw 3x3 determinant). The Gauss weights wg[]
+    // sum to 1/6 (the natural-tet volume), so using xsj = Jdet applied the
+    // 1/6 factor TWICE -> every stiffness/mass/reaction came out 6x too soft
+    // (verified by a uniaxial patch test: reaction = E*eps*A / 6). The volume
+    // integrand must be the raw determinant D = 6*Jdet so that
+    // sum(wg)*xsj = (1/6)*D = V. The derivative shape functions below already
+    // use 1/(6*Jdet) = 1/D and are unaffected.
+    xsj = 6.0 * Jdet;
 
     // qx1 - qx10 (17.24)
     shp[0][0] = 1/(6.0*Jdet)*(dN1_dzeta1*a1  + dN1_dzeta2*a2  + dN1_dzeta3*a3  + dN1_dzeta4*a4);
