@@ -1051,6 +1051,7 @@ Domain::clearAll(void) {
   theSPs->clearAll();
   thePCs->clearAll();
   theMPs->clearAll();
+  theEQs->clearAll();   // was omitted: EQ_Constraints survived clearAll()/wipe() (leak + stale non-empty domain)
   theLoadPatterns->clearAll();
   theParameters->clearAll();
   numParameters = 0;
