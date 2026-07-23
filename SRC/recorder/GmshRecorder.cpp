@@ -395,9 +395,24 @@ GmshRecorder::write_mesh()
         
                 const ID& elenodes = theEle->getExternalNodes();
                 int nnodes = elenodes.Size();
-                for (int j = 0; j < nnodes; j++) 
+                if (gmsheletype == GMSH_HEXAHEDRON_20 && nnodes == 20)
                 {
-                    theFile << elenodes(j) << " ";
+                    // The OpenSees 20-node serendipity hex (shp3dv.cpp local node
+                    // pattern) and the Gmsh hex20 (MSH type 17) share the eight
+                    // corners but order the twelve mid-edge nodes differently, so
+                    // the mid-edges must be permuted. gmsh slot j <- OpenSees node
+                    // hex20perm[j]:
+                    static const int hex20perm[20] = {0,1,2,3,4,5,6,7,
+                        8,11,16,9,17,10,18,19,12,15,13,14};
+                    for (int j = 0; j < 20; j++)
+                        theFile << elenodes(hex20perm[j]) << " ";
+                }
+                else
+                {
+                    for (int j = 0; j < nnodes; j++)
+                    {
+                        theFile << elenodes(j) << " ";
+                    }
                 }
                 theFile << '\n';
         }
@@ -1300,7 +1315,7 @@ GmshRecorder::setGMSHType()
     gmshtypes[ELE_TAG_BrickUP] = GMSH_HEXAHEDRON;
     gmshtypes[ELE_TAG_Nine_Four_Node_QuadUP] = GMSH_POLY_VERTEX;
     gmshtypes[ELE_TAG_Twenty_Eight_Node_BrickUP] = GMSH_POLY_VERTEX;
-    gmshtypes[ELE_TAG_Twenty_Node_Brick] = GMSH_QUADRATIC_HEXAHEDRON;
+    gmshtypes[ELE_TAG_Twenty_Node_Brick] = GMSH_HEXAHEDRON_20; // 20-node serendipity hex is MSH type 17, not 12 (the 27-node hex)
     gmshtypes[ELE_TAG_BBarFourNodeQuadUP] = GMSH_QUAD;
     gmshtypes[ELE_TAG_BBarBrickUP] = GMSH_QUAD;
     gmshtypes[ELE_TAG_PlateMITC4] = GMSH_QUAD;
