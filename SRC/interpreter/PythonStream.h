@@ -66,7 +66,12 @@ template<class T>void PythonStream::err_out(T err)
   std::stringstream ss;
   ss << err;
   msg = ss.str();
-  PySys_FormatStderr(msg.c_str());
+  // Pass the already-formatted message as a %s argument, not as the format
+  // string itself. Any literal '%' in an opserr message (e.g. "50% of model
+  // mass") would otherwise be interpreted by PySys_FormatStderr as a printf
+  // conversion, so the message was silently dropped or garbled under openseespy
+  // (the Tcl StandardStream path is unaffected). Classic format-string bug.
+  PySys_FormatStderr("%s", msg.c_str());
 }
 
 
