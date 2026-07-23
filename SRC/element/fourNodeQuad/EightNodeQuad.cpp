@@ -201,7 +201,7 @@ EightNodeQuad::EightNodeQuad(int tag, int nd1, int nd2, int nd3, int nd4,
 EightNodeQuad::EightNodeQuad()
 :Element (0,ELE_TAG_EightNodeQuad),
   theMaterial(0), connectedExternalNodes(nnodes),
- Q(nnodes*2), applyLoad(0), pressureLoad(nnodes*2), thickness(0.0), pressure(0.0), Ki(0)
+ Q(nnodes*2), applyLoad(0), pressureLoad(nnodes*2), thickness(0.0), pressure(0.0), rho(0.0), Ki(0) // rho was left uninitialized in the blank (broker) constructor -> garbage element density on DB/parallel restore
 {
 	pts[0][0] = -0.7745966692414834;
 	pts[0][1] = -0.7745966692414834;
@@ -825,7 +825,7 @@ EightNodeQuad::sendSelf(int commitTag, Channel &theChannel)
 
   // Quad packs its data into a Vector and sends this to theChannel
   // along with its dbTag and the commitTag passed in the arguments
-  static Vector data(9);
+  static Vector data(10);
   data(0) = this->getTag();
   data(1) = thickness;
   data(2) = b[0];
@@ -836,6 +836,7 @@ EightNodeQuad::sendSelf(int commitTag, Channel &theChannel)
   data(6) = betaK;
   data(7) = betaK0;
   data(8) = betaKc;
+  data(9) = rho;  // serialize element-level rho: the mass matrix uses it when nonzero, but sendSelf/recvSelf never carried it, so a database restore / MPI send got garbage rho
 
   res += theChannel.sendVector(dataTag, commitTag, data);
   if (res < 0) {
@@ -894,7 +895,7 @@ EightNodeQuad::recvSelf(int commitTag, Channel &theChannel,
 
   // Quad creates a Vector, receives the Vector and then sets the
   // internal data with the data in the Vector
-  static Vector data(9);
+  static Vector data(10);
   res += theChannel.recvVector(dataTag, commitTag, data);
   if (res < 0) {
     opserr << "WARNING EightNodeQuad::recvSelf() - failed to receive Vector\n";
@@ -911,6 +912,7 @@ EightNodeQuad::recvSelf(int commitTag, Channel &theChannel,
   betaK = data(6);
   betaK0 = data(7);
   betaKc = data(8);
+  rho = data(9);  // restore element rho
 
   static ID idData(2*nip+nnodes);
   // Quad now receives the tags of its nine external nodes
