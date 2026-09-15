@@ -571,6 +571,7 @@
 #define ND_TAG_ASDPlasticMaterial3D 10000 // For ASDPlasticity-class material
 
 #define ND_TAG_FAM_CS 40801 // Shaohui Zhang, Xiaodong Ji - Tsinghua University
+#define ND_TAG_TimeVaryingMaterial      2009 // Jose Abell & Jose Larenas (UANDES); wraps an NDMaterial with time-varying E,K,A
 
 
 #define FIBER_TAG_Uniaxial2d	1
@@ -621,6 +622,7 @@
 #define PATTERN_TAG_PBowlLoading          4
 #define PATTERN_TAG_DRMLoadPattern        5
 #define PATTERN_TAG_H5DRM                 6
+#define PATTERN_TAG_ThermalVolumetricLoadingPattern 8 // Jose Abell & Jose Larenas (UANDES); 7 is FirePattern
 
 #define LOAD_TAG_Beam2dUniformLoad        3
 #define LOAD_TAG_Beam2dPointLoad          4
@@ -908,6 +910,8 @@
 #define ELE_TAG_CurvedPipe                      270
 #define ELE_TAG_PML3DVISCOUS               271 // Amin Pakzad
 #define ELE_TAG_MEFI_3D        			  272 // C. N. Lopez
+#define ELE_TAG_SixNodeBoundryCondition         273 // Jose Abell & Jose Larenas (UANDES)
+#define ELE_TAG_TenNodeTetrahedronThermal       274 // Jose Abell & Jose Larenas (UANDES); 272 is MEFI_3D
 
 #define FRN_TAG_Coulomb            1
 #define FRN_TAG_VelDependent       2
@@ -980,6 +984,8 @@
 #define LOAD_TAG_EarthquakeNodalLoad 	2
 #define LOAD_TAG_SingleExcitation 	3
 #define LOAD_TAG_RectPulseNodalLoad 	4
+#define LOAD_TAG_ThermalHeatSource                    19 // Jose Abell & Jose Larenas (UANDES)
+#define LOAD_TAG_ThermalBoundaryConditionTemperature  20 // Jose Abell & Jose Larenas (UANDES)
 
 #define CNSTRNT_TAG_SP_Constraint 	1
 #define CNSTRNT_TAG_MP_Constraint 	2

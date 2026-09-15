@@ -67,6 +67,8 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <vector>
 #include <InterpolatedGroundMotion.h>
 #include <IGAFollowerLoad.h>
+#include <ThermalHeatSource.h>
+#include <ThermalBoundaryConditionTemperature.h>
 
 void* OPS_LoadPattern();
 void* OPS_UniformExcitationPattern();
@@ -625,6 +627,77 @@ int OPS_ElementalLoad()
 	    int loadPatternTag = theActiveLoadPattern->getTag();
 
 	    // add the load to the domain
+	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+		opserr << theLoad;
+		delete theLoad;
+		return -1;
+	    }
+	    eleLoadTag++;
+	}
+	return 0;
+    }
+
+    // Thermal heat source (volumetric heat generation) for TenNodeTetrahedronThermal.
+    // Jose Luis Larenas & Jose A. Abell (UANDES, Chile)
+    else if (strcmp(type,"-ThermalHeatSource") == 0) {
+	double q = 0.0;
+	int numdata = OPS_GetNumRemainingInputArgs();
+	if (numdata < 1) {
+	    opserr<<"WARNING eleLoad -ThermalHeatSource want q?\n";
+	    return -1;
+	}
+	numdata = 1;
+	if (OPS_GetDoubleInput(&numdata, &q) < 0) {
+	    opserr<<"WARNING eleLoad - invalid value for ThermalHeatSource\n";
+	    return -1;
+	}
+	for (int i=0; i<theEleTags.Size(); i++) {
+	    // ThermalHeatSource(int tag, int eleTag, double q)
+	    theLoad = new ThermalHeatSource(eleLoadTag, theEleTags(i), q);
+
+	    if (theLoad == 0) {
+		opserr << "WARNING eleLoad - out of memory creating load of type " << type;
+		return -1;
+	    }
+
+	    int loadPatternTag = theActiveLoadPattern->getTag();
+
+	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+		opserr << theLoad;
+		delete theLoad;
+		return -1;
+	    }
+	    eleLoadTag++;
+	}
+	return 0;
+    }
+    // Prescribed-temperature (Dirichlet-type) thermal boundary condition for SixNodeBoundryCondition.
+    // Jose Luis Larenas & Jose A. Abell (UANDES, Chile)
+    else if (strcmp(type,"-ThermalBoundaryConditionTemperature") == 0) {
+	double factor = 1.0;
+	int numdata = OPS_GetNumRemainingInputArgs();
+	if (numdata < 1) {
+	    opserr<<"WARNING eleLoad -ThermalBoundaryConditionTemperature want factor?\n";
+	    return -1;
+	}
+	numdata = 1;
+	if (OPS_GetDoubleInput(&numdata, &factor) < 0) {
+	    opserr<<"WARNING eleLoad - invalid value for ThermalBoundaryConditionTemperature\n";
+	    return -1;
+	}
+	for (int i=0; i<theEleTags.Size(); i++) {
+	    // ThermalBoundaryConditionTemperature(int tag, int eleTag, double factor)
+	    theLoad = new ThermalBoundaryConditionTemperature(eleLoadTag, theEleTags(i), factor);
+
+	    if (theLoad == 0) {
+		opserr << "WARNING eleLoad - out of memory creating load of type " << type;
+		return -1;
+	    }
+
+	    int loadPatternTag = theActiveLoadPattern->getTag();
+
 	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
 		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
 		opserr << theLoad;

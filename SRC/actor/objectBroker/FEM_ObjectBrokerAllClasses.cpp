@@ -466,6 +466,8 @@
 #include "twoNodeLink/LinearElasticSpring.h"
 #include "twoNodeLink/Inerter.h"
 #include "tetrahedron/FourNodeTetrahedron.h"
+#include "tetrahedron/TenNodeTetrahedronThermal.h"
+#include "tetrahedron/SixNodeBoundryCondition.h"
 
 #include "mvlem/MVLEM.h"		// Kristijan Kolozvari
 #include "mvlem/SFI_MVLEM.h"	// Kristijan Kolozvari
@@ -1056,6 +1058,12 @@ FEM_ObjectBrokerAllClasses::getNewElement(int classTag)
 
     case ELE_TAG_FourNodeTetrahedron:
       return new FourNodeTetrahedron();
+
+    case ELE_TAG_TenNodeTetrahedronThermal:
+      return new TenNodeTetrahedronThermal();
+
+    case ELE_TAG_SixNodeBoundryCondition:
+      return new SixNodeBoundryCondition();
 	
 	case ELE_TAG_PML2D:
 	  return new PML2D();

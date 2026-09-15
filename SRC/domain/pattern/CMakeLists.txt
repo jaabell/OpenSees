@@ -53,11 +53,13 @@ target_sources(OPS_Domain
         PathTimeSeriesThermal.cpp
         PeerMotion.cpp
         PeerNGAMotion.cpp
+        ThermalVolumetricLoadingPattern.cpp
     PUBLIC
         FireLoadPattern.h
         PathTimeSeriesThermal.h
         PeerMotion.h
         PeerNGAMotion.h
+        ThermalVolumetricLoadingPattern.h
 )
 
 # The following files are currently being added to the OPS_Tcl target

@@ -57,6 +57,7 @@ OBJS       = NDMaterial.o \
 	J2BeamFiber3d.o \
 	J2ThreeDimensional.o \
 	OrthotropicMaterial.o \
+	TimeVaryingMaterial.o \
 	Series3DMaterial.o \
 	Parallel3DMaterial.o \
 	PlaneStrainMaterial.o \

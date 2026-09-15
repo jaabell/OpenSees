@@ -76,6 +76,8 @@
 #include <BrickSelfWeight.h>
 #include <SurfaceLoader.h>
 #include <SelfWeight.h>
+#include <ThermalHeatSource.h>
+#include <ThermalBoundaryConditionTemperature.h>
 #include <LoadPattern.h>
 
 
@@ -3410,6 +3412,68 @@ TclCommand_addElementalLoad(ClientData clientData, Tcl_Interp *interp, int argc,
       opserr << "WARNING eleLoad -beamTempLoad type currently only valid only for ndm=2\n";
       return TCL_ERROR;
     }  
+  }
+  // Thermal heat source (volumetric heat generation) for TenNodeTetrahedronThermal.
+  // Jose Luis Larenas & Jose A. Abell (UANDES, Chile)
+  else if (strcmp(argv[count], "-ThermalHeatSource") == 0) {
+    count++;
+    if (argc - count != 1) {
+      opserr << "WARNING eleLoad -ThermalHeatSource want q?\n";
+      return TCL_ERROR;
+    }
+    double q;
+    if (Tcl_GetDouble(interp, argv[count], &q) != TCL_OK) {
+      opserr << "WARNING eleLoad - invalid value " << argv[count] << " for -ThermalHeatSource\n";
+      return TCL_ERROR;
+    }
+    for (int i = 0; i < theEleTags.Size(); i++) {
+      // ThermalHeatSource(int tag, int eleTag, double q)
+      theLoad = new ThermalHeatSource(eleLoadTag, theEleTags(i), q);
+      if (theLoad == 0) {
+        opserr << "WARNING eleLoad - out of memory creating load of type -ThermalHeatSource\n";
+        return TCL_ERROR;
+      }
+      int loadPatternTag = theTclLoadPattern->getTag();
+      if (theTclDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+        opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+        opserr << theLoad;
+        delete theLoad;
+        return TCL_ERROR;
+      }
+      eleLoadTag++;
+    }
+    return TCL_OK;
+  }
+  // Prescribed-temperature (Dirichlet-type) thermal boundary condition for SixNodeBoundryCondition.
+  // Jose Luis Larenas & Jose A. Abell (UANDES, Chile)
+  else if (strcmp(argv[count], "-ThermalBoundaryConditionTemperature") == 0) {
+    count++;
+    if (argc - count != 1) {
+      opserr << "WARNING eleLoad -ThermalBoundaryConditionTemperature want factor?\n";
+      return TCL_ERROR;
+    }
+    double factor;
+    if (Tcl_GetDouble(interp, argv[count], &factor) != TCL_OK) {
+      opserr << "WARNING eleLoad - invalid value " << argv[count] << " for -ThermalBoundaryConditionTemperature\n";
+      return TCL_ERROR;
+    }
+    for (int i = 0; i < theEleTags.Size(); i++) {
+      // ThermalBoundaryConditionTemperature(int tag, int eleTag, double factor)
+      theLoad = new ThermalBoundaryConditionTemperature(eleLoadTag, theEleTags(i), factor);
+      if (theLoad == 0) {
+        opserr << "WARNING eleLoad - out of memory creating load of type -ThermalBoundaryConditionTemperature\n";
+        return TCL_ERROR;
+      }
+      int loadPatternTag = theTclLoadPattern->getTag();
+      if (theTclDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+        opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+        opserr << theLoad;
+        delete theLoad;
+        return TCL_ERROR;
+      }
+      eleLoadTag++;
+    }
+    return TCL_OK;
   }
 
   // if get here we have successfully created the load and added it to the domain
