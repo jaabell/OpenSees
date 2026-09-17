@@ -37,12 +37,11 @@
 
 void *OPS_TimeVaryingMaterial(void)
 {
-    opserr << "Using TimeVaryingMaterial" << endln ;
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 7) {
         opserr <<
-               "nDMaterial TimeVarying Error: Few arguments (< 17).\n"
+               "nDMaterial TimeVarying Error: too few arguments.\n"
                "nDMaterial TimeVarying $tag $theProjectedMat $Nt t1 t2 t3 .. t_Nt E1 E2 E3 ... E_Nt K1 K2 K3...K_Nt  A1 A2 A3...A_Nt\n";
         return nullptr;
     }
@@ -137,10 +136,6 @@ std::map<int, Vector> TimeVaryingMaterial::E_histories;
 std::map<int, Vector> TimeVaryingMaterial::K_histories;
 std::map<int, Vector> TimeVaryingMaterial::A_histories;
 std::map<int, bool> TimeVaryingMaterial::new_time_step ;
-bool TimeVaryingMaterial::print_strain_once = true;
-bool TimeVaryingMaterial::print_stress_once = true;
-bool TimeVaryingMaterial::print_commit_once = true;
-bool TimeVaryingMaterial::print_tang_once = true;
 // double TimeVaryingMaterial::E = 0;
 // double TimeVaryingMaterial::G = 0;
 // double TimeVaryingMaterial::A = 0;
@@ -165,7 +160,7 @@ TimeVaryingMaterial::TimeVaryingMaterial(
     // copy the isotropic material
     theProjectedMaterial = theProjMat.getCopy("ThreeDimensional");
     if (theProjectedMaterial == 0) {
-        opserr << "nDMaterial Orthotropic Error: failed to get a (3D) copy of the isotropic material\n";
+        opserr << "nDMaterial TimeVarying Error: failed to get a (3D) copy of the wrapped material\n";
         exit(-1);
     }
 
@@ -194,15 +189,6 @@ TimeVaryingMaterial::TimeVaryingMaterial(
     //and advance the number of evolution laws.
     // number_of_evolution_laws++;
 
-    opserr << "Created new TimeVaryingMaterial \n";
-    // opserr << "  evolution_law_id          = " << evolution_law_id                << endln;
-    opserr << "  tag          = " << tag                << endln;
-    opserr << "  proj_tag     = " << theProjectedMaterial->getTag() << endln;
-    opserr << "  Nt           = " << E_histories[tag].Size()  << endln;
-    opserr << "  time_history = " << time_histories[tag]      << endln;
-    opserr << "  E_history    = " << E_histories[tag]         << endln;
-    opserr << "  K_history    = " << K_histories[tag]         << endln;
-    opserr << "  A_history    = " << A_histories[tag]         << endln;
 }
 
 TimeVaryingMaterial::~TimeVaryingMaterial()
@@ -289,7 +275,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     C0proj = theProjectedMaterial->getInitialTangent();
     int res = C0proj.Invert(C0proj_inv);
     if (res < 0) {
-        opserr << "nDMaterial Orthotropic Error: the isotropic material gave a singular initial tangent.\n";
+        opserr << "nDMaterial TimeVarying Error: the wrapped material gave a singular initial tangent.\n";
         exit(-1);
     }
 
@@ -307,21 +293,6 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     static Vector epsilon_proj(6);
     epsilon_proj = epsilon_proj_n;
     epsilon_proj.addVector(1.0, depsilon_proj, 1.0); // epsilon_proj = epsilon_proj_old + depsilon_proj
-
-    my_element_tag = ops_TheActiveElement->getTag();
-    // opserr << "my_element_tag = " << my_element_tag << endln;
-    // if (my_element_tag == 83 )
-    // {
-    //     opserr << "@ TimeVaryingMaterial::setTrialStrain" << endln;
-    //     opserr << "strain = " << strain << endln;
-    //     opserr << "epsilon_internal = " << epsilon_internal << endln;
-    //     opserr << "epsilon_real = " << epsilon_real << endln;
-    //     opserr << "depsilon_real = " << depsilon_real << endln;
-    //     opserr << "depsilon_proj = " << depsilon_proj << endln;
-    //     opserr << "epsilon_proj = " << epsilon_proj << endln;
-    //     print_strain_once = false;
-    //     print_commit_once = true;
-    // }
 
     // call projected material with the projected total strain
     res = theProjectedMaterial->setTrialStrain(epsilon_proj);
@@ -364,16 +335,6 @@ const Vector &TimeVaryingMaterial::getStress(void)
     //add real stress increment to the previous real stress
     sigma_real = sigma_real_n + dsigma_real;
 
-    if (my_element_tag == 83)
-    {
-        opserr << " @TimeVaryingMaterial::getStress mattag = " << this->getTag() << endln;
-        opserr << "sigma_real_n = " << sigma_real_n << endln;
-        opserr << "dsigma_real = " << dsigma_real << endln;
-        opserr << "sigma_real = " << sigma_real << endln;
-        // opserr << "Aepsilon = " << Aepsilon << endln;
-        print_stress_once = false;
-    }
-
     return sigma_real;
 }
 
@@ -395,39 +356,11 @@ const Matrix &TimeVaryingMaterial::getTangent(void)
     // C_real = temp / A;
     C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A[this->getTag()]);
 
-
-    // cdiff = C_proj - C_real;
-    bool printnow = false;
-    // for (int i = 0; i < 6; ++i)
-    // {
-    //     for (int j = 0; j < 6; ++j)
-    //     {
-    //         if (abs(cdiff(i, j)) > 1e-4 || cdiff(i, j) != cdiff(i, j) )
-    //         {
-    //             printnow = true;
-    //         }
-    //     }
-    // }
-
-    // if (my_element_tag == 83  )
-    // {
-    //     opserr << "@ getTangent" << endln;
-    //     opserr << "C_real = " << C_real << endln;
-    //     opserr << "C_proj = " << C_proj << endln;
-    //     // opserr << "diff = " << cdiff  << endln;
-    //     opserr << "Asigma_inv = " << 1 / A[this->getTag()]  << endln;
-    //     opserr << "Aepsilon = " << Aepsilon  << endln;
-    //     // print_tang_once = false;
-    // }
-
-
     return C_real;
 }
 
 const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 {
-    opserr << "@TimeVaryingMaterial::getInitialTangent" << endln;
-
     // elasticity tensor in projected space
     const Matrix& C_proj = theProjectedMaterial->getInitialTangent();
 
@@ -453,25 +386,10 @@ int TimeVaryingMaterial::commitState(void)
     const Vector& sigma_proj = theProjectedMaterial->getStress();
     const Vector& epsilon_proj = theProjectedMaterial->getStrain();
 
-    print_stress_once = true;
-    print_strain_once = true;
-    print_tang_once = true;
     sigma_real_n = sigma_real;
     sigma_proj_n = sigma_proj;
     epsilon_real_n = epsilon_real;
     epsilon_proj_n = epsilon_proj;
-    epsilon_new_n = epsilon_new;
-
-    if (my_element_tag == 83)
-    {
-        opserr << "@ TimeVaryingMaterial::commitState(void) " << endln;
-        opserr << "sigma_real_n = " << sigma_real_n;
-        opserr << "sigma_proj_n = " << sigma_proj_n;
-        opserr << "epsilon_real_n = " << epsilon_real_n;
-        opserr << "epsilon_proj_n = " << epsilon_proj_n;
-        opserr << "epsilon_new_n = " << epsilon_new_n;
-        // print_commit_once = false;
-    }
 
     return theProjectedMaterial->commitState();
 }
@@ -481,8 +399,6 @@ int TimeVaryingMaterial::revertToLastCommit(void)
     sigma_real = sigma_real_n ;
     // sigma_proj = sigma_proj_n ;
     epsilon_real = epsilon_real_n ;
-    // epsilon_proj = epsilon_proj_n ;
-    epsilon_new = epsilon_new_n ;
     return theProjectedMaterial->revertToLastCommit();
 }
 
@@ -492,7 +408,6 @@ int TimeVaryingMaterial::revertToStart(void)
     sigma_proj_n.Zero();
     epsilon_real_n.Zero();
     epsilon_proj_n.Zero();
-    epsilon_new_n .Zero();
     return theProjectedMaterial->revertToStart();
 }
 
@@ -513,8 +428,6 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     theCopy->sigma_proj_n = sigma_proj_n;
     theCopy->epsilon_real_n = epsilon_real_n;
     theCopy->epsilon_proj_n = epsilon_proj_n;
-    theCopy->epsilon_new = epsilon_new;
-    theCopy->epsilon_new_n = epsilon_new_n;
     // theCopy->E = E;
     // theCopy->G = G;
     // theCopy->nu = nu;
@@ -630,7 +543,6 @@ void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, do
             }
         }
 
-        opserr << "index for time (" << time << ") = " << index << endln;
 
         if (index == 0)
         {
@@ -669,16 +581,5 @@ void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, do
             nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
         }
 
-        opserr << " UPDATING PARAMETERS of mat = " << this->getTag() <<   " TO "  << endln;
-        opserr << "  E  = " << E[tag]  << endln;
-        opserr << "  G  = " << G[tag]  << endln;
-        opserr << "  nu = " << nu[tag] << endln;
-        opserr << "  A  = " << A[tag]  << endln;
     }
-//     opserr << "current_time = " << time << " "
-//            << "new_time_step = " << (int)new_time_step << " "
-//            << "E = " << E << " "
-//            << "G = " << G << " "
-//            << "nu = " << nu << " "
-//            << "A = " << A << " " << endln;
 }
