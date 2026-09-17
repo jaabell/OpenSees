@@ -39,6 +39,7 @@
 #include <Channel.h>
 #include <ErrorHandler.h>
 #include <Parameter.h>
+#include <elementAPI.h>
 
 #include <math.h>
 
@@ -124,6 +125,32 @@ double interpolate(const std::vector<double>& times, const std::vector<double>& 
     throw std::out_of_range("Query time out of range.");
 }
 
+
+// Interpreter (OpenSeesPy / new-style Tcl) factory:
+//   pattern('ThermalVolumetricLoadingPattern', tag, alpha, elementsFile, gaussTempsFile, [addEpsilonFile])
+void* OPS_ThermalVolumetricLoadingPattern()
+{
+    int numArgs = OPS_GetNumRemainingInputArgs();
+    if (numArgs != 4 && numArgs != 5) {
+        opserr << "WARNING pattern ThermalVolumetricLoadingPattern - want: tag alpha elementsFile gaussTempsFile <addEpsilonFile>\n";
+        return 0;
+    }
+    int tag;
+    int numdata = 1;
+    if (OPS_GetIntInput(&numdata, &tag) < 0) {
+        opserr << "WARNING pattern ThermalVolumetricLoadingPattern - invalid tag\n";
+        return 0;
+    }
+    double alpha;
+    if (OPS_GetDoubleInput(&numdata, &alpha) < 0) {
+        opserr << "WARNING pattern ThermalVolumetricLoadingPattern - invalid alpha\n";
+        return 0;
+    }
+    std::string elements_filename = OPS_GetString();
+    std::string gausstemps_filename = OPS_GetString();
+    std::string add_epsilon_filename = (numArgs == 5) ? OPS_GetString() : "";
+    return new ThermalVolumetricLoadingPattern(tag, alpha, elements_filename, gausstemps_filename, add_epsilon_filename);
+}
 
 ThermalVolumetricLoadingPattern::ThermalVolumetricLoadingPattern(int tag, double alpha_, std::string elements_filename_, std::string gausstemps_filename_, std::string add_epsilon_filename_)
   :LoadPattern(tag, PATTERN_TAG_ThermalVolumetricLoadingPattern),  

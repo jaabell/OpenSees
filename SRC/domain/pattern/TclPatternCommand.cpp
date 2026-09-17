@@ -54,6 +54,7 @@
 #include <PathTimeSeries.h>
 #include <PathSeries.h>
 #include <UniformExcitation.h>
+#include <ThermalVolumetricLoadingPattern.h>
 #include <MultiSupportPattern.h>
 #include <GroundMotion.h>
 #include <GroundMotionRecord.h>
@@ -98,7 +99,7 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
   if (argc < 4) {
     opserr << "WARNING invalid command - want: pattern type ";
     opserr << " <type args> {list of load and sp constraints commands}\n";
-    opserr << "           valid types: Plain, UniformExcitation, MultiSupport\n";
+    opserr << "           valid types: Plain, UniformExcitation, MultiSupport, ThermalVolumetricLoadingPattern\n";
     return TCL_ERROR;
   } 
 
@@ -589,6 +590,32 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
 #endif
 
   //////// //////// ///////// ////////// /////  // DRMLoadPattern add BEGIN
+  // Thermal field applied as a volumetric eigenstrain at each element's Gauss points (UANDES thermomechanical
+  // workflow; Larenas 2024, Arrieta 2025). Jose L. Larenas & Jose A. Abell.
+  //   pattern ThermalVolumetricLoadingPattern $tag $alpha $elementsFile $gaussTempsFile <$addEpsilonFile>
+  else if (strcmp(argv[1],"ThermalVolumetricLoadingPattern") == 0) {
+    if (argc != 6 && argc != 7) {
+      opserr << "WARNING pattern ThermalVolumetricLoadingPattern - want: pattern ThermalVolumetricLoadingPattern "
+             << "$tag $alpha $elementsFile $gaussTempsFile <$addEpsilonFile>\n";
+      return TCL_ERROR;
+    }
+    double alpha = 1.0;
+    if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK) {
+      opserr << "WARNING pattern ThermalVolumetricLoadingPattern - invalid alpha " << argv[3] << "\n";
+      return TCL_ERROR;
+    }
+    std::string elements_filename = argv[4];
+    std::string gausstemps_filename = argv[5];
+    std::string add_epsilon_filename = (argc == 7) ? argv[6] : "";
+    thePattern = new ThermalVolumetricLoadingPattern(patternID, alpha, elements_filename, gausstemps_filename,
+                                                     add_epsilon_filename);
+    if (theDomain->addLoadPattern(thePattern) == false) {
+      opserr << "WARNING pattern ThermalVolumetricLoadingPattern - could not add to domain\n";
+      delete thePattern;
+      return TCL_ERROR;
+    }
+    return TCL_OK;
+  }
   else if (strcmp(argv[1],"DRMLoadPattern") == 0) {
     TCL_Char * InputDataFileName = 0;
     

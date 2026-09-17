@@ -73,6 +73,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 void* OPS_LoadPattern();
 void* OPS_UniformExcitationPattern();
 void* OPS_MultiSupportPattern();
+void* OPS_ThermalVolumetricLoadingPattern();
 void* OPS_TimeSeriesIntegrator();
 
 namespace {
@@ -112,6 +113,11 @@ int OPS_Pattern()
 
 	theActiveMultiSupportPattern = (MultiSupportPattern*)OPS_MultiSupportPattern();
 	pattern = theActiveMultiSupportPattern;
+
+    } else if (strcmp(type, "ThermalVolumetricLoadingPattern") == 0) {
+
+	// thermal field as volumetric eigenstrain at Gauss points (UANDES thermomechanical workflow)
+	pattern = (LoadPattern*)OPS_ThermalVolumetricLoadingPattern();
 
     } else {
 	opserr<<"WARNING unknown pattern type"<<type<<"\n";
