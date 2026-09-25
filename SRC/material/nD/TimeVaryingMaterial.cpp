@@ -135,15 +135,6 @@ std::map<int, Vector> TimeVaryingMaterial::time_histories;
 std::map<int, Vector> TimeVaryingMaterial::E_histories;
 std::map<int, Vector> TimeVaryingMaterial::K_histories;
 std::map<int, Vector> TimeVaryingMaterial::A_histories;
-std::map<int, bool> TimeVaryingMaterial::new_time_step ;
-// double TimeVaryingMaterial::E = 0;
-// double TimeVaryingMaterial::G = 0;
-// double TimeVaryingMaterial::A = 0;
-// double TimeVaryingMaterial::nu = 0;
-std::map<int, double> TimeVaryingMaterial::E;
-std::map<int, double> TimeVaryingMaterial::G;
-std::map<int, double> TimeVaryingMaterial::A;
-std::map<int, double> TimeVaryingMaterial::nu;
 
 TimeVaryingMaterial::TimeVaryingMaterial()
     : NDMaterial(0, ND_TAG_TimeVaryingMaterial)
@@ -182,7 +173,7 @@ TimeVaryingMaterial::TimeVaryingMaterial(
     K_histories[tag] = K_;
     A_histories[tag] = A_;
 
-    new_time_step[tag] = true;
+    new_time_step = true;
 
     //This is a new material constructor, hence we save the evolution law
     // evolution_law_id = number_of_evolution_laws;
@@ -222,13 +213,15 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     depsilon_real = epsilon_real - epsilon_real_n ; // depsilon_real = epsilon_real_new - epsilon_real_old
 
     // Get the current parameters at current time
-    double current_time = OPS_GetDomain()->getCurrentTime();  //should not be used in displacement control user could set the current time as a parameter (check ASDConcrete3D)
-    getParameters(current_time);
+    double current_driver = use_local_evolution_variable
+        ? local_evolution_variable
+        : OPS_GetDomain()->getCurrentTime();
+    getParameters(current_driver);
 
     int tag = this->getTag();
-    double Ex  = E[tag];  double Ey  = E[tag];  double Ez  = E[tag];
-    double Gxy = G[tag];  double Gyz = G[tag];  double Gzx = G[tag];
-    double vxy = nu[tag]; double vyz = nu[tag]; double vzx = nu[tag];
+    double Ex  = current_E;  double Ey  = current_E;  double Ez  = current_E;
+    double Gxy = current_G;  double Gyz = current_G;  double Gzx = current_G;
+    double vxy = current_nu; double vyz = current_nu; double vzx = current_nu;
     // double Asigmaxx   = A; double Asigmayy   = A; double Asigmazz   = A;
     // double Asigmaxyxy = A; double Asigmayzyz = A; double Asigmaxzxz = A;
 
@@ -253,9 +246,9 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     C0(5, 5) = Gzx;
 
     // compute the Asigma and its inverse
-    if (A[tag] <= 0 ) {
+    if (current_A <= 0 ) {
         opserr << "nDMaterial TimeVarying Error: A must be greater than 0 for tag = " << tag << "\n";
-        opserr << "A = " << A[tag] << endln;
+        opserr << "A = " << current_A << endln;
         exit(-1);
     }
     // static Matrix Asigma(6, 6);
@@ -283,7 +276,7 @@ int TimeVaryingMaterial::setTrialStrain(const Vector & strain)
     // static Matrix Asigma_C0(6, 6);
     // Asigma_C0.addMatrixProduct(0.0, Asigma, C0, 1.0);
     // Asigma_C0 = A*C0;
-    Aepsilon.addMatrixProduct(0.0, C0proj_inv, C0, A[tag]);
+    Aepsilon.addMatrixProduct(0.0, C0proj_inv, C0, current_A);
 
     //Compute the projected strain increment
     static Vector depsilon_proj(6);
@@ -330,7 +323,7 @@ const Vector &TimeVaryingMaterial::getStress(void)
     //     dsigma_real(i) = dsigma_proj(i) / A;
     // dsigma_real = Asigma^-1 * dsigma_proj
     // dsigma_real(i) = Asigma_inv(i) * dsigma_proj(i); // dsigma_real = Asigma^-1 * dsigma_proj
-    dsigma_real = dsigma_proj / A[this->getTag()];  // dsigma_real = Asigma^-1 * dsigma_proj
+    dsigma_real = dsigma_proj / current_A;  // dsigma_real = Asigma^-1 * dsigma_proj
 
     //add real stress increment to the previous real stress
     sigma_real = sigma_real_n + dsigma_real;
@@ -354,7 +347,7 @@ const Matrix &TimeVaryingMaterial::getTangent(void)
     // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
     // C_real.addMatrixProduct(0.0, invAsigma, temp, 1.0);
     // C_real = temp / A;
-    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A[this->getTag()]);
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / current_A);
 
     return C_real;
 }
@@ -373,7 +366,7 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
     //     invAsigma(i, i) = Asigma_inv(i);
     // temp.addMatrixProduct(0.0, C_proj, Aepsilon, 1.0);
     // C.addMatrixProduct(0.0, invAsigma, temp, 1.0);
-    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / A[this->getTag()]);
+    C_real.addMatrixProduct(0.0, C_proj, Aepsilon, 1 / current_A);
     return C_real;
 
 
@@ -381,34 +374,46 @@ const Matrix &TimeVaryingMaterial::getInitialTangent(void)
 
 int TimeVaryingMaterial::commitState(void)
 {
-    new_time_step[this->getTag()] = true;
+    // Materialize and snapshot a complete trial state before advancing either material.
+    Vector sigma_proj_trial(theProjectedMaterial->getStress());
+    Vector dsigma_proj = sigma_proj_trial - sigma_proj_n;
+    Vector sigma_real_trial = sigma_real_n + dsigma_proj / current_A;
+    Vector epsilon_real_trial(epsilon_real);
+    Vector epsilon_proj_trial(theProjectedMaterial->getStrain());
 
-    const Vector& sigma_proj = theProjectedMaterial->getStress();
-    const Vector& epsilon_proj = theProjectedMaterial->getStrain();
-
-    sigma_real_n = sigma_real;
-    sigma_proj_n = sigma_proj;
-    epsilon_real_n = epsilon_real;
-    epsilon_proj_n = epsilon_proj;
-
-    return theProjectedMaterial->commitState();
+    int result = theProjectedMaterial->commitState();
+    if (result == 0) {
+        sigma_real_n = sigma_real_trial;
+        sigma_proj_n = sigma_proj_trial;
+        epsilon_real_n = epsilon_real_trial;
+        epsilon_proj_n = epsilon_proj_trial;
+        new_time_step = true;
+    }
+    return result;
 }
 
 int TimeVaryingMaterial::revertToLastCommit(void)
 {
-    sigma_real = sigma_real_n ;
-    // sigma_proj = sigma_proj_n ;
-    epsilon_real = epsilon_real_n ;
-    return theProjectedMaterial->revertToLastCommit();
+    int result = theProjectedMaterial->revertToLastCommit();
+    if (result == 0) {
+        sigma_real = sigma_real_n;
+        epsilon_real = epsilon_real_n;
+    }
+    return result;
 }
 
 int TimeVaryingMaterial::revertToStart(void)
 {
-    sigma_real_n.Zero();
-    sigma_proj_n.Zero();
-    epsilon_real_n.Zero();
-    epsilon_proj_n.Zero();
-    return theProjectedMaterial->revertToStart();
+    int result = theProjectedMaterial->revertToStart();
+    if (result == 0) {
+        sigma_real.Zero();
+        epsilon_real.Zero();
+        sigma_real_n.Zero();
+        sigma_proj_n.Zero();
+        epsilon_real_n.Zero();
+        epsilon_proj_n.Zero();
+    }
+    return result;
 }
 
 NDMaterial * TimeVaryingMaterial::getCopy(void)
@@ -428,10 +433,13 @@ NDMaterial * TimeVaryingMaterial::getCopy(void)
     theCopy->sigma_proj_n = sigma_proj_n;
     theCopy->epsilon_real_n = epsilon_real_n;
     theCopy->epsilon_proj_n = epsilon_proj_n;
-    // theCopy->E = E;
-    // theCopy->G = G;
-    // theCopy->nu = nu;
-    // theCopy->A = A;
+    theCopy->current_E = current_E;
+    theCopy->current_G = current_G;
+    theCopy->current_nu = current_nu;
+    theCopy->current_A = current_A;
+    theCopy->new_time_step = new_time_step;
+    theCopy->local_evolution_variable = local_evolution_variable;
+    theCopy->use_local_evolution_variable = use_local_evolution_variable;
     return theCopy;
 }
 
@@ -478,6 +486,14 @@ int TimeVaryingMaterial::setParameter(const char** argv, int argc, Parameter& pa
         return param.addObject(4001, this);
     }
 
+    // 4002 - optional material-point evolution variable. Once updated, this
+    // value replaces global domain time as the interpolation driver.
+    if (strcmp(argv[0], "evolutionVariable") == 0 ||
+            strcmp(argv[0], "localDriver") == 0) {
+        param.setValue(local_evolution_variable);
+        return param.addObject(4002, this);
+    }
+
     // forward to the adapted (isotropic) material
     return theProjectedMaterial->setParameter(argv, argc, param);
 }
@@ -494,6 +510,15 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
         epsilon_internal(0) = initNormalStrain;
         epsilon_internal(1) = initNormalStrain;
         epsilon_internal(2) = initNormalStrain;
+        return 0;
+    }
+
+
+    case 4002:
+    {
+        local_evolution_variable = info.theDouble;
+        use_local_evolution_variable = true;
+        new_time_step = true;
         return 0;
     }
 
@@ -528,10 +553,10 @@ Response* TimeVaryingMaterial::setResponse(const char** argv, int argc, OPS_Stre
 void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, double& nu, double& A)
 {
     int tag = this->getTag();
-    if (new_time_step[tag]) {
+    if (new_time_step) {
         double K = 0;
         // opserr << "Getting Parameters (E, G, nu, A)" << endln;
-        new_time_step[tag] = false;
+        new_time_step = false;
 
         // Find the interval in which 'time' falls within time_history
         int index = 0;
@@ -546,12 +571,12 @@ void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, do
 
         if (index == 0)
         {
-            E[tag] = E_histories[tag](0) ;
-            A[tag] = A_histories[tag](0) ;
+            current_E = E_histories[tag](0) ;
+            current_A = A_histories[tag](0) ;
             K = K_histories[tag](0) ;
 
-            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
-            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
+            current_G  = (3.0 * K * current_E) / (9.0 * K - current_E);
+            current_nu = (3.0 * K - current_E) / (6.0 * K);
         }
 
         else if (index > 0 && index < time_histories[tag].Size())
@@ -564,21 +589,21 @@ void TimeVaryingMaterial::getParameters(double time)//, double& E, double& G, do
             // opserr << "t2    = " << t2    << endln ;
             // opserr << "alpha = " << alpha << endln ;
 
-            E[tag] = (1.0 - alpha) * E_histories[tag](index - 1) + alpha * E_histories[tag](index);
-            A[tag] = (1.0 - alpha) * A_histories[tag](index - 1) + alpha * A_histories[tag](index);
+            current_E = (1.0 - alpha) * E_histories[tag](index - 1) + alpha * E_histories[tag](index);
+            current_A = (1.0 - alpha) * A_histories[tag](index - 1) + alpha * A_histories[tag](index);
             K = (1.0 - alpha) * K_histories[tag](index - 1) + alpha * K_histories[tag](index);
 
-            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
-            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
+            current_G  = (3.0 * K * current_E) / (9.0 * K - current_E);
+            current_nu = (3.0 * K - current_E) / (6.0 * K);
         }
 
         else {
-            E[tag] = E_histories[tag](time_histories[tag].Size() - 1) ;
-            A[tag] = A_histories[tag](time_histories[tag].Size() - 1) ;
+            current_E = E_histories[tag](time_histories[tag].Size() - 1) ;
+            current_A = A_histories[tag](time_histories[tag].Size() - 1) ;
             K = K_histories[tag](time_histories[tag].Size() - 1) ;
 
-            G[tag]  = (3.0 * K * E[tag]) / (9.0 * K - E[tag]);
-            nu[tag] = (3.0 * K - E[tag]) / (6.0 * K);
+            current_G  = (3.0 * K * current_E) / (9.0 * K - current_E);
+            current_nu = (3.0 * K - current_E) / (6.0 * K);
         }
 
     }
