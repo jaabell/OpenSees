@@ -3105,21 +3105,23 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       DistributedDiagonalSolver    *theSolver = new DistributedDiagonalSolver();   
       theSOE = new DistributedDiagonalSOE(*theSolver);
 #else
+      bool lumped = (argc > 2 && (strcmp(argv[2],"-lumped") == 0 || strcmp(argv[2],"lumped") == 0));
       DiagonalSolver    *theSolver = new DiagonalDirectSolver();   
-      theSOE = new DiagonalSOE(*theSolver);
+      theSOE = new DiagonalSOE(*theSolver, lumped);
 #endif
 
 
   } 
   // Diagonal SOE & SOLVER
   else if (strcmp(argv[1],"MPIDiagonal") == 0) {
+      bool lumped = (argc > 2 && (strcmp(argv[2],"-lumped") == 0 || strcmp(argv[2],"lumped") == 0));
 #ifdef _PARALLEL_INTERPRETERS
       MPIDiagonalSolver    *theSolver = new MPIDiagonalSolver();   
-      theSOE = new MPIDiagonalSOE(*theSolver);
+      theSOE = new MPIDiagonalSOE(*theSolver, lumped);
       setMPIDSOEFlag = true;
 #else
       DiagonalSolver    *theSolver = new DiagonalDirectSolver();   
-      theSOE = new DiagonalSOE(*theSolver);
+      theSOE = new DiagonalSOE(*theSolver, lumped);
 #endif
   } 
 
