@@ -424,3 +424,37 @@ createASDPlasticMaterial3D<
             BackStress<NullHardeningTensorFunction>
             >
         > (instance_tag, yf_type, pf_type, el_type, iv_type, instance_pointers, available_models);
+
+// =========================================
+// Stiff Soil (Hardening Soil) Models
+// =========================================
+
+createASDPlasticMaterial3D<
+        StiffSoil_EL, 
+        StiffSoilShear_YF<
+            EpsQpShear
+            >, 
+        StiffSoilShear_PF<
+            EpsQpShear
+            >
+        > (instance_tag, yf_type, pf_type, el_type, iv_type, instance_pointers, available_models);
+
+createASDPlasticMaterial3D<
+        StiffSoil_EL, 
+        StiffSoilCap_YF<
+            CapPressure
+            >, 
+        StiffSoilCap_PF<
+            CapPressure
+            >
+        > (instance_tag, yf_type, pf_type, el_type, iv_type, instance_pointers, available_models);
+
+createASDPlasticMaterial3D<
+        StiffSoil_EL, 
+        StiffSoilCap_YF<
+            CapPressureLinear
+            >, 
+        StiffSoilCap_PF<
+            CapPressureLinear
+            >
+        > (instance_tag, yf_type, pf_type, el_type, iv_type, instance_pointers, available_models);
