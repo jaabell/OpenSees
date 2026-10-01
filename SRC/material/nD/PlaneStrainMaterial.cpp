@@ -386,6 +386,12 @@ PlaneStrainMaterial::setParameter(const char **argv, int argc,
   return theMaterial->setParameter(argv, argc, param);
 }
 
+int
+PlaneStrainMaterial::updateParameter(int responseID, Information &info)
+{
+  return theMaterial->updateParameter(responseID, info);
+}
+
 Response* PlaneStrainMaterial::setResponse(const char** argv, int argc, OPS_Stream& s)
 {
     // for strain, stress and tangent use the base class implementation
