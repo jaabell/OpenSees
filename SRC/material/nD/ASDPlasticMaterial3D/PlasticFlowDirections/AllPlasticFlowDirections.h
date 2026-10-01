@@ -28,3 +28,4 @@
 #include "DruckerPrager_PF.h"
 #include "ConstantDilatancy_PF.h"
 #include "MohrCoulomb_PF.h"
+#include "HoekBrown_PF.h"
