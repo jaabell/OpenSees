@@ -44,6 +44,7 @@
 #include "../PlasticFlowBase.h"
 #include "../ASDPlasticMaterial3DGlobals.h"
 #include "../AllASDModelParameterTypes.h"
+#include "../HoekBrown_Utils.h"
 #include <cmath>
 #include <typeinfo>
 
@@ -86,8 +87,11 @@ public:
         // Get Hoek-Brown parameters
         double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
         double mb_psi = GET_PARAMETER_VALUE(HB_mb_psi);  // Dilation parameter (reduced mb)
-        double s = GET_PARAMETER_VALUE(HB_s);
-        double a = GET_PARAMETER_VALUE(HB_a);
+        double mb_unused, s, a;
+        HoekBrownUtils::effective_rock_mass_parameters(
+            GET_PARAMETER_VALUE(HB_mi), GET_PARAMETER_VALUE(HB_GSI), GET_PARAMETER_VALUE(HB_D),
+            0.0, GET_PARAMETER_VALUE(HB_s), GET_PARAMETER_VALUE(HB_a),
+            mb_unused, s, a);
         double ds = GET_PARAMETER_VALUE(HB_ds);
 
         double sigma_norm = sigma.norm();
@@ -124,7 +128,7 @@ public:
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_s, HB_a, HB_ds>;
+    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_GSI, HB_mi, HB_D, HB_s, HB_a, HB_ds>;
 
 private:
     static VoigtVector vv_out;

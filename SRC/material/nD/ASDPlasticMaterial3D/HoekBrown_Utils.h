@@ -262,6 +262,21 @@ inline std::tuple<double, double> compute_equivalent_mohr_coulomb(
     return std::make_tuple(c, phi);
 }
 
+/**
+ * Effective rock-mass constants used by HoekBrown_YF / HoekBrown_PF.
+ *
+ * mb, s and a are derived from mi, GSI and D (Hoek & Brown 2018). Each of
+ * mb_override, s_override, a_override replaces the derived value when it is
+ * greater than zero (unset model parameters are zero). Does not throw.
+ */
+inline void effective_rock_mass_parameters(double mi, double GSI, double D,
+                                           double mb_override, double s_override, double a_override,
+                                           double &mb, double &s, double &a) {
+    mb = mb_override > 0.0 ? mb_override : mi * std::exp((GSI - 100.0) / (28.0 - 14.0 * D));
+    s  = s_override  > 0.0 ? s_override  : std::exp((GSI - 100.0) / (9.0 - 3.0 * D));
+    a  = a_override  > 0.0 ? a_override  : 0.5 + (std::exp(-GSI / 15.0) - std::exp(-20.0 / 3.0)) / 6.0;
+}
+
 } // namespace HoekBrownUtils
 
 #endif // HoekBrown_Utils_H

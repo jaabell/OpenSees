@@ -47,6 +47,7 @@
 #include "../YieldFunctionBase.h"
 #include "../ASDPlasticMaterial3DGlobals.h"
 #include "../AllASDModelParameterTypes.h"
+#include "../HoekBrown_Utils.h"
 #include <cmath>
 #include <iostream>
 #include <algorithm>
@@ -109,9 +110,11 @@ public:
 
         // Hoek–Brown parameters
         double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
-        double mb       = GET_PARAMETER_VALUE(HB_mb);
-        double s        = GET_PARAMETER_VALUE(HB_s);
-        double a        = GET_PARAMETER_VALUE(HB_a);
+        double mb, s, a;
+        HoekBrownUtils::effective_rock_mass_parameters(
+            GET_PARAMETER_VALUE(HB_mi), GET_PARAMETER_VALUE(HB_GSI), GET_PARAMETER_VALUE(HB_D),
+            GET_PARAMETER_VALUE(HB_mb), GET_PARAMETER_VALUE(HB_s), GET_PARAMETER_VALUE(HB_a),
+            mb, s, a);
 
         // Compression-positive convention; σ1 ≥ σ2 ≥ σ3
         VoigtVector sigma_geo = -sigma;
@@ -143,9 +146,6 @@ public:
 
         // Get Hoek-Brown parameters
         double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
-        double mb = GET_PARAMETER_VALUE(HB_mb);
-        double s = GET_PARAMETER_VALUE(HB_s);
-        double a = GET_PARAMETER_VALUE(HB_a);
         double ds = GET_PARAMETER_VALUE(HB_ds);  // Perturbation for numerical derivative
 
         double sigma_norm = sigma.norm();
@@ -239,7 +239,7 @@ public:
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<HB_sigci, HB_mb, HB_s, HB_a, HB_ds>;
+    using parameters_t = std::tuple<HB_sigci, HB_GSI, HB_mi, HB_D, HB_mb, HB_s, HB_a, HB_ds>;
 
 private:
     static VoigtVector vv_out;  // For returning VoigtVectors
