@@ -38,8 +38,6 @@
 #include <MaterialResponse.h>
 #include <Parameter.h>
 
-#include "ASDPlasticMaterial3DTraits.h"
-
 #include "ASDPlasticMaterial3DGlobals.h"
 
 
@@ -49,7 +47,6 @@
 #include "ElasticityModels/AllElasticityModels.h"
 #include "AllASDModelParameterTypes.h"
 #include "AllASDInternalVariableTypes.h"
-#include "AllASDHardeningFunctions.h"
 
 #include "utuple_storage.h"
 
@@ -59,11 +56,6 @@
 #include <map> // For std::pair
 #include <limits>
 #include <type_traits>
-
-#include "std_tuple_concat.h"
-
-// for debugging printing
-#include <fstream>
 
 #define ASDPlasticMaterial3D_MAXITER_BRENT 50
 
@@ -112,7 +104,7 @@ public:
     ASDPlasticMaterial3D( )
         : NDMaterial(0, thisClassTag)
     {
-
+        stress_set_externally = false;
     }
 
 
@@ -129,6 +121,7 @@ public:
         CommitPlastic_Strain *= 0;
 
         first_step = true;
+        stress_set_externally = false;
     }
 
 
@@ -188,9 +181,7 @@ public:
     //==================================================================================================
     const char *getClassType(void) const
     {
-        std::string name("ASDPlasticMaterial3D");
-
-        return name.c_str();
+        return "ASDPlasticMaterial3D";
     };
 
     double getRho(void)
@@ -222,7 +213,7 @@ public:
     int setTrialStrain(const Vector &v)
     {
 
-        if (first_step)
+        if (first_step && !stress_set_externally)
         {
             double p0 = parameters_storage.template get<InitialP0>().value;
             TrialStress(0) = p0;
@@ -788,6 +779,7 @@ public:
         newmaterial->CommitPlastic_Strain = this->CommitPlastic_Strain;
         newmaterial->iv_storage = this->iv_storage;
         newmaterial->parameters_storage = this->parameters_storage;
+        newmaterial->stress_set_externally = this->stress_set_externally;
 
         return newmaterial;
     }
@@ -810,6 +802,7 @@ public:
             newmaterial->CommitPlastic_Strain = this->CommitPlastic_Strain;
             newmaterial->iv_storage = this->iv_storage;
             newmaterial->parameters_storage = this->parameters_storage;
+            newmaterial->stress_set_externally = this->stress_set_externally;
 
             return newmaterial;
         } else
@@ -823,13 +816,7 @@ public:
     int setParameter(const char **argv, int argc, Parameter &param)
     {
 
-        cout << "ASDPlasticMaterial3D::setParameter  argv = " << *argv << endl;
 
-        // if (argc < 2)
-        //     return -1;
-        
-        // int theMaterialTag;
-        // theMaterialTag = atoi(argv[1]);
         
         // if (theMaterialTag == this->getTag()) {
         if (true) {
@@ -861,6 +848,45 @@ public:
                 cout << "       ---->  K03D" << endl;
                 return param.addObject(8, this);
             }
+            else if (strcmp(argv[0], "trialStressIncrement") == 0) {
+                return param.addObject(9, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXX") == 0) {
+                return param.addObject(10, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementYY") == 0) {
+                return param.addObject(11, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementZZ") == 0) {
+                return param.addObject(12, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXY") == 0) {
+                return param.addObject(13, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementYZ") == 0) {
+                return param.addObject(14, this);
+            }
+            else if (strcmp(argv[0], "trialStressIncrementXZ") == 0) {
+                return param.addObject(15, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXX") == 0) {
+                return param.addObject(16, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementYY") == 0) {
+                return param.addObject(17, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementZZ") == 0) {
+                return param.addObject(18, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXY") == 0) {
+                return param.addObject(19, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementYZ") == 0) {
+                return param.addObject(20, this);
+            }
+            else if (strcmp(argv[0], "commitStressIncrementXZ") == 0) {
+                return param.addObject(21, this);
+            }
             else {
                 // For all other parameter names, use the parameter system to pass the name
                 // Store the parameter name in the Parameter object (if supported)
@@ -876,7 +902,6 @@ public:
     int updateParameter(int responseID, Information &info)
     {
 
-        cout << "ASDPlasticMaterial3D::updateParameter  responseID = " << responseID << endl;
 
 
         // State variables (committed values)
@@ -885,6 +910,7 @@ public:
                 const Vector& newStress = *(info.theVector);
                 CommitStress = VoigtVector::fromStress(newStress);
                 TrialStress = CommitStress;
+                stress_set_externally = true;
             }
             return 0;
         }
@@ -909,6 +935,7 @@ public:
             if (info.theType == VectorType) {
                 const Vector& newTrialStress = *(info.theVector);
                 TrialStress = VoigtVector::fromStress(newTrialStress);
+                stress_set_externally = true;
             }
             return 0;
         }
@@ -933,6 +960,7 @@ public:
                 cout << "ASDPL @ tag = " << this->getTag() << " K02D  K0 = " << K02D << endl;
                 CommitStress(0) = K02D * CommitStress(1);
                 CommitStress(2) = K02D * CommitStress(1);
+                stress_set_externally = true;
             // }
             return 0;
         }
@@ -942,7 +970,77 @@ public:
                 cout << "ASDPL @ tag = " << this->getTag() << " K03D  K0 = " << K03D << endl;
                 CommitStress(0) = K03D * CommitStress(2);
                 CommitStress(1) = K03D * CommitStress(2);
+                stress_set_externally = true;
             // }
+            return 0;
+        }
+        else if (responseID == 9) { // trialStressIncrement
+            if (info.theType == VectorType) {
+                const Vector& newTrialStress = *(info.theVector);
+                opserr << "ASDPL @ tag = " << this->getTag() << "  newTrialStress = " << newTrialStress   << endln;
+                TrialStress += VoigtVector::fromStress(newTrialStress);
+                stress_set_externally = true;
+            }
+            return 0;
+        }
+        else if (responseID == 10) { // trialStressIncrementXX
+            TrialStress(0) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 11) { // trialStressIncrementYY
+            TrialStress(1) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 12) { // trialStressIncrementZZ
+            TrialStress(2) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 13) { // trialStressIncrementXY
+            TrialStress(3) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 14) { // trialStressIncrementYZ
+            TrialStress(4) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 15) { // trialStressIncrementXZ
+            TrialStress(5) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 16) { // commitStressIncrementXX
+            CommitStress(0) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 17) { // commitStressIncrementYY
+            CommitStress(1) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 18) { // commitStressIncrementZZ
+            CommitStress(2) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 19) { // commitStressIncrementXY
+            CommitStress(3) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 20) { // commitStressIncrementYZ
+            CommitStress(4) += info.theDouble;
+            stress_set_externally = true;
+            return 0;
+        }
+        else if (responseID == 21) { // commitStressIncrementXZ
+            CommitStress(5) += info.theDouble;
+            stress_set_externally = true;
             return 0;
         }
         // Generic parameter update (model parameters and internal variables)
@@ -1858,6 +1956,9 @@ private:
 
         int errorcode = -1;
 
+        int    max_iter = INT_OPT_n_max_iterations[ASDP_TAG];
+        double tol_yf   = DBL_OPT_f_absolute_tol[ASDP_TAG]; 
+
         // -------- setup
         static VoigtVector depsilon;
         depsilon = strain_incr;
@@ -1879,11 +1980,18 @@ private:
         TrialStrain = epsilon + depsilon;
         TrialPlastic_Strain = CommitPlastic_Strain;
 
+        // cout << "BE - TrialStress = " << TrialStress.transpose() <<  endl;
+        // cout << "BE - CommitStress = " << CommitStress.transpose() <<  endl;
+        
         const double yf_val_start = yf(sigma,        iv_storage, parameters_storage);
+        // cout << "----->  yf_val_start = " << yf_val_start <<  endl;
+        
         const double yf_val_end   = yf(TrialStress,  iv_storage, parameters_storage);
+        // cout << "----->  yf_val_end = " << yf_val_end << " tol_yf = " << tol_yf <<  endl;
 
         // purely elastic or moving deeper inside the surface
-        if ( (yf_val_start <= 0.0 && yf_val_end <= 0.0) || (yf_val_start > yf_val_end) ) {
+        if ( (yf_val_start <= 0.0 && yf_val_end <= 0.0) || (yf_val_start - yf_val_end > tol_yf) ) {
+            // cout << "BE - ELASTIC!" << endl << endl;
             Stiffness = Eelastic;
             return 0;
         }
@@ -1960,10 +2068,11 @@ private:
         }
 
         // -------- plastic correction (Backward Euler)
-        int    max_iter = INT_OPT_n_max_iterations[ASDP_TAG];
-        double tol_yf   = DBL_OPT_f_absolute_tol[ASDP_TAG]; 
 
         double dLambda = 0.0;
+
+
+        // cout << "BE - Plastic! Begin iterations----------" << endl << endl;
 
         for (int iter = 0; iter < max_iter; ++iter)
         {
@@ -1982,6 +2091,10 @@ private:
             if (std::abs(Phi) < tol_yf) {
                 GLOBAL_INT_max_iter[ASDP_TAG] = std::max(GLOBAL_INT_max_iter[ASDP_TAG], iter);
                 GLOBAL_DBL_max_error[ASDP_TAG] = std::max(GLOBAL_DBL_max_error[ASDP_TAG], std::abs(Phi));
+
+                // cout << "  =>  n = " << n.transpose() << endl;
+                // cout << "  =>  m = " << m.transpose() << endl;
+                // cout << "  =>  H = " << H << endl;
                 break; // converged
             }
 
@@ -1992,36 +2105,57 @@ private:
 
             if (std::abs(dPhi_dLambda) < MACHINE_EPSILON) {
                 // singular local tangent
+                cout << " SINGULAR LOCAL TANGENT - FAILING!" << endl;
+                cout << "  =>  n = " << n.transpose() << endl;
+                cout << "  =>  m = " << m.transpose() << endl;
+                cout << "  =>  H = " << H << endl;
                 return -1;
             }
 
             const double deltaLambda = - Phi / dPhi_dLambda;
 
+            // cout << " ---- iter = " << iter << " / " << max_iter << endl;
+            // cout << "  =>  n = " << n.transpose() << endl;
+            // cout << "  =>  m = " << m.transpose() << endl;
+            // cout << "  =>  H = " << H << endl;
+            // cout << "  =>  nEm = " << nEm << endl;
+            // cout << "  =>  Phi = " << Phi << endl;
+            // cout << "  =>  dPhi_dLambda = H - nEm = " << dPhi_dLambda << endl;
+            // cout << "  =>  deltaLambda = -Phi / dPhi_dLambda = " << deltaLambda << endl;
+            // cout << "  =>  dLambda = " << dLambda << endl ;
+
             // keep λ >= 0
             if (dLambda + deltaLambda < 0.0) {
+                cout << " PLASTIC INCONSISTENCY - ELASTIC STEP! (dLambda + deltaLambda < 0.0)" << endl << endl;
                 // step cannot be plastic; fall back to elastic in this rare case
                 Stiffness = Eelastic;
                 return 0;
             }
 
-            dLambda += deltaLambda;
-
             // incremental updates (use delta to avoid re-summing from commit each iter)
+            dLambda += deltaLambda;
             TrialStress          = TrialStress - deltaLambda * (Eelastic * m);
             TrialPlastic_Strain  = TrialPlastic_Strain + deltaLambda * m;
-
+            // cout << "  =>  dLambda + deltaLambda = " << dLambda << endl;
+            // cout << "  =>  CommitStress = " << CommitStress.transpose() << endl;
+            // cout << "  =>  TrialStress = " << TrialStress.transpose() << endl;
+            // cout << "  =>  TrialPlastic_Strain = " << TrialPlastic_Strain.transpose() << endl;
             iv_storage.apply([&](auto & internal_variable)
             {
                 auto h = internal_variable.hardening_function(depsilon, m, TrialStress, parameters_storage);
                 internal_variable.trial_value += deltaLambda * h;
+                // cout << "  => " <<  internal_variable << endl;
             });
 
             // NaN guard
             const double norm_trial_stress = TrialStress.transpose() * TrialStress;
-            if (!(norm_trial_stress == norm_trial_stress)) { // NaN check
+            if (!(norm_trial_stress == norm_trial_stress)) { // NaN chec
+               cout << "NaN!" << endl;
                 return -1;
             }
         }
+        // cout << "BE - END iterations----------" << endl << endl;
+
 
         ComputeTangentStiffness();
 
@@ -2612,9 +2746,9 @@ private:
             }
 
 
-           //Return to Yield with bisection
-           else if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 2)  // Return to yield with iterations
-           {
+            //Return to Yield with bisection
+            else if (INT_OPT_return_to_yield_surface[ASDP_TAG] == 2)  // Return to yield with iterations
+            {
                 // In the evolve function, only dLambda and m are used. Other arguments are not used at all.
                 // Make surface the internal variables are already updated. And then, return to the yield surface.
                 double y0  = yf(TrialStress, iv_storage, parameters_storage) ;
@@ -2631,8 +2765,8 @@ private:
                     // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
                     double dL = y0 / (
-                                                         n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
-                                                     );
+                                                        n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
+                                                    );
 
                     
                     VoigtVector TS = TrialStress - dL * Eelastic * m_after_corrector;
@@ -3782,6 +3916,7 @@ protected:
     static std::map<int, double> GLOBAL_DBL_max_error; 
 
     bool first_step;
+    bool stress_set_externally;
 
     static VoigtVector dsigma;
     static VoigtVector depsilon_elpl;    //Elastoplastic strain increment : For a strain increment that causes first yield, the step is divided into an elastic one (until yield) and an elastoplastic one.

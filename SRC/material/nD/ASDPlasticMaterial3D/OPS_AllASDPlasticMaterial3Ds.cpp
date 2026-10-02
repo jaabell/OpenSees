@@ -91,7 +91,7 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
 
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
-    if (numArgs < 3) {
+    if (numArgs < 2) {
         "nDMaterial ASDPlasticMaterial3D Error: Few arguments \n";
         opserr << "    numArgs = " << numArgs << endln << endln;
         print_usage();
@@ -118,6 +118,8 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
     pf_type = numArgs >= 3 ? OPS_GetString() : " X ";
     el_type = numArgs >= 4 ? OPS_GetString() : " X ";
     iv_type = numArgs >= 5 ? OPS_GetString() : " X ";
+    
+    opserr << "    numArgs = " << numArgs << endln << endln;
 
 
     cout << "Searching for instance with:\n";
@@ -142,14 +144,14 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
             std::string model_el_type = std::get<2>(model);
             std::string model_iv_type = std::get<3>(model);
             
-            if (std::strcmp(pf_type, model_yf_type.c_str())==0)
+            if (std::strcmp(pf_type, model_yf_type.c_str())==0 || std::strcmp(pf_type, " X ")==0 )
             {
+                cout << "  YF = " << model_yf_type << endl;
                 cout << "  PF = " << model_pf_type << endl;
                 cout << "  EL = " << model_el_type << endl;
                 cout << "  IV = " << model_iv_type << endl << endln;
             }
         }
-            
     }
 
     if(instance==nullptr)
@@ -223,7 +225,9 @@ NDMaterial*  ASDPlasticMaterial3DFactory(int instance_tag, const char * yf_type,
 
 template<typename EL, typename YF, typename PF>
 NDMaterial* createASDPlasticMaterial3D(int instance_tag, 
-        const char* yf_type, const char* pf_type, const char* el_type, const char* iv_type, std::list<NDMaterial*> &instance_pointers, std::list<model_spec_t> &available_models) {
+        const char* yf_type, const char* pf_type, const char* el_type, const char* iv_type, 
+        std::list<NDMaterial*> &instance_pointers, std::list<model_spec_t> &available_models) 
+{
     auto instance = new ASDPlasticMaterial3D<EL, YF, PF, ND_TAG_ASDPlasticMaterial3D>(instance_tag);
 
 
@@ -284,8 +288,8 @@ void populate_ASDPlasticMaterial3D(T* instance)
     });
 
     // Default integration options
-    int method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Runge_Kutta_45_Error_Control;
-    int tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Elastic;
+    int method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler;
+    int tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Secant;
     double f_absolute_tol = 1e-6; 
     double stress_absolute_tol = 1e-6; 
     int n_max_iterations = 100;
