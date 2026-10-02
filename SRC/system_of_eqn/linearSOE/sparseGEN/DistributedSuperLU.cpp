@@ -66,7 +66,9 @@
 
 #endif
 
-SuperLUStat_t stat;
+// Renamed from `stat` to avoid a name collision with the POSIX stat() function
+// declared transitively via <sys/stat.h>/<io.h> on some toolchains (notably MSVC).
+SuperLUStat_t superlu_stat;
 SuperMatrix A;
 gridinfo_t grid;
 MPI_Comm comm_SuperLU;
@@ -188,7 +190,7 @@ DistributedSuperLU::solve(void)
     //
 
     pdgssvx_ABglobal(&options, &A, &ScalePermstruct, Xptr, ldb, nrhs, &grid,
-		     &LUstruct, berr, &stat, &info);
+		     &LUstruct, berr, &superlu_stat, &info);
 
     if (theSOE->factored == false) {
       options.Fact = FACTORED;      
@@ -254,7 +256,7 @@ DistributedSuperLU::setSize()
   //
   // Initialize the statistics variables.
   //
-  PStatInit(&stat);
+  PStatInit(&superlu_stat);
   
   //
   // Create compressed column matrix for A. 
@@ -294,7 +296,7 @@ DistributedSuperLU::setSize()
   //
   // Initialize the statistics variables. 
   //
-  PStatInit(&stat);
+  PStatInit(&superlu_stat);
 
   return 0;
 }

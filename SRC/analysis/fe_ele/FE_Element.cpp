@@ -170,25 +170,35 @@ FE_Element::FE_Element(int tag, int numDOF_Group, int ndof)
    myEle(0), theResidual(0), theTangent(0), theIntegrator(0)
 {
     // this is for a subtype, the subtype must set the myDOF_Groups ID array
-    numFEs++;
 
-    // if this is the first FE_Element we now
-    // create the arrays used to store pointers to class wide
-    // matrix and vector objects used to return tangent and residual
+    // If this is the first FE_Element, create the class-wide arrays that hold
+    // pointers to the shared tangent/residual matrix and vector objects.
+    //
+    // The increment of numFEs must happen AFTER this guard (the element-backed
+    // constructor above does exactly that). Incrementing first left this
+    // `numFEs == 0` test permanently false, so a model whose only FE_Elements
+    // are subtype adapters (no element-backed FE_Element ever built) never
+    // allocated theMatrices/theVectors -- a null dereference in ~FE_Element when
+    // the last FE_Element is destroyed. Any model that already owns an
+    // element-backed FE_Element is unaffected (numFEs is already > 0 by the time
+    // these subtypes are constructed).
     if (numFEs == 0) {
 	theMatrices = new Matrix *[MAX_NUM_DOF+1];
 	theVectors  = new Vector *[MAX_NUM_DOF+1];
-	
+
 	if (theMatrices == 0 || theVectors == 0) {
 	    opserr << "FE_Element::FE_Element(Element *) ";
-	    opserr << " ran out of memory";	    
+	    opserr << " ran out of memory";
 	}
 	for (int i=0; i<MAX_NUM_DOF; i++) {
 	    theMatrices[i] = 0;
 	    theVectors[i] = 0;
 	}
     }
-    
+
+    // increment number of FE_Elements by 1 (after the first-time allocation guard)
+    numFEs++;
+
     // as subtypes have no access to the tangent or residual we don't set them
     // this way we can detect if subclass does not provide all methods it should
 }
