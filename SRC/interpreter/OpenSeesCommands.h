@@ -469,6 +469,7 @@ void* OPS_ParallelDisplacementControl();
 
 void* OPS_ItpackLinSolver();
 void* OPS_MumpsSolver();
+void* OPS_PARDISOGenLinSolver();
 
 // Sensitivity:BEGIN /////////////////////////////////////////////
 int OPS_computeGradients();

@@ -877,6 +877,96 @@ target_link_libraries(OpenSeesPy
 
 
 #
+# MKL PARDISO (system Pardiso)
+#
+# Enabled on Windows when MKL is found, and on other hosts only with
+# -DMKL_PARDISO_LINUX=ON. The SOE/solver objects go into OPS_SysOfEqn; the
+# command is registered in the serial interpreters only (OPS_INTERPRETER for
+# OpenSeesPy, commands.cpp in the OpenSees executable). OpenSeesSP/OpenSeesMP
+# refuse it and keep using Mumps.
+#
+# Windows: the serial targets link the threaded MKL layer (mkl_intel_thread +
+# libiomp5md), since shared-memory threading is what PARDISO offers there. The
+# parallel targets keep the sequential layer in SCALAPACK_LIBRARIES; one
+# process carries one MKL threading layer.
+#
+
+option(MKL_PARDISO_LINUX "Enable MKL PARDISO (system Pardiso) on a non-Windows host" OFF)
+option(MKL_PARDISO_LINUX_THREADED "With MKL_PARDISO_LINUX, link the GNU OpenMP MKL layer (mkl_gnu_thread) instead of mkl_sequential" OFF)
+
+set(OPS_HAVE_PARDISO FALSE)
+set(PARDISO_FLAG "")
+set(PARDISO_MKL_LIBRARIES "")
+
+if(WIN32 AND MKL_FOUND AND DEFINED MKL_LPATH)
+  set(OPS_HAVE_PARDISO TRUE)
+  set(PARDISO_FLAG _PARDISO)
+  set(PARDISO_MKL_LIBRARIES
+      "${MKL_LPATH}/mkl_intel_lp64.lib;${MKL_LPATH}/mkl_intel_thread.lib;${MKL_LPATH}/mkl_core.lib")
+  find_library(IOMP5_LIB NAMES libiomp5md iomp5md iomp5
+               HINTS "${MKL_ROOT}/../compiler/latest/lib"
+                     "${MKL_ROOT}/../compiler/latest/windows/compiler/lib/intel64_win"
+                     ENV LIB)
+  if(IOMP5_LIB)
+    list(APPEND PARDISO_MKL_LIBRARIES ${IOMP5_LIB})
+  endif()
+  message(STATUS "MKL PARDISO enabled (threaded MKL layer): ${PARDISO_MKL_LIBRARIES}")
+
+elseif(MKL_PARDISO_LINUX AND NOT WIN32)
+  # Explicit LP64 interface + threading layer + core, found under MKLROOT.
+  # The threading layer must match the one in LAPACK_LIBRARIES/BLAS_LIBRARIES.
+  set(_mkl_hints ${MKL_ROOT} $ENV{MKLROOT})
+  find_library(MKL_PARDISO_LP64 NAMES mkl_intel_lp64
+    HINTS ${_mkl_hints} PATHS /usr/lib/x86_64-linux-gnu PATH_SUFFIXES lib lib/intel64)
+  find_library(MKL_PARDISO_CORE NAMES mkl_core
+    HINTS ${_mkl_hints} PATHS /usr/lib/x86_64-linux-gnu PATH_SUFFIXES lib lib/intel64)
+  set(_mkl_omp "")
+  if(MKL_PARDISO_LINUX_THREADED)
+    if("${LAPACK_LIBRARIES}" MATCHES "mkl_sequential" OR "${BLAS_LIBRARIES}" MATCHES "mkl_sequential")
+      message(FATAL_ERROR "MKL_PARDISO_LINUX_THREADED=ON but LAPACK_LIBRARIES/BLAS_LIBRARIES "
+        "name mkl_sequential; one process carries one MKL threading layer. Pass the "
+        "mkl_gnu_thread layer there as well.")
+    endif()
+    find_library(MKL_PARDISO_THREAD NAMES mkl_gnu_thread
+      HINTS ${_mkl_hints} PATHS /usr/lib/x86_64-linux-gnu PATH_SUFFIXES lib lib/intel64)
+    find_library(MKL_PARDISO_GOMP NAMES gomp PATHS /usr/lib/x86_64-linux-gnu /usr/lib/gcc/x86_64-linux-gnu)
+    if(MKL_PARDISO_GOMP)
+      set(_mkl_omp ${MKL_PARDISO_GOMP})
+    else()
+      set(_mkl_omp gomp)
+    endif()
+  else()
+    find_library(MKL_PARDISO_THREAD NAMES mkl_sequential
+      HINTS ${_mkl_hints} PATHS /usr/lib/x86_64-linux-gnu PATH_SUFFIXES lib lib/intel64)
+  endif()
+  find_path(MKL_PARDISO_INCLUDE NAMES mkl_pardiso.h
+    HINTS ${_mkl_hints} PATHS /usr/include/mkl /usr/include PATH_SUFFIXES include)
+  if(MKL_PARDISO_LP64 AND MKL_PARDISO_THREAD AND MKL_PARDISO_CORE AND MKL_PARDISO_INCLUDE)
+    set(OPS_HAVE_PARDISO TRUE)
+    set(PARDISO_FLAG _PARDISO)
+    target_include_directories(OPS_SysOfEqn PUBLIC ${MKL_PARDISO_INCLUDE})
+    target_link_libraries(OPS_SysOfEqn PUBLIC
+      -Wl,--start-group ${MKL_PARDISO_LP64} ${MKL_PARDISO_THREAD} ${MKL_PARDISO_CORE} -Wl,--end-group
+      ${_mkl_omp} pthread m dl)
+    message(STATUS "MKL PARDISO enabled: ${MKL_PARDISO_THREAD}")
+  else()
+    message(FATAL_ERROR "MKL_PARDISO_LINUX=ON but mkl_intel_lp64, the threading layer, "
+      "mkl_core or mkl_pardiso.h was not found; set MKLROOT or -DMKL_ROOT=<MKL dir>")
+  endif()
+
+else()
+  message(STATUS "MKL PARDISO disabled (system Pardiso unavailable)")
+endif()
+
+if(OPS_HAVE_PARDISO)
+  target_compile_definitions(OPS_INTERPRETER PRIVATE ${PARDISO_FLAG})
+  target_compile_definitions(OpenSees PRIVATE ${PARDISO_FLAG})
+  target_link_libraries(OpenSees ${PARDISO_MKL_LIBRARIES})
+  target_link_libraries(OpenSeesPy ${PARDISO_MKL_LIBRARIES})
+endif()
+
+
+#
 # INSTALL
 #
 

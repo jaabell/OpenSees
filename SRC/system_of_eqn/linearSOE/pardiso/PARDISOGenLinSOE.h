@@ -32,14 +32,33 @@
 
 class PARDISOGenLinSolver;
 
+// matType selects the storage and, through the solver, the PARDISO mtype:
+//
+//   0  unsymmetric                    full CSR             mtype 11
+//   1  symmetric positive definite    upper-triangle CSR   mtype  2
+//   2  symmetric indefinite           upper-triangle CSR   mtype -2
+//
+// The numbering matches `system Mumps -matrixType`. For the symmetric types
+// PARDISO reads the upper triangle only, row by row, with ascending column
+// indices and the diagonal always present (Intel oneMKL Developer Reference,
+// "Sparse Matrix Storage Formats"); setSize() builds and checks that layout.
+//
+// With matType 1 or 2 only the col >= row half of each element matrix is
+// assembled. A genuinely unsymmetric tangent (contact, non-associated flow,
+// follower loads, corotational transformations) is then solved with its upper
+// triangle reflected, which can converge to a wrong answer. addA() samples the
+// element matrices for this and warns once; the default stays 0.
+
 class PARDISOGenLinSOE : public LinearSOE
 {
   public:
     PARDISOGenLinSOE(PARDISOGenLinSolver &theSolver);
+    PARDISOGenLinSOE(PARDISOGenLinSolver &theSolver, int matType);
 
     ~PARDISOGenLinSOE();
 
     int getNumEqn(void) const;
+    int getMatType(void) const;
     int setSize(Graph &theGraph);
     int addA(const Matrix &, const ID &, double fact = 1.0);
     int addB(const Vector &, const ID &, double fact = 1.0);    
@@ -70,6 +89,11 @@ class PARDISOGenLinSOE : public LinearSOE
     Vector *vectB;    
     int Asize, Bsize;    // size of the 1d array holding A
     bool factored;
+    int matType;         // 0 unsymmetric, 1 SPD, 2 symmetric indefinite
+    int asymWarned;      // half-storage asymmetry already reported
+    int asymBudget;      // element-matrix checks left in this sampling window
+    int asymPass;        // tangent assemblies seen for the current pattern
+    int missWarned;      // an addA entry without a CSR slot already reported
 };
 
 
