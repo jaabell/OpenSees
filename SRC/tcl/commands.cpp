@@ -2355,11 +2355,18 @@ printA(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       else if ((strcmp(argv[currentArg], "sparse") == 0) ||
           (strcmp(argv[currentArg], "-sparse") == 0)) {
           fileSparse = true;
-          currentArg++;
-          if (currentArg < argc) {
-              if (Tcl_GetInt(interp, argv[currentArg], &baseIndex) != TCL_OK) {
-                  opserr << "WARNING: printA - failed to read -sparse <baseIndex>\n";
-                  return TCL_ERROR;
+          // the base index is optional: do not consume a following option flag
+          if (currentArg + 1 < argc) {
+              const char *nxt = argv[currentArg + 1];
+              bool nextIsFlag = (nxt[0] == '-' &&
+                                 ((nxt[1] >= 'a' && nxt[1] <= 'z') ||
+                                  (nxt[1] >= 'A' && nxt[1] <= 'Z')));
+              if (!nextIsFlag) {
+                  currentArg++;
+                  if (Tcl_GetInt(interp, argv[currentArg], &baseIndex) != TCL_OK) {
+                      opserr << "WARNING: printA - failed to read -sparse <baseIndex>\n";
+                      return TCL_ERROR;
+                  }
               }
           }
       }

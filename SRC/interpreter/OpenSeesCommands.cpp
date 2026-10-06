@@ -357,7 +357,8 @@ OpenSeesCommands::eigen(int typeSolver, double shift,
     //
     // set the eigen soe in the system if reassigned/created
     //
-    if (eigenSOEUpdated && theEigenSOE != 0) {
+    // a temporary analysis is rebuilt on every call and starts without an eigen SOE
+    if ((eigenSOEUpdated || newanalysis) && theEigenSOE != 0) {
         if (theStaticAnalysis != 0) {
             theStaticAnalysis->setEigenSOE(*theEigenSOE);
         } else if (theTransientAnalysis != 0) {
@@ -2311,11 +2312,19 @@ int OPS_printA()
             ret = true;
         } else if ((strcmp(flag,"sparse") == 0) || (strcmp(flag,"-sparse") == 0)) {
             fileSparse = true;
+            // the base index is optional: do not consume a following option flag
             if (OPS_GetNumRemainingInputArgs() > 0) {
-                int numdata = 1;
-                if (OPS_GetIntInput(&numdata, &baseIndex) < 0) {
-                    opserr << "WARNING: printA - failed to read -sparse <baseIndex>\n";
-                    return -1;
+                const char *nxt = OPS_GetString();
+                bool nextIsFlag = (nxt != 0 && nxt[0] == '-' &&
+                                   ((nxt[1] >= 'a' && nxt[1] <= 'z') ||
+                                    (nxt[1] >= 'A' && nxt[1] <= 'Z')));
+                OPS_ResetCurrentInputArg(-1);
+                if (!nextIsFlag) {
+                    int numdata = 1;
+                    if (OPS_GetIntInput(&numdata, &baseIndex) < 0) {
+                        opserr << "WARNING: printA - failed to read -sparse <baseIndex>\n";
+                        return -1;
+                    }
                 }
             }
         } else if ((strcmp(flag,"precision") == 0) || (strcmp(flag,"-precision") == 0)) {
