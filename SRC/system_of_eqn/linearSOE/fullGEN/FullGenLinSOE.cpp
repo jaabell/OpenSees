@@ -187,7 +187,8 @@ FullGenLinSOE::setSize(Graph &theGraph)
     }
 
     // create new Vectors
-    if (size != oldSize) {
+    // also on the first call with size 0, so the wrappers are never null
+    if (size != oldSize || vectX == 0) {
 	if (vectX != 0)
 	    delete vectX;
 
@@ -197,9 +198,10 @@ FullGenLinSOE::setSize(Graph &theGraph)
 	if (matA != 0)
 	    delete matA;
 	
-	vectX = new Vector(X,Bsize);
-	vectB = new Vector(B,Bsize);	
-	matA = new Matrix(A,Bsize, Bsize);	
+	// the wrappers span the current size, not the allocated capacity
+	vectX = new Vector(X,size);
+	vectB = new Vector(B,size);
+	matA = new Matrix(A,size, size);
     }
 
     // invoke setSize() on the Solver    
@@ -424,12 +426,20 @@ FullGenLinSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 FullGenLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL FullGenLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING FullGenLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }
     return *vectX;
 }
@@ -438,8 +448,8 @@ const Vector &
 FullGenLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL FullGenLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING FullGenLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }        
     return *vectB;
 }
@@ -448,8 +458,8 @@ const Matrix *
 FullGenLinSOE::getA(void)
 {
     if (matA == 0) {
-	opserr << "FATAL FullGenLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING FullGenLinSOE::getA() - system has not been sized, returning 0\n";
+	return 0;
     }        
     return matA;
 }

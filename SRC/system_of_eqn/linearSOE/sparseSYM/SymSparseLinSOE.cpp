@@ -65,7 +65,7 @@ SymSparseLinSOE::~SymSparseLinSOE()
     OFFDBLK *tempBlk;
     int curRow = -1;
 
-    while (1) {
+    while (blkPtr != 0) {
       if (blkPtr->next == blkPtr) {
 	if (blkPtr != NULL) {
 	  free(blkPtr);
@@ -509,6 +509,12 @@ SymSparseLinSOE::setB(const Vector &v, double fact)
  */
 void SymSparseLinSOE::zeroA(void)
 {
+    // nothing to zero before setSize() has allocated the storage
+    if (size == 0 || penv == 0 || first == 0) {
+        factored = false;
+        return;
+    }
+
     memset(diag, 0, size*sizeof(double));
 
     int profileSize = penv[size] - penv[0];
@@ -550,12 +556,20 @@ SymSparseLinSOE::setX(const Vector &x)
 }
 
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 SymSparseLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL SymSparseLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING SymSparseLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }
     return *vectX;
 }
@@ -564,8 +578,8 @@ const Vector &
 SymSparseLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL SymSparseLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING SymSparseLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }        
     return *vectB;
 }

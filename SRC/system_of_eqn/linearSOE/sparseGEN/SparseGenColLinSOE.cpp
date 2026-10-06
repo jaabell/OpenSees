@@ -462,12 +462,20 @@ SparseGenColLinSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 SparseGenColLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL SparseGenColLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING SparseGenColLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }
     return *vectX;
 }
@@ -476,8 +484,8 @@ const Vector &
 SparseGenColLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL SparseGenColLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING SparseGenColLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }        
     return *vectB;
 }

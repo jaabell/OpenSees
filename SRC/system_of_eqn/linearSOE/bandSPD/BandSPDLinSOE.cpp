@@ -218,7 +218,8 @@ BandSPDLinSOE::setSize(Graph &theGraph)
 	X[j] = 0;
     }
 
-    if (size != oldSize) {
+    // also on the first call with size 0, so the wrappers are never null
+    if (size != oldSize || vectX == 0) {
 
 	if (vectX != 0)
 	    delete vectX;
@@ -441,12 +442,20 @@ BandSPDLinSOE::setX(const Vector &x)
 
 
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 BandSPDLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL BandSPDLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING BandSPDLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }
     return *vectX;
 }
@@ -455,8 +464,8 @@ const Vector &
 BandSPDLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL BandSPDLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING BandSPDLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }    
     return *vectB;
 }

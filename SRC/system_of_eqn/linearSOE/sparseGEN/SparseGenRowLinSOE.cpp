@@ -424,12 +424,20 @@ SparseGenRowLinSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 SparseGenRowLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL SparseGenRowLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING SparseGenRowLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }
     return *vectX;
 }
@@ -438,8 +446,8 @@ const Vector &
 SparseGenRowLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL SparseGenRowLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING SparseGenRowLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }        
     return *vectB;
 }

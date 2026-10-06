@@ -218,7 +218,8 @@ BandGenLinSOE::setSize(Graph &theGraph)
     }
 
     // get new Vector objects if size has changes
-    if (oldSize != size) {
+    // also on the first call with size 0, so the wrappers are never null
+    if (oldSize != size || vectX == 0) {
 	if (vectX != 0) 
 	    delete vectX;
 
@@ -470,12 +471,20 @@ BandGenLinSOE::zeroB(void)
 }
 
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 BandGenLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL BandGenLinSOE::getX - vectX == 0!";
-	exit(-1);
+	opserr << "WARNING BandGenLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }    
     
     return *vectX;
@@ -486,8 +495,8 @@ const Vector &
 BandGenLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL BandGenLinSOE::getB - vectB == 0!";
-	exit(-1);
+	opserr << "WARNING BandGenLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }    
 
     return *vectB;

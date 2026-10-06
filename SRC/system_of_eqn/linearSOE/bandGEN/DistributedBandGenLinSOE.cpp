@@ -542,9 +542,22 @@ DistributedBandGenLinSOE::zeroB(void)
 }
 
 
+// returned by getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 DistributedBandGenLinSOE::getB(void)
 {
+  if (myVectB == 0 || vectB == 0 || theChannels == 0) {
+    opserr << "WARNING DistributedBandGenLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
+  }
+
   if (processID != 0) {
     Channel *theChannel = theChannels[0];
 

@@ -213,8 +213,10 @@ ProfileSPDLinSOE::setSize(Graph &theGraph)
 	}
 	}
 
-    if (iDiagLoc != 0)       
+    if (iDiagLoc != 0 && size > 0)
     	profileSize = iDiagLoc[size-1];
+    else
+	profileSize = 0;
 
     // check if we need more space to hold A
     // if so then go get it
@@ -270,7 +272,8 @@ ProfileSPDLinSOE::setSize(Graph &theGraph)
 	X[l] = 0;
     }
     
-    if (size != oldSize) {
+    // also on the first call with size 0, so the wrappers are never null
+    if (size != oldSize || vectX == 0) {
 	
 	if (vectX != 0)
 	    delete vectX;
@@ -522,12 +525,20 @@ ProfileSPDLinSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 ProfileSPDLinSOE::getX(void)
 {
     if (vectX == 0) {
-	opserr << "FATAL ProfileSPDLinSOE::getX - vectX == 0";
-	exit(-1);
+	opserr << "WARNING ProfileSPDLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }    
     return *vectX;
 }
@@ -536,8 +547,8 @@ const Vector &
 ProfileSPDLinSOE::getB(void)
 {
     if (vectB == 0) {
-	opserr << "FATAL ProfileSPDLinSOE::getB - vectB == 0";
-	exit(-1);
+	opserr << "WARNING ProfileSPDLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+	return emptyVector();
     }        
     return *vectB;
 }

@@ -53,7 +53,7 @@ DiagonalSOE::DiagonalSOE(DiagonalSolver &the_Solver, bool ld)
 :LinearSOE(the_Solver, LinSOE_TAGS_DiagonalSOE), lumpDiagonal(ld),
  size(0), A(0), B(0), X(0), vectX(0), vectB(0), matA(0), isAfactored(false)
 {
-  if (size > 0) {
+  if (N > 0) {
     size = N;
     A = new double[size];
     B = new double[size];
@@ -137,7 +137,8 @@ DiagonalSOE::setSize(Graph &theGraph)
     }
   }
 
-  if (size != oldSize && size != 0) {
+  // also on the first call with size 0, so the wrappers are never null
+  if (size != oldSize || vectX == 0) {
     if (vectX != 0) delete vectX; vectX = 0;
     if (vectB != 0) delete vectB; vectB = 0;
     if (matA  != 0) delete matA;  matA = 0;
@@ -345,12 +346,20 @@ DiagonalSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+  static Vector theEmptyVector;
+  return theEmptyVector;
+}
+
 const Vector &
 DiagonalSOE::getX(void)
 {
   if (vectX == 0) {
-    opserr << "FATAL DiagonalSOE::getX - vectX == 0";
-    exit(-1);
+    opserr << "WARNING DiagonalSOE::getX() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }    
   return *vectX;
 }
@@ -359,8 +368,8 @@ const Vector &
 DiagonalSOE::getB(void)
 {
   if (vectB == 0) {
-    opserr << "FATAL DiagonalSOE::getB - vectB == 0";
-    exit(-1);
+    opserr << "WARNING DiagonalSOE::getB() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }        
   return *vectB;
 }
@@ -369,8 +378,8 @@ const Matrix *
 DiagonalSOE::getA(void)
 {
   if (matA == 0) {
-    opserr << "FATAL DiagonalSOE::getA - matA == 0";
-    exit(-1);
+    opserr << "WARNING DiagonalSOE::getA() - system has not been sized, returning 0\n";
+    return 0;
   }        
   return matA;
 }

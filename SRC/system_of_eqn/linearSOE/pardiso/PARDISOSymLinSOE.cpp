@@ -379,12 +379,20 @@ PARDISOSymLinSOE::setX(const Vector &x)
 		*vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 PARDISOSymLinSOE::getX(void)
 {
 	if (vectX == 0) {
-		opserr << "FATAL PARDISOSymLinSOE::getX - vectX == 0";
-		exit(-1);
+		opserr << "WARNING PARDISOSymLinSOE::getX() - system has not been sized, returning an empty Vector\n";
+		return emptyVector();
 	}
 	return *vectX;
 }
@@ -393,8 +401,8 @@ const Vector &
 PARDISOSymLinSOE::getB(void)
 {
 	if (vectB == 0) {
-		opserr << "FATAL PARDISOSymLinSOE::getB - vectB == 0";
-		exit(-1);
+		opserr << "WARNING PARDISOSymLinSOE::getB() - system has not been sized, returning an empty Vector\n";
+		return emptyVector();
 	}
 	return *vectB;
 }

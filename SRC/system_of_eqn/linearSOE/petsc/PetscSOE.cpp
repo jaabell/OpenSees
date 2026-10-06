@@ -848,13 +848,21 @@ PetscSOE::zeroB(void)
 }
 
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 PetscSOE::getX(void)
 {
   if (vectX == 0)
   {
-    cerr << "FATAL PetscSOE::getX - vectX == 0!";
-    exit(-1);
+    cerr << "WARNING PetscSOE::getX() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }
 
   return *vectX;
@@ -866,8 +874,8 @@ PetscSOE::getB(void)
 {
   if (vectB == 0)
   {
-    cerr << "FATAL PetscSOE::getB - vectB == 0!";
-    exit(-1);
+    cerr << "WARNING PetscSOE::getB() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }
 
   return *vectB;

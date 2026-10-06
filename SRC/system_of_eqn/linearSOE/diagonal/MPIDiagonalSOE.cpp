@@ -383,8 +383,8 @@ const Vector&
 MPIDiagonalSOE::getpartofA(Vector& At, const ID& ids)
 {
   if (A == 0) {
-    opserr << "FATAL MPIDiagonalSOE::getA - A == 0";
-    exit(-1);
+    opserr << "WARNING MPIDiagonalSOE::getpartofA() - system has not been sized, returning a zeroed Vector\n";
+    At.Zero();
   } 
   else if (isAfactored) {
     for (int i=0; i<ids.Size(); i++)
@@ -699,12 +699,20 @@ MPIDiagonalSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 MPIDiagonalSOE::getX(void)
 {
   if (vectX == 0) {
-    opserr << "FATAL MPIDiagonalSOE::getX - vectX == 0";
-    exit(-1);
+    opserr << "WARNING MPIDiagonalSOE::getX() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }    
   //opserr << "MPIDiagonalSOE::getX(void) : " << vectX->Size() << endln;
   return *vectX;
@@ -714,8 +722,8 @@ const Vector &
 MPIDiagonalSOE::getB(void)
 {
   if (vectB == 0) {
-    opserr << "FATAL MPIDiagonalSOE::getB - vectB == 0";
-    exit(-1);
+    opserr << "WARNING MPIDiagonalSOE::getB() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }        
   return *vectB;
 }

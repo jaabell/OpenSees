@@ -468,12 +468,20 @@ DistributedDiagonalSOE::setX(const Vector &x)
     *vectX = x;
 }
 
+// returned by getX() and getB() before the system has been sized
+static const Vector &
+emptyVector(void)
+{
+    static Vector theEmptyVector;
+    return theEmptyVector;
+}
+
 const Vector &
 DistributedDiagonalSOE::getX(void)
 {
   if (vectX == 0) {
-    opserr << "FATAL DistributedDiagonalSOE::getX - vectX == 0";
-    exit(-1);
+    opserr << "WARNING DistributedDiagonalSOE::getX() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }    
   return *vectX;
 }
@@ -482,8 +490,8 @@ const Vector &
 DistributedDiagonalSOE::getB(void)
 {
   if (vectB == 0) {
-    opserr << "FATAL DistributedDiagonalSOE::getB - vectB == 0";
-    exit(-1);
+    opserr << "WARNING DistributedDiagonalSOE::getB() - system has not been sized, returning an empty Vector\n";
+    return emptyVector();
   }        
   return *vectB;
 }
