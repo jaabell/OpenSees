@@ -74,6 +74,7 @@ class ArpackSolver : public EigenSolver
     LinearSOE *theSOE;
     ArpackSOE *theArpackSOE;
     int numModesMax;
+    int sizeMax;    // system size the work arrays were allocated for
     int numMode;
     int size;
     double *eigenvalues;

@@ -229,6 +229,26 @@ SymArpackSolver::solve(int numModes, bool generalized, bool findSmallest)
 	    opserr << "BandArpackSolver::No Shifts could be applied during implicit," << endln;
 	    opserr << "Arnoldi update, try increasing NCV." << endln;
 	}
+	// iparam[4] is the number of converged Ritz values; the remaining
+	// eigenvalue slots would be returned without having been computed
+	if (iparam[4] < nev) {
+	    opserr << "WARNING SymArpackSolver::solve() - only " << iparam[4] << " of " << nev
+		   << " eigenvalues converged\n";
+
+	    delete [] workl;
+	    delete [] workd;
+	    delete [] resid;
+	    delete [] iparam;
+	    delete [] iwork;
+	    delete [] ipntr;
+	    delete [] v;
+	    delete [] d;
+#ifndef _WIN32
+	    delete [] select;
+#endif
+	    return -1;
+	}
+
 	double sigma = theSOE->shift;
 	if (iparam[4] > 0) {
 #ifdef _WIN32
@@ -307,11 +327,9 @@ int
 SymArpackSolver::getNCV(int n, int nev)
 {
     int result;
-    if (2*nev > nev+8) {
-        result = nev+8;
-    } else {
-        result = 2*nev;
-    }
+    // eight Lanczos vectors more than modes, so that repeated or closely
+    // spaced eigenvalues are resolved also when few modes are requested
+    result = nev+8;
 
     if (result >= n) {
         result = n;

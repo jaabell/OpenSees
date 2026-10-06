@@ -67,7 +67,7 @@ static int sizeWork = 0;
 
 ArpackSolver::ArpackSolver()
 :EigenSolver(EigenSOLVER_TAGS_ArpackSolver),
- theSOE(0), numModesMax(0), numMode(0), size(0),
+ theSOE(0), numModesMax(0), sizeMax(0), numMode(0), size(0),
  eigenvalues(0), eigenvectors(0), 
  v(0), workl(0), workd(0), resid(0), select(0)
 {
@@ -159,8 +159,9 @@ ArpackSolver::solve(int numModes, bool generalized, bool findSmallest)
   int processID = theArpackSOE->processID;
   
   // set up the space for ARPACK functions.
-  // this is done each time method is called!! .. this needs to be cleaned up
-  if (numModes > numModesMax) {
+  // the arrays depend on both the number of modes and the system size, and
+  // an earlier failure may have released the eigenvalue storage
+  if (numModes != numModesMax || n != sizeMax || eigenvalues == 0) {
     
     if (v != 0) delete [] v;
     if (workl != 0) delete [] workl;
@@ -187,6 +188,7 @@ ArpackSolver::solve(int numModes, bool generalized, bool findSmallest)
       v[i] = 0;
     
     numModesMax = numModes;
+    sizeMax = n;
   }
 
   char which[3];
@@ -358,7 +360,15 @@ ArpackSolver::solve(int numModes, bool generalized, bool findSmallest)
       opserr << "ArpackSolver::No Shifts could be applied during implicit,";
       opserr << "Arnoldi update, try increasing NCV." << endln;
     }
-    
+
+    // iparam[4] is the number of converged Ritz values; the remaining
+    // eigenvalue slots would be returned without having been computed
+    if (iparam[4] < nev) {
+      opserr << "WARNING ArpackSolver::solve() - only " << iparam[4] << " of " << nev
+	     << " eigenvalues converged\n";
+      return -1;
+    }
+
     double sigma = shift;
     if (iparam[4] > 0) {
       rvec = true;
@@ -473,11 +483,9 @@ int
 ArpackSolver::getNCV(int n, int nev)
 {
   int result;
-  if (2*nev > nev+8) {
-    result = nev+8;
-  } else {
-    result = 2*nev;
-  }
+  // eight Lanczos vectors more than modes, so that repeated or closely
+  // spaced eigenvalues are resolved also when few modes are requested
+  result = nev+8;
   
   if (result >= n) {
     result = n;
