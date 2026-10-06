@@ -53,7 +53,6 @@
 //#include<ReliabilityDomain.h>//Abbas
 #include<Parameter.h>
 #include<ParameterIter.h>//Abbas
-static bool converged = false;
 static int count = 0;
 
 void *
@@ -192,20 +191,6 @@ int Newmark::newStep(double deltaT)
     }
     
     // set response at t to be that at t+deltaT of previous step
-    /*
-    if (converged == true) {
-      std::ofstream outfile;
-
-      outfile.open("Newmark.dat",std::ofstream::out | std::ofstream::app);
-      int size = U->Size();
-      for (int i=0; i<size; i++)
-	outfile << (*U)(i) << " ";
-      outfile << "\n";
-      outfile.close();
-    }
-    */
-
-    converged = true;
 
     (*Ut) = *U;        
     (*Utdot) = *Udot;  
@@ -270,7 +255,6 @@ Newmark::getVel(void)
 int Newmark::revertToLastStep()
 {
   // set response at t+deltaT to be that at t .. for next newStep
-  converged = false;
   if (U != 0)  {
     (*U) = *Ut;        
     (*Udot) = *Utdot;  
