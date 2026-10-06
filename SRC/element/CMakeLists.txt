@@ -79,6 +79,7 @@ add_subdirectory(HUelements)
 add_subdirectory(XMUelements)
 add_subdirectory(masonry)
 add_subdirectory(CEqElement)
+add_subdirectory(coupling)
 
 add_subdirectory(IGA)
 

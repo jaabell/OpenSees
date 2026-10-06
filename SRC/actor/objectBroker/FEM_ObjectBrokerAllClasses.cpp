@@ -501,6 +501,8 @@
 #include "RockingBC/RockingBC.h"
 
 #include "CEqElement/ASDEmbeddedNodeElement.h"
+#include "coupling/KinematicCoupling.h"
+#include "coupling/DistributingCoupling.h"
 
 #include "absorbentBoundaries/ASDAbsorbingBoundary2D.h"
 #include "absorbentBoundaries/ASDAbsorbingBoundary3D.h"
@@ -1243,6 +1245,12 @@ FEM_ObjectBrokerAllClasses::getNewElement(int classTag)
 
     case ELE_TAG_ASDEmbeddedNodeElement:
       return new ASDEmbeddedNodeElement();
+
+    case ELE_TAG_KinematicCoupling:
+      return new KinematicCoupling();
+
+    case ELE_TAG_DistributingCoupling:
+      return new DistributingCoupling();
 
     case ELE_TAG_ASDAbsorbingBoundary2D:
       return new ASDAbsorbingBoundary2D();
