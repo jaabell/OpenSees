@@ -107,7 +107,7 @@ FE_Element::FE_Element(int tag, Element *ele)
 	    opserr << "FE_Element::FE_Element(Element *) ";
 	    opserr << " ran out of memory";	    
 	}
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    theMatrices[i] = 0;
 	    theVectors[i] = 0;
 	}
@@ -190,7 +190,7 @@ FE_Element::FE_Element(int tag, int numDOF_Group, int ndof)
 	    opserr << "FE_Element::FE_Element(Element *) ";
 	    opserr << " ran out of memory";
 	}
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    theMatrices[i] = 0;
 	    theVectors[i] = 0;
 	}
@@ -222,7 +222,7 @@ FE_Element::~FE_Element()
     // if this is the last FE_Element, clean up the
     // storage for the matrix and vector objects
     if (numFEs == 0) {
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    if (theVectors[i] != 0)
 		delete theVectors[i];
 	    if (theMatrices[i] != 0)

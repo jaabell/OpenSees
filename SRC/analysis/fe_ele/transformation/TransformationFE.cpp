@@ -127,7 +127,7 @@ TransformationFE::TransformationFE(int tag, Element *ele)
 	    opserr << "TransformationFE::TransformationFE(Element *) ";
 	    opserr << " ran out of memory";	    
 	}
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    modMatrices[i] = 0;
 	    modVectors[i] = 0;
 	}
@@ -168,7 +168,7 @@ TransformationFE::~TransformationFE()
     // if this is the last FE_Element, clean up the
     // storage for the matrix and vector objects
     if (numTransFE == 0) {
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    if (modVectors[i] != 0)
 		delete modVectors[i];
 	    if (modMatrices[i] != 0)

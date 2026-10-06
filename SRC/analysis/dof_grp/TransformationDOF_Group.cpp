@@ -130,7 +130,7 @@ TransformationDOF_Group::TransformationDOF_Group(int tag, Node *node,
 	    opserr << "TransformationDOF_Group::TransformationDOF_Group(Node *) ";
 	    opserr << " ran out of memory";	    
 	}
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    modMatrices[i] = 0;
 	    modVectors[i] = 0;
 	}
@@ -226,7 +226,7 @@ TransformationDOF_Group::TransformationDOF_Group(int tag,
 	    opserr << "TransformationDOF_Group::TransformationDOF_Group(Node *) ";
 	    opserr << " ran out of memory";	    
 	}
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    modMatrices[i] = 0;
 	    modVectors[i] = 0;
 	}
@@ -262,7 +262,7 @@ TransformationDOF_Group::~TransformationDOF_Group()
     // if this is the last FE_Element, clean up the
     // storage for the matrix and vector objects
     if (numTransDOFs == 0) {
-	for (int i=0; i<MAX_NUM_DOF; i++) {
+	for (int i=0; i<=MAX_NUM_DOF; i++) {
 	    if (modVectors[i] != 0)
 		delete modVectors[i];
 	    if (modMatrices[i] != 0)
