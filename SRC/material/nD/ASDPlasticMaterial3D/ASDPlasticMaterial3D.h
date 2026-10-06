@@ -2112,7 +2112,7 @@ private:
                 return -1;
             }
 
-            const double deltaLambda = - Phi / dPhi_dLambda;
+            double deltaLambda = - Phi / dPhi_dLambda;
 
             // cout << " ---- iter = " << iter << " / " << max_iter << endl;
             // cout << "  =>  n = " << n.transpose() << endl;
@@ -2125,11 +2125,54 @@ private:
             // cout << "  =>  dLambda = " << dLambda << endl ;
 
             // keep λ >= 0
-            if (dLambda + deltaLambda < 0.0) {
-                cout << " PLASTIC INCONSISTENCY - ELASTIC STEP! (dLambda + deltaLambda < 0.0)" << endl << endl;
-                // step cannot be plastic; fall back to elastic in this rare case
-                Stiffness = Eelastic;
-                return 0;
+            const double lambda_trial = dLambda + deltaLambda;
+            if (lambda_trial < 0.0) {
+                static int inconsistency_print_count = 0;
+                if (dLambda > MACHINE_EPSILON) {
+                    const double limited_deltaLambda = -0.5 * dLambda;
+                    if (inconsistency_print_count < 400) {
+                        ++inconsistency_print_count;
+                        cout << " PLASTIC INCONSISTENCY - APPLYING LOCAL LIMITER"
+                             << " tag=" << ASDP_TAG
+                             << " iter=" << iter
+                             << " Phi=" << Phi
+                             << " dPhi_dLambda=" << dPhi_dLambda
+                             << " nEm=" << nEm
+                             << " H=" << H
+                             << " dLambda=" << dLambda
+                             << " deltaLambda=" << deltaLambda
+                             << " lambda_trial=" << lambda_trial
+                             << " limited_deltaLambda=" << limited_deltaLambda
+                             << " |sigma|=" << TrialStress.norm()
+                             << " |n|=" << n.norm()
+                             << " |m|=" << m.norm()
+                             << " p=" << TrialStress.getI1() / 3.0
+                             << endl << endl;
+                    }
+                    deltaLambda = limited_deltaLambda;
+                } else {
+                    if (inconsistency_print_count < 400) {
+                        ++inconsistency_print_count;
+                        cout << " PLASTIC INCONSISTENCY - ELASTIC STEP! (dLambda + deltaLambda < 0.0)"
+                             << " tag=" << ASDP_TAG
+                             << " iter=" << iter
+                             << " Phi=" << Phi
+                             << " dPhi_dLambda=" << dPhi_dLambda
+                             << " nEm=" << nEm
+                             << " H=" << H
+                             << " dLambda=" << dLambda
+                             << " deltaLambda=" << deltaLambda
+                             << " lambda_trial=" << lambda_trial
+                             << " |sigma|=" << TrialStress.norm()
+                             << " |n|=" << n.norm()
+                             << " |m|=" << m.norm()
+                             << " p=" << TrialStress.getI1() / 3.0
+                             << endl << endl;
+                    }
+                    // no positive accumulated lambda to backtrack from
+                    Stiffness = Eelastic;
+                    return 0;
+                }
             }
 
             // incremental updates (use delta to avoid re-summing from commit each iter)
@@ -2197,15 +2240,18 @@ private:
         // ------------------ solver (un sub-paso Δε) ------------------
         auto solve_increment = [&](const VoigtVector& dEps)->bool
         {
-            // Predictor elástico desde el estado commit
-            TrialStrain = epsilon + dEps;
-            TrialPlastic_Strain = CommitPlastic_Strain;
-            TrialStress = sigma + Eelastic * dEps;
+            // Predictor elastico desde el estado actual acumulado
+            const VoigtVector sigma_start = TrialStress;
+            const VoigtVector epsilon_start = TrialStrain;
+            const VoigtVector epsp_start = TrialPlastic_Strain;
+            const iv_storage_t iv_start = iv_storage;
 
-            // Estado interno trial = commit
-            iv_storage.revert_all();
+            TrialStrain = epsilon_start + dEps;
+            TrialPlastic_Strain = epsp_start;
+            TrialStress = sigma_start + Eelastic * dEps;
+            iv_storage = iv_start;
 
-            const double yf_start = yf(sigma,       iv_storage, parameters_storage);
+            const double yf_start = yf(sigma_start, iv_storage, parameters_storage);
             const double yf_end   = yf(TrialStress, iv_storage, parameters_storage);
 
             // Misma lógica que usabas: puramente elástico o moviéndose "hacia adentro"
@@ -2276,46 +2322,100 @@ private:
                 if (std::abs(deltaLambda) > dLmax)
                     deltaLambda = (deltaLambda > 0.0 ? 1.0 : -1.0) * dLmax;
 
+                // Mantener lambda no negativo con la misma logica del Backward_Euler clasico
+                const double lambda_trial = dLambda + deltaLambda;
+                if (lambda_trial < 0.0) {
+                    if (dLambda > MACHINE_EPSILON) {
+                        deltaLambda = -0.5 * dLambda;
+                    } else {
+                        Stiffness = Eelastic;
+                        return true;
+                    }
+                }
+
                 // Enforce λ ≥ 0
                 if (dLambda + deltaLambda < 0.0)
                     deltaLambda = -dLambda * 0.5; // reduce para no cruzar a negativo
 
-                // -------- line search (backtracking) con Φ linealizado --------
+                // -------- line search (backtracking) con evaluacion real de Φ --------
+                const VoigtVector Em = Eelastic * m;
+                const VoigtVector stress_base = TrialStress;
+                const VoigtVector epsp_base = TrialPlastic_Strain;
+                const iv_storage_t iv_base = iv_storage;
+                const double dLambda_base = dLambda;
+
                 double alpha = 1.0;
                 const double c = 1e-4;
+                const double alpha_min = 1.0 / 2048.0;
+                bool accepted = false;
                 double dl_accepted = 0.0;
+                double best_abs_phi = std::numeric_limits<double>::infinity();
+                double best_dl = 0.0;
+                bool has_best = false;
 
-                for (int ls = 0; ls < 8; ++ls) {
+                if (deltaLambda < 0.0) {
+                    if (dLambda_base <= MACHINE_EPSILON) {
+                        newton_ok = false;
+                        break;
+                    }
+                    const double alpha_max = 0.999 * dLambda_base / (-deltaLambda);
+                    alpha = std::min(alpha, alpha_max);
+                }
+
+                while (alpha >= alpha_min) {
                     const double dl = alpha * deltaLambda;
 
-                    // Predicción lineal de Φ
-                    const double Phi_pred = Phi + dPhi_dLambda * dl;
+                    TrialStress = stress_base - dl * Em;
+                    TrialPlastic_Strain = epsp_base + dl * m;
+                    iv_storage = iv_base;
+                    iv_storage.apply([&](auto & iv){
+                        auto h = iv.hardening_function(dEps, m, TrialStress, parameters_storage);
+                        iv.trial_value += dl * h;
+                    });
 
-                    if (std::abs(Phi_pred) <= (1.0 - c*alpha) * std::abs(Phi)) {
+                    const double Phi_trial = yf(TrialStress, iv_storage, parameters_storage);
+                    const double sufficient_decrease = (1.0 - c * alpha) * std::abs(Phi);
+
+                    if (std::isfinite(Phi_trial)) {
+                        const double abs_phi_trial = std::abs(Phi_trial);
+                        if (abs_phi_trial < best_abs_phi) {
+                            best_abs_phi = abs_phi_trial;
+                            best_dl = dl;
+                            has_best = true;
+                        }
+                    }
+
+                    if (std::isfinite(Phi_trial) &&
+                        (std::abs(Phi_trial) <= sufficient_decrease ||
+                         std::abs(Phi_trial) <= tol_abs)) {
+                        accepted = true;
                         dl_accepted = dl;
                         break;
                     }
                     alpha *= 0.5;
                 }
 
-                if (dl_accepted == 0.0) {
-                    // No se pudo aceptar un paso útil → dejar a substepping
+                if (!accepted && has_best && best_abs_phi < std::abs(Phi)) {
+                    accepted = true;
+                    dl_accepted = best_dl;
+                }
+
+                if (!accepted) {
+                    TrialStress = stress_base;
+                    TrialPlastic_Strain = epsp_base;
+                    iv_storage = iv_base;
                     newton_ok = false;
                     break;
                 }
 
-                // Aplicar actualización aceptada
-                const VoigtVector Em = Eelastic * m;
-
-                TrialStress         = TrialStress - dl_accepted * Em;
-                TrialPlastic_Strain = TrialPlastic_Strain + dl_accepted * m;
-
+                TrialStress = stress_base - dl_accepted * Em;
+                TrialPlastic_Strain = epsp_base + dl_accepted * m;
+                iv_storage = iv_base;
                 iv_storage.apply([&](auto & iv){
                     auto h = iv.hardening_function(dEps, m, TrialStress, parameters_storage);
                     iv.trial_value += dl_accepted * h;
                 });
-
-                dLambda += dl_accepted;
+                dLambda = dLambda_base + dl_accepted;
 
                 // Guard NaN
                 if (!std::isfinite(TrialStress.squaredNorm())) {
@@ -2350,48 +2450,66 @@ private:
                 }
             }
 
-            // -------- Tangente algorítmica consistente --------
-            {
-                const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
-                const VoigtVector& m = pf(dEps,        TrialStress, iv_storage, parameters_storage);
-                const double       H = yf.hardening(dEps, m,        TrialStress, iv_storage, parameters_storage);
-
-                const VoigtVector Em = Eelastic * m;
-                const double nEm = n.dot(Em);
-                const double denom = nEm - H; // ojo: este es el de la fórmula de C_alg
-
-                if (std::abs(denom) > MACHINE_EPSILON) {
-                    // (6x6) = E - (6x1)*(1x6)/denom
-                    const auto row_nE = (n.transpose() * Eelastic); // 1x6
-                    Stiffness = Eelastic - (Em * row_nE) / denom;
-                } else {
-                    Stiffness = Eelastic; // fallback
-                }
-            }
+            ComputeTangentStiffness();
 
             return true;
         };
 
         // ------------------ substepping automático ------------------
-        VoigtVector dEps = depsilon;
+        TrialStress = sigma;
+        TrialStrain = epsilon;
+        TrialPlastic_Strain = CommitPlastic_Strain;
+        iv_storage.revert_all();
 
-        // intenta paso completo; si falla, corta a la mitad repetidamente (hasta 1/32)
-        bool ok = false;
-        for (int split = 0; split <= 5; ++split)   // 0..5 → 1, 2, 4, 8, 16, 32 subpasos
-        {
-            // resetear a commit antes de intentar este tamaño de paso
-            TrialStress = sigma + Eelastic * dEps;   // predictor para flags de arriba
-            TrialStrain = epsilon + dEps;
-            TrialPlastic_Strain = CommitPlastic_Strain;
-            iv_storage.revert_all();
+        const int max_split_level = 5; // hasta 1/32 del subpaso local
+        bool ok = true;
+        std::vector<std::pair<VoigtVector, int>> pending_substeps;
+        pending_substeps.emplace_back(depsilon, 0);
 
-            if (solve_increment(dEps)) { ok = true; break; }
+        while (!pending_substeps.empty()) {
+            const auto step = pending_substeps.back();
+            pending_substeps.pop_back();
 
-            // reducir paso y reintentar
-            dEps *= 0.5;
+            const VoigtVector dEps_step = step.first;
+            const int split_level = step.second;
+
+            const VoigtVector stress_base = TrialStress;
+            const VoigtVector strain_base = TrialStrain;
+            const VoigtVector epsp_base = TrialPlastic_Strain;
+            const iv_storage_t iv_base = iv_storage;
+
+            if (solve_increment(dEps_step)) {
+                continue;
+            }
+
+            TrialStress = stress_base;
+            TrialStrain = strain_base;
+            TrialPlastic_Strain = epsp_base;
+            iv_storage = iv_base;
+
+            if (split_level >= max_split_level) {
+                ok = false;
+                break;
+            }
+
+            const VoigtVector half_step = dEps_step * 0.5;
+            pending_substeps.emplace_back(half_step, split_level + 1);
+            pending_substeps.emplace_back(half_step, split_level + 1);
         }
 
-        if (!ok) return -1;
+        if (!ok) {
+            static int ls_fallback_count = 0;
+            if (ls_fallback_count < 200) {
+                ++ls_fallback_count;
+                cout << " BACKWARD_EULER_LINESEARCH - SUBSTEPPING FAILED, FALLING BACK TO BACKWARD_EULER"
+                     << " tag=" << ASDP_TAG
+                     << " |depsilon|=" << depsilon.norm()
+                     << endl << endl;
+            }
+            return Backward_Euler(strain_incr);
+        }
+
+        ComputeTangentStiffness();
 
         return 0;
     }

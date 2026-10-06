@@ -668,8 +668,9 @@ int  SixNodeBoundryCondition::sendSelf (int commitTag, Channel &theChannel)
     // along with its dbTag and the commitTag passed in the arguments
 
     // Now quad sends the ids of its materials
-    static ID idData(26);
+    static ID idData(27);
 
+    idData(26) = this->getTag();
     idData(20) = connectedExternalNodes(0);
     idData(21) = connectedExternalNodes(1);
     idData(22) = connectedExternalNodes(2);
@@ -709,7 +710,7 @@ int  SixNodeBoundryCondition::recvSelf (int commitTag,
 
     int dataTag = this->getDbTag();
 
-    static ID idData(26);
+    static ID idData(27);
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING SixNodeBoundryCondition::recvSelf() - " << this->getTag() << " failed to receive ID\n";
@@ -808,13 +809,9 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
 
     if (strcmp(argv[0], "force") == 0 || strcmp(argv[0], "forces") == 0)
     {
-        for (int i = 1; i <= 10; i++)
+        for (int i = 1; i <= 6; i++)
         {
-            sprintf(outputData, "P1_%d", i);
-            output.tag("ResponseType", outputData);
-            sprintf(outputData, "P2_%d", i);
-            output.tag("ResponseType", outputData);
-            sprintf(outputData, "P3_%d", i);
+            sprintf(outputData, "F%d", i);
             output.tag("ResponseType", outputData);
         }
         theResponse = new ElementResponse(this, 1, resid);
@@ -844,7 +841,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
 
     else if (strcmp(argv[0], "stresses") == 0)
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             output.tag("GaussPoint");
             output.attr("number", i + 1);
@@ -863,7 +860,7 @@ SixNodeBoundryCondition::setResponse(const char **argv, int argc, OPS_Stream &ou
 
     else if (strcmp(argv[0], "strains") == 0)
     {
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
             output.tag("GaussPoint");
             output.attr("number", i + 1);
@@ -1001,7 +998,7 @@ SixNodeBoundryCondition::shp3d( const double zeta[3], double &xsj, double shp[3]
     double J1 = Jy1 * Jz2 - Jy2 * Jz1;
     double J2 = Jx2 * Jz1 - Jx1 * Jz2;
     double J3 = Jx1 * Jy2 - Jx2 * Jy1;
-    double Jdet = sqrt( J1*J1 + J2*J2 + J3*J3 ) / 2.0 ;
+    double Jdet = sqrt( J1*J1 + J2*J2 + J3*J3 ) ;
     if (Jdet <= 0)
     {
         opserr << "Jdet = " << Jdet << endln;

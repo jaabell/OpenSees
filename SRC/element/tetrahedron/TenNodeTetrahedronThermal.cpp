@@ -907,8 +907,9 @@ int  TenNodeTetrahedronThermal::sendSelf (int commitTag, Channel &theChannel)
     // along with its dbTag and the commitTag passed in the arguments
 
     // Now quad sends the ids of its materials
-    static ID idData(30);
+    static ID idData(31);
 
+    idData(30) = this->getTag();
     idData(20) = connectedExternalNodes(0);
     idData(21) = connectedExternalNodes(1);
     idData(22) = connectedExternalNodes(2);
@@ -954,7 +955,7 @@ int  TenNodeTetrahedronThermal::recvSelf (int commitTag,
 
     int dataTag = this->getDbTag();
 
-    static ID idData(30);
+    static ID idData(31);
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING TenNodeTetrahedronThermal::recvSelf() - " << this->getTag() << " failed to receive ID\n";

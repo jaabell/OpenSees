@@ -63,20 +63,25 @@ public:
     {
         using namespace std;
         
-        // Get principal stresses (sorted: sigma1 >= sigma2 >= sigma3)
-        auto [sigma3, sigma2, sigma1] = sig.principalStresses();
+        // Keep sign convention consistent with HoekBrown_YF:
+        // convert OpenSees stress (tension-positive) to compression-positive.
+        VoigtVector sigma_geo = -sig;
+        auto [sigma3, sigma2, sigma1] = sigma_geo.principalStresses();
         
-        double arg = mb_psi * sigma3 / sigma_ci + s;
-        
-        double gval;
-        if (arg > 0) {
-            gval = sigma1 - sigma3 - sigma_ci * pow(arg, a);
-        } else {
-            // In tension region - use tension cutoff behavior
-            gval = sigma1 - sigma3 - sigma_ci * s;
+        // Use the same branch structure used by HoekBrown_YF
+        // to avoid directional inconsistencies around the transition.
+        const double arg = mb_psi * sigma3 / sigma_ci + s;
+        const double arg_safe = max(arg, 0.0);
+
+        const double g_shear = sigma1 - sigma3 - sigma_ci * pow(arg_safe, a);
+
+        double sigma_t_psi = 0.0;
+        if (std::abs(mb_psi) > 1e-14) {
+            sigma_t_psi = -s * sigma_ci / mb_psi;
         }
-        
-        return gval;
+        const double g_tension = sigma_t_psi - sigma3;
+
+        return max(g_shear, g_tension);
     }
 
     PLASTIC_FLOW_DIRECTION
