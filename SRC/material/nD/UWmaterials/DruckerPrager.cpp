@@ -404,6 +404,10 @@ void DruckerPrager:: plastic_integrator( )
 		// compute yield function value (contravariant norm)
         norm_eta = sqrt(eta(0)*eta(0) + eta(1)*eta(1) + eta(2)*eta(2) + 2*(eta(3)*eta(3) + eta(4)*eta(4) + eta(5)*eta(5)));
 
+		// norm_eta is overwritten below with the returned norm; the
+		// consistent tangent needs the trial norm.
+		double norm_eta_trial = norm_eta;
+
         // f1_n+1_trial
 		f1 = norm_eta + mrho*Invariant_1 - root23*Kiso(mAlpha1_n1);
 
@@ -487,15 +491,18 @@ void DruckerPrager:: plastic_integrator( )
 
 			// Newton procedure to compute nonlinear gamma1 and gamma2
 			//initialize terms
-			for (int i = 0; i < 2; i++) {
-				if (Jact(i) == 1) {
-					R(0) = norm_eta - (2*mG + two3*mHprime)*gamma(0) + mrho*Invariant_1 
-						   - 9*mK*mrho*mrho_bar*gamma(0) - 9*mK*mrho*gamma(1) - root23*Kiso(alpha1);
-					g(0,0) = -2*mG - two3*(mHprime + Kisoprime(alpha1)) - 9*mK*mrho*mrho_bar;
-				} else if (Jact(i) == 2) {
-					R(1) = Invariant_1 - 9*mK*mrho_bar*gamma(0) - 9*mK*gamma(1) - T(alpha2);
-					g(1,1) = -9*mK + mdelta2*T(alpha2);
-				}
+			// Jact holds one 0/1 flag per surface, so the residual row is the
+			// surface index: row 0 for the cone f1, row 1 for the tension
+			// cutoff f2. An inactive row keeps R = 0 and g = 1, which makes
+			// its dgamma zero.
+			if (Jact(0) == 1) {
+				R(0) = norm_eta - (2*mG + two3*mHprime)*gamma(0) + mrho*Invariant_1 
+					   - 9*mK*mrho*mrho_bar*gamma(0) - 9*mK*mrho*gamma(1) - root23*Kiso(alpha1);
+				g(0,0) = -2*mG - two3*(mHprime + Kisoprime(alpha1)) - 9*mK*mrho*mrho_bar;
+			}
+			if (Jact(1) == 1) {
+				R(1) = Invariant_1 - 9*mK*mrho_bar*gamma(0) - 9*mK*gamma(1) - T(alpha2);
+				g(1,1) = -9*mK + mdelta2*T(alpha2);
 			}
 			if (Jact(0) == 1 && Jact(1) == 1) {
 				g(0,1) = -9*mK*mrho;
@@ -522,15 +529,14 @@ void DruckerPrager:: plastic_integrator( )
 				g(1,0) = 0;
 				g(0,1) = 0;
 				R.Zero();
-				for (int i = 0; i < 2; i++) {
-				if (Jact(i) == 1) {
+				if (Jact(0) == 1) {
 					R(0) = norm_eta - (2*mG + two3*mHprime)*gamma(0) + mrho*Invariant_1 
 						   - 9*mK*mrho*mrho_bar*gamma(0) - 9*mK*mrho*gamma(1) - root23*Kiso(alpha1);
 					g(0,0) = -2*mG - two3*(mHprime + Kisoprime(alpha1)) - 9*mK*mrho*mrho_bar;
-				} else if (Jact(i) == 2) {
+				}
+				if (Jact(1) == 1) {
 					R(1) = Invariant_1 - 9*mK*mrho_bar*gamma(0) - 9*mK*gamma(1) - T(alpha2);
 					g(1,1) = -9*mK + mdelta2*T(alpha2);
-				}
 				}
 				if (Jact(0) == 1 && Jact(1) == 1) {
 					g(0,1) = -9*mK*mrho;
@@ -661,13 +667,22 @@ void DruckerPrager:: plastic_integrator( )
 		temp1 = g_contra(0,0)*b1 + g_contra(0,1)*b2;  
 		temp2 = mrho_bar*temp1 + g_contra(1,0)*b1 + g_contra(1,1)*b2;
 
+		// The flow direction n is frozen at the trial state, and
+		// dn/deps = 2G/||eta_trial|| * (IIdev - n(x)n), so the radial-return
+		// term divides by the trial norm, as in the radial return for J2
+		// plasticity. A purely volumetric trial has ||eta_trial|| = 0 and
+		// gamma(0) = 0; the term is then zero.
+		double devSoft = 0.0;
+		if (norm_eta_trial > 1.0e-13)
+			devSoft = 4*mG*mG/norm_eta_trial*gamma(0);
+
 		NormCep = 0.0;
 		for (int i = 0; i < 6; i++){
 			for (int j = 0; j < 6; j++) {
 				mCep(i,j) = mCe(i,j)
 						  + 3*mK * mI1(i)*temp2(j)  
 						  + 2*mG * n(i)*temp1(j)
-						  - 4*mG*mG/norm_eta*gamma(0) * (mIIdev(i,j) - n(i)*n(j));
+						  - devSoft * (mIIdev(i,j) - n(i)*n(j));
 				NormCep += mCep(i,j)*mCep(i,j);
 			}
 		}

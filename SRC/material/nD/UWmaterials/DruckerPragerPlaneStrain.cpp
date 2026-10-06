@@ -134,18 +134,18 @@ DruckerPragerPlaneStrain::getTangent()
     return tangent;
 } 
 
-//send back the tangent 
+//send back the initial (elastic) tangent 
 const Matrix& DruckerPragerPlaneStrain::getInitialTangent() 
 {
-    tangent(0,0) = mCep(0,0);
-	tangent(0,1) = mCep(0,1);
-	tangent(0,2) = mCep(0,3);
-	tangent(1,0) = mCep(1,0);
-	tangent(1,1) = mCep(1,1);
-	tangent(1,2) = mCep(1,3);
-	tangent(2,0) = mCep(3,0);
-	tangent(2,1) = mCep(3,1);
-	tangent(2,2) = mCep(3,3);
+    tangent(0,0) = mCe(0,0);
+	tangent(0,1) = mCe(0,1);
+	tangent(0,2) = mCe(0,3);
+	tangent(1,0) = mCe(1,0);
+	tangent(1,1) = mCe(1,1);
+	tangent(1,2) = mCe(1,3);
+	tangent(2,0) = mCe(3,0);
+	tangent(2,1) = mCe(3,1);
+	tangent(2,2) = mCe(3,3);
 	
     return tangent;
 } 
