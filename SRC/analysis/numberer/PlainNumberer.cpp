@@ -39,6 +39,8 @@
 
 #include <PlainNumberer.h>
 #include <AnalysisModel.h>
+#include <unordered_map>
+#include <vector>
 
 #include <DOF_Group.h>
 #include <DOF_GrpIter.h>
@@ -115,6 +117,17 @@ PlainNumberer::numberDOF(int lastDOF)
     }
 
     // iterate through the DOFs one last time setting any -4 values
+    // index the MP_Constraints by constrained node in one pass, instead of
+    // scanning every MP_Constraint for each constrained DOF_Group. Each list
+    // keeps the getMPs() order, so a node constrained by several MP_Constraints
+    // receives its IDs in the same order as with the full scan.
+    std::unordered_map<int, std::vector<MP_Constraint*> > mpIndex;
+    {
+	MP_ConstraintIter &theMPsAll = theDomain->getMPs();
+	MP_Constraint *mpAll;
+	while ((mpAll = theMPsAll()) != 0)
+	    mpIndex[mpAll->getNodeConstrained()].push_back(mpAll);
+    }
     DOF_GrpIter &tDOFs = theModel->getDOFs();
     while ((dofPtr = tDOFs()) != 0) {
     	const ID &theID = dofPtr->getID();
@@ -124,15 +137,12 @@ PlainNumberer::numberDOF(int lastDOF)
 
 	if (have4s == 1) {
 		int nodeID = dofPtr->getNodeTag();
-		// loop through the MP_Constraints to see if any of the
-		// DOFs are constrained, note constraint matrix must be diagonal
-		// with 1's on the diagonal
-		MP_ConstraintIter &theMPs = theDomain->getMPs();
-		MP_Constraint *mpPtr;
-		while ((mpPtr = theMPs()) != 0 ) {
-			// note keep looping over all in case multiple constraints
-			// are used to constrain a node -- can't assume intelli user
-	    		if (mpPtr->getNodeConstrained() == nodeID) {
+		std::unordered_map<int, std::vector<MP_Constraint*> >::iterator
+		    mpIt = mpIndex.find(nodeID);
+		if (mpIt != mpIndex.end())
+		for (std::size_t mpk = 0; mpk < mpIt->second.size(); ++mpk) {
+			MP_Constraint *mpPtr = mpIt->second[mpk];
+	    		{
 	    			int nodeRetained = mpPtr->getNodeRetained();
 	    			Node *nodeRetainedPtr = theDomain->getNode(nodeRetained);
 	    			DOF_Group *retainedDOF = nodeRetainedPtr->getDOF_GroupPtr();
@@ -146,8 +156,8 @@ PlainNumberer::numberDOF(int lastDOF)
 	    				dofPtr->setID(dofC, dofID);
 	    			}
 	    		}
-		}		
-	}	
+		}
+	}
     }
 
     eqnNumber--;
@@ -220,6 +230,17 @@ PlainNumberer::numberDOF(ID &lastDOFs)
     }
     // iterate through the DOFs one last time setting any -4 values
     // iterate through the DOFs one last time setting any -4 values
+    // index the MP_Constraints by constrained node in one pass, instead of
+    // scanning every MP_Constraint for each constrained DOF_Group. Each list
+    // keeps the getMPs() order, so a node constrained by several MP_Constraints
+    // receives its IDs in the same order as with the full scan.
+    std::unordered_map<int, std::vector<MP_Constraint*> > mpIndex;
+    {
+	MP_ConstraintIter &theMPsAll = theDomain->getMPs();
+	MP_Constraint *mpAll;
+	while ((mpAll = theMPsAll()) != 0)
+	    mpIndex[mpAll->getNodeConstrained()].push_back(mpAll);
+    }
     DOF_GrpIter &tDOFs = theModel->getDOFs();
     while ((dofPtr = tDOFs()) != 0) {
     	const ID &theID = dofPtr->getID();
@@ -229,15 +250,12 @@ PlainNumberer::numberDOF(ID &lastDOFs)
 
 	if (have4s == 1) {
 		int nodeID = dofPtr->getNodeTag();
-		// loop through the MP_Constraints to see if any of the
-		// DOFs are constrained, note constraint matrix must be diagonal
-		// with 1's on the diagonal
-		MP_ConstraintIter &theMPs = theDomain->getMPs();
-		MP_Constraint *mpPtr;
-		while ((mpPtr = theMPs()) != 0 ) {
-			// note keep looping over all in case multiple constraints
-			// are used to constrain a node -- can't assume intelli user
-	    		if (mpPtr->getNodeConstrained() == nodeID) {
+		std::unordered_map<int, std::vector<MP_Constraint*> >::iterator
+		    mpIt = mpIndex.find(nodeID);
+		if (mpIt != mpIndex.end())
+		for (std::size_t mpk = 0; mpk < mpIt->second.size(); ++mpk) {
+			MP_Constraint *mpPtr = mpIt->second[mpk];
+	    		{
 	    			int nodeRetained = mpPtr->getNodeRetained();
 	    			Node *nodeRetainedPtr = theDomain->getNode(nodeRetained);
 	    			DOF_Group *retainedDOF = nodeRetainedPtr->getDOF_GroupPtr();
@@ -251,8 +269,8 @@ PlainNumberer::numberDOF(ID &lastDOFs)
 	    				dofPtr->setID(dofC, dofID);
 	    			}
 	    		}
-		}		
-	}	
+		}
+	}
     }
 
     eqnNumber--;
