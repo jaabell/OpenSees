@@ -103,6 +103,7 @@ class TransformationDOF_Group: public DOF_Group
 
     int addSP_Constraint(SP_Constraint &theSP);
     int enforceSPs(int doMP);
+    virtual int getSPDispIncr(Vector &du, int start);
 
 // AddingSensitivity:BEGIN ////////////////////////////////////
     void addM_ForceSensitivity(const Vector &Udotdot, double fact = 1.0);        

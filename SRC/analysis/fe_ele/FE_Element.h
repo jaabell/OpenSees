@@ -87,6 +87,15 @@ class FE_Element: public TaggedObject
     virtual void  addK_Force(const Vector &disp, double fact = 1.0);
     virtual void  addKg_Force(const Vector &disp, double fact = 1.0);    
 
+    // Returns K * du_p for this element in its assembled (transformed) dof
+    // space, where du_p holds the prescribed (SP_Constraint) displacement
+    // increments of the element's nodes and K is the element tangent at the
+    // current state; returns 0 when the element has no non-zero prescribed
+    // increment. A dof eliminated by the constraint handler has no equation
+    // number, so this coupling term cannot be recovered from any global
+    // vector. The base class returns 0.
+    virtual const Vector *getSPTangentForce(Integrator *theIntegrator);
+
     virtual int updateElement(void);
 
     virtual Integrator *getLastIntegrator(void);

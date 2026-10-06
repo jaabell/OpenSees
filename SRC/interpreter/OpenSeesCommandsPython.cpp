@@ -482,7 +482,7 @@ integType -- a string of the Integrator name\n\n\
 The type of integrator used in the analysis is dependent on whether it is a \n\
 static analysis or transient analysis.\n\n\
 Static integrators:\n\n\
-* integrator('LoadControl',lambda[,numIter,miniLambda,maxLambda])\n\n\
+* integrator('LoadControl',lambda[,numIter,miniLambda,maxLambda][,'-tangentPredictor'])\n\n\
 lambda -- the load factor increment\n\
 numIter -- the number of iterations the user would like to occur in the solution \n\
            algorithm. Optional, default = 1.0.\n\

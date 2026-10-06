@@ -83,6 +83,14 @@ class DOF_Group: public TaggedObject
     virtual const Vector &getC_Force(const Vector &x, double fact = 1.0);
     virtual const Vector &getM_Force(const Vector &x, double fact = 1.0);
 
+    // Writes the prescribed (SP_Constraint) displacement increment of this
+    // group, i.e. the prescribed total value at the current domain time minus
+    // the committed nodal value, into du(start + i) for each constrained nodal
+    // dof i, in the node's own dof ordering. Entries without an SP are left
+    // untouched. Returns the number of entries written. The base class holds
+    // no SP_Constraints and returns 0.
+    virtual int getSPDispIncr(Vector &du, int start);
+
     // methods to obtain committed responses from the nodes
     virtual const Vector & getCommittedDisp(void);
     virtual const Vector & getCommittedVel(void);

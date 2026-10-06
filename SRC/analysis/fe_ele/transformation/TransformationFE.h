@@ -56,6 +56,7 @@ class TransformationFE: public FE_Element
     // methods to form and obtain the tangent and residual
     virtual const Matrix &getTangent(Integrator *theIntegrator);
     virtual const Vector &getResidual(Integrator *theIntegrator);
+    virtual const Vector *getSPTangentForce(Integrator *theIntegrator);
     
     // methods for ele-by-ele strategies
     virtual const Vector &getTangForce(const Vector &x, double fact = 1.0);

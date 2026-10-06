@@ -60,6 +60,12 @@ class LoadControl : public StaticIntegrator
     int update(const Vector &deltaU);
     int setDeltaLambda(double newDeltaLambda);
 
+    // Optional tangent predictor for non-homogeneous SP constraints
+    // (-tangentPredictor). Off by default.
+    void setTangentPredictor(bool onOff);
+    int formUnbalance(void);
+    int domainChanged(void);
+
     // Public methods for Output
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
@@ -93,6 +99,13 @@ protected:
     int sensitivityFlag;
    // EquiSolnAlgo *theAlgorithm;
     ReliabilityDomain *theDomain;
+
+    // tangent predictor state (-tangentPredictor); not sent by sendSelf()
+    bool tangentPredictReq;  // requested by the user
+    bool tangentPredict;     // active; cleared when no element contributes
+    bool spNotYetEnforced;   // between newStep() and the first update()
+    bool fallbackNoted;      // the fallback note has been printed
+    double stepLambda;       // load factor applied by newStep()
     ////////////////////
 };
 

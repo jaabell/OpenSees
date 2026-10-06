@@ -468,6 +468,13 @@ DOF_Group::getTangForce(const Vector &Udotdot, double fact)
 }
 
 
+int
+DOF_Group::getSPDispIncr(Vector &du, int start)
+{
+  return 0;
+}
+
+
 const Vector &
 DOF_Group::getM_Force(const Vector &Udotdot, double fact)
 {

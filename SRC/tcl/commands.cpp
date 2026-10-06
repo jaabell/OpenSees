@@ -4325,13 +4325,20 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
       double dLambda;
       double minIncr, maxIncr;
       int numIter;
-      if (argc < 3) {
-	opserr << "WARNING incorrect # args - integrator LoadControl dlam <Jd dlamMin dlamMax>\n";
+      // optional trailing flag: LoadControl dlam <Jd dlamMin dlamMax> <-tangentPredictor>
+      bool tangentPredictor = false;
+      int numArgs = argc;
+      if (numArgs > 3 && strcmp(argv[numArgs-1], "-tangentPredictor") == 0) {
+	tangentPredictor = true;
+	numArgs--;
+      }
+      if (numArgs < 3) {
+	opserr << "WARNING incorrect # args - integrator LoadControl dlam <Jd dlamMin dlamMax> <-tangentPredictor>\n";
 	return TCL_ERROR;
       }    
       if (Tcl_GetDouble(interp, argv[2], &dLambda) != TCL_OK)	
 	return TCL_ERROR;	
-      if (argc > 5) {
+      if (numArgs > 5) {
 	if (Tcl_GetInt(interp, argv[3], &numIter) != TCL_OK)	
 	  return TCL_ERROR;	
 	if (Tcl_GetDouble(interp, argv[4], &minIncr) != TCL_OK)	
@@ -4344,7 +4351,10 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	maxIncr = dLambda;
 	numIter = 1;
       }
-      theStaticIntegrator = new LoadControl(dLambda, numIter, minIncr, maxIncr);       
+      LoadControl *theLoadControl = new LoadControl(dLambda, numIter, minIncr, maxIncr);
+      if (tangentPredictor)
+	theLoadControl->setTangentPredictor(true);
+      theStaticIntegrator = theLoadControl;
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)

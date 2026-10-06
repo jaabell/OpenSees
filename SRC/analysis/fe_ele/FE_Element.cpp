@@ -538,6 +538,13 @@ FE_Element::addRIncInertiaToResidual(double fact)
 }
 
 
+const Vector *
+FE_Element::getSPTangentForce(Integrator *theIntegrator)
+{
+    return 0;
+}
+
+
 const Vector &
 FE_Element::getTangForce(const Vector &disp, double fact)
 {

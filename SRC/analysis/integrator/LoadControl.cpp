@@ -54,6 +54,7 @@
 #include<EquiSolnAlgo.h>
 #include <elementAPI.h>
 #include <iostream>
+#include <string.h>
 
 void* OPS_LoadControlIntegrator()
 {
@@ -67,6 +68,18 @@ void* OPS_LoadControlIntegrator()
     if(OPS_GetDoubleInput(&numData,&lambda) < 0) {
 	opserr<<"WARNING LoadControl - failed to read double lambda\n";
 	return 0;
+    }
+
+    // -tangentPredictor is accepted right after lambda or after the
+    // optional numIter/minLambda/maxLambda triple
+    bool tangentPredictor = false;
+    char optBuffer[64];
+    if(OPS_GetNumRemainingInputArgs() > 0) {
+	const char* opt = OPS_GetStringFromAll(optBuffer, 64);
+	if(opt != 0 && strcmp(opt,"-tangentPredictor") == 0)
+	    tangentPredictor = true;
+	else
+	    OPS_ResetCurrentInputArg(-1);
     }
 
     int numIter = 1;
@@ -83,14 +96,28 @@ void* OPS_LoadControlIntegrator()
 	}
     }
 
-    return new LoadControl(lambda,numIter,mLambda[0],mLambda[1]);
+    if(!tangentPredictor && OPS_GetNumRemainingInputArgs() > 0) {
+	const char* opt = OPS_GetStringFromAll(optBuffer, 64);
+	if(opt != 0 && strcmp(opt,"-tangentPredictor") == 0)
+	    tangentPredictor = true;
+	else
+	    OPS_ResetCurrentInputArg(-1);
+    }
+
+    LoadControl *theIntegrator = new LoadControl(lambda,numIter,mLambda[0],mLambda[1]);
+    if(tangentPredictor)
+	theIntegrator->setTangentPredictor(true);
+
+    return theIntegrator;
 }
 
 LoadControl::LoadControl(double dLambda, int numIncr, double min, double max, int classtag)
     : StaticIntegrator(classtag),
  deltaLambda(dLambda), 
  specNumIncrStep(numIncr), numIncrLastStep(numIncr),
- dLambdaMin(min), dLambdaMax(max), gradNumber(0), sensitivityFlag(0)
+ dLambdaMin(min), dLambdaMax(max), gradNumber(0), sensitivityFlag(0),
+ tangentPredictReq(false), tangentPredict(false), spNotYetEnforced(false),
+ fallbackNoted(false), stepLambda(0.0)
 {
   // to avoid divide-by-zero error on first update() ensure numIncr != 0
   if (numIncr == 0) {
@@ -127,6 +154,25 @@ LoadControl::newStep(void)
     double currentLambda = theModel->getCurrentDomainTime();
 
     currentLambda += deltaLambda;
+
+    if (tangentPredict) {
+      // Apply the domain loads only: this assigns every SP_Constraint its
+      // value for the new load factor, but the constraint handler does not
+      // enforce them, so the elements stay at the committed state. The first
+      // iteration then takes the prescribed-motion forcing from -K*du_p
+      // (formUnbalance) and the SPs are enforced in update().
+      Domain *theModelDomain = theModel->getDomainPtr();
+      if (theModelDomain == 0) {
+	opserr << "LoadControl::newStep() - no Domain linked to the AnalysisModel\n";
+	return -1;
+      }
+      theModelDomain->applyLoad(currentLambda);
+      stepLambda = currentLambda;
+      spNotYetEnforced = true;
+      numIncrLastStep = 0;
+      return 0;
+    }
+
     theModel->applyLoadDomain(currentLambda);
 
     numIncrLastStep = 0;
@@ -146,6 +192,14 @@ LoadControl::update(const Vector &deltaU)
     }
 
     myModel->incrDisp(deltaU);    
+
+    // with -tangentPredictor, deltaU of the first iteration is the response
+    // of the free dofs to the prescribed increment; enforce the SPs now
+    if (tangentPredict && spNotYetEnforced) {
+      myModel->applyLoadDomain(stepLambda);
+      spNotYetEnforced = false;
+    }
+
     if (myModel->updateDomain() < 0) {
       opserr << "LoadControl::update - model failed to update for new dU\n";
       return -1;
@@ -167,6 +221,84 @@ LoadControl::setDeltaLambda(double newValue)
   numIncrLastStep = specNumIncrStep;
   deltaLambda = newValue;
   return 0;
+}
+
+
+void
+LoadControl::setTangentPredictor(bool onOff)
+{
+  tangentPredictReq = onOff;
+  tangentPredict = onOff;
+  spNotYetEnforced = false;
+}
+
+
+int
+LoadControl::domainChanged(void)
+{
+  // a step left half open is abandoned, and a changed domain may now hold
+  // non-homogeneous SPs that the fallback in formUnbalance() had not seen
+  spNotYetEnforced = false;
+  tangentPredict = tangentPredictReq;
+  return this->StaticIntegrator::domainChanged();
+}
+
+
+// With -tangentPredictor, between newStep() and the first update() the
+// unbalance is P - R(committed) - K*du_p, where du_p are the prescribed
+// increments of the non-homogeneous SPs that have been set but not yet
+// enforced. If no element supplies such a term (no non-homogeneous SP, or a
+// constraint handler other than Transformation) nothing would drive the
+// prescribed dofs in the first iteration and a displacement-based test could
+// accept an unmoved step, so the SPs are enforced immediately and the
+// predictor is switched off until the domain changes.
+int
+LoadControl::formUnbalance(void)
+{
+  int res = this->IncrementalIntegrator::formUnbalance();
+
+  if (res < 0 || !tangentPredict || !spNotYetEnforced)
+    return res;
+
+  AnalysisModel *theModel = this->getAnalysisModel();
+  LinearSOE *theSOE = this->getLinearSOE();
+  if (theModel == 0 || theSOE == 0) {
+    opserr << "WARNING LoadControl::formUnbalance() ";
+    opserr << "No AnalysisModel or LinearSOE has been set\n";
+    return -1;
+  }
+
+  FE_EleIter &theEles = theModel->getFEs();
+  FE_Element *elePtr;
+  int numContributed = 0;
+  while ((elePtr = theEles()) != 0) {
+    const Vector *spForce = elePtr->getSPTangentForce(this);
+    if (spForce != 0) {
+      if (theSOE->addB(*spForce, elePtr->getID(), -1.0) < 0) {
+	opserr << "WARNING LoadControl::formUnbalance() ";
+	opserr << "failed to add the prescribed-motion force to B\n";
+	return -1;
+      }
+      numContributed++;
+    }
+  }
+
+  if (numContributed > 0)
+    return 0;
+
+  if (!fallbackNoted) {
+    opserr << "LoadControl -tangentPredictor: no element supplied a K*du_p term ";
+    opserr << "(no non-homogeneous sp under constraints Transformation); ";
+    opserr << "using the standard predictor\n";
+    fallbackNoted = true;
+  }
+  tangentPredict = false;
+
+  // same state as the standard newStep(): loads applied and SPs enforced
+  theModel->applyLoadDomain(stepLambda);
+  spNotYetEnforced = false;
+
+  return this->IncrementalIntegrator::formUnbalance();
 }
 
 
@@ -215,7 +347,10 @@ LoadControl::Print(OPS_Stream &s, int flag)
     if (theModel != 0) {
 	double currentLambda = theModel->getCurrentDomainTime();
 	s << "\t LoadControl - currentLambda: " << currentLambda;
-	s << "  deltaLambda: " << deltaLambda << endln;
+	s << "  deltaLambda: " << deltaLambda;
+	if (tangentPredictReq)
+	  s << "  -tangentPredictor";
+	s << endln;
     } else 
 	s << "\t LoadControl - no associated AnalysisModel\n";
     
