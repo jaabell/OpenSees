@@ -5,10 +5,14 @@
 #
 #==============================================================================
 
+# With MSVC this file is compiled per executable; see
+# OPS_INTERP_TCL_PER_TARGET_SOURCES in the top-level CMakeLists.txt.
+if(NOT MSVC)
 target_sources(OPS_InterpTcl
     PRIVATE
         myCommands.cpp
 )
+endif()
 
 target_sources(OPS_INTERPRETER
     PRIVATE

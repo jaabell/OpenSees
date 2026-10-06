@@ -27,7 +27,6 @@ target_sources(OPS_InterpTcl PRIVATE
     "${OPS_SRC_DIR}/domain/region/TclRegionCommands.cpp"
     "${OPS_SRC_DIR}/element/TclElementCommands.cpp"
     "${OPS_SRC_DIR}/element/UP-ucsd/TclFourNodeQuadUPCommand.cpp"
-    "${OPS_SRC_DIR}/element/UWelements/Tcl_generateInterfacePoints.cpp"
     "${OPS_SRC_DIR}/element/adapter/TclActuatorCommand.cpp"
     "${OPS_SRC_DIR}/element/adapter/TclActuatorCorotCommand.cpp"
     "${OPS_SRC_DIR}/element/adapter/TclAdapterCommand.cpp"
@@ -100,4 +99,10 @@ target_sources(OPS_InterpTcl PRIVATE
     #"${OPS_SRC_DIR}/tcl/TclVideoPlayer.cpp"
 )
 
-
+# With MSVC this file is compiled per executable; see
+# OPS_INTERP_TCL_PER_TARGET_SOURCES in the top-level CMakeLists.txt.
+if(NOT MSVC)
+  target_sources(OPS_InterpTcl PRIVATE
+    "${OPS_SRC_DIR}/element/UWelements/Tcl_generateInterfacePoints.cpp"
+  )
+endif()
