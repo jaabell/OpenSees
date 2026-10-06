@@ -1944,11 +1944,14 @@ int OPS_Algorithm()
 	opserr<<"WARNING unknown algorithm type "<<type<<"\n";
     }
 
+    if (theAlgo == 0) {
+	opserr << "WARNING failed to create algorithm - previous algorithm left unchanged\n";
+	return -1;
+    }
+
     // set algorithm
-    if (theAlgo != 0) {
-	if (cmds != 0) {
-	    cmds->setAlgorithm(theAlgo);
-	}
+    if (cmds != 0) {
+	cmds->setAlgorithm(theAlgo);
     }
 
     return 0;
