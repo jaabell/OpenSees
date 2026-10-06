@@ -402,7 +402,7 @@ int GeneralizedAlpha::update(const Vector &deltaU)
 
     
     // update the response at the DOFs
-    theModel->setResponse(*Ualpha,*Ualphadot,*Udotdot);        
+    theModel->setResponse(*Ualpha,*Ualphadot,*Ualphadotdot);        
     if (theModel->updateDomain() < 0)  {
         opserr << "GeneralizedAlpha::update() - failed to update the domain\n";
         return -4;
