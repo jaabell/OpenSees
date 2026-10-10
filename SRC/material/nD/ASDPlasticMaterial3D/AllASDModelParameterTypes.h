@@ -36,13 +36,13 @@ struct PoissonsRatioName { static constexpr const char* name = "PoissonsRatio";}
 using PoissonsRatio = ModelParameterType<double, PoissonsRatioName>;
 
 struct ReferenceYoungsModulusName { static constexpr const char* name = "ReferenceYoungsModulus";};  // Bulk modulus at reference pressure
-using ReferenceYoungsModulus = ModelParameterType<double, YoungsModulusName>;
+using ReferenceYoungsModulus = ModelParameterType<double, ReferenceYoungsModulusName>;
 struct ReferencePressureName { static constexpr const char* name = "ReferencePressure";};       // The reference pressure
-using ReferencePressure = ModelParameterType<double, YoungsModulusName>;
+using ReferencePressure = ModelParameterType<double, ReferencePressureName>;
 struct DuncanChang_MaxSigma3Name { static constexpr const char* name = "DuncanChang_MaxSigma3";};       // The reference pressure
-using DuncanChang_MaxSigma3 = ModelParameterType<double, YoungsModulusName>;
+using DuncanChang_MaxSigma3 = ModelParameterType<double, DuncanChang_MaxSigma3Name>;
 struct DuncanChang_nName { static constexpr const char* name = "DuncanChang_n";};       // The reference pressure
-using DuncanChang_n = ModelParameterType<double, YoungsModulusName>;
+using DuncanChang_n = ModelParameterType<double, DuncanChang_nName>;
 
 
 // ============================================================================
