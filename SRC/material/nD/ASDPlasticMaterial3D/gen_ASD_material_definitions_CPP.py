@@ -102,6 +102,50 @@ createASDPlasticMaterial3D<
 
 
 # ============================================================================
+# STIFF SOIL MODEL DEFINITIONS
+# ============================================================================
+
+# Template for Stiff Soil models (YF and PF share the same IV type)
+stiffsoil_template = """
+createASDPlasticMaterial3D<
+        {EL}, 
+        {YF}<
+            {IV}
+            >, 
+        {PF}<
+            {IV}
+            >
+        > (instance_tag, yf_type, pf_type, el_type, iv_type, instance_pointers, available_models);
+"""
+
+# Stiff Soil model configurations
+# Each entry is (Elasticity, YieldFunction, PlasticFlow, InternalVariable)
+STIFFSOIL_MODELS = [
+    # Deviatoric (Shear) mechanism
+    {
+        "EL": "StiffSoil_EL",
+        "YF": "StiffSoilShear_YF",
+        "PF": "StiffSoilShear_PF",
+        "IV": "EpsQpShear"
+    },
+    # Cap (Volumetric) mechanism
+    {
+        "EL": "StiffSoil_EL",
+        "YF": "StiffSoilCap_YF",
+        "PF": "StiffSoilCap_PF",
+        "IV": "CapPressure"
+    },
+    # Cap mechanism with linear hardening (alternative)
+    {
+        "EL": "StiffSoil_EL",
+        "YF": "StiffSoilCap_YF",
+        "PF": "StiffSoilCap_PF",
+        "IV": "CapPressureLinear"
+    },
+]
+
+
+# ============================================================================
 # Generate output file
 # ============================================================================
 with open("ASD_material_definitions.cpp", "w") as fid:
@@ -121,5 +165,15 @@ with open("ASD_material_definitions.cpp", "w") as fid:
         for iv_yf in IV_YF[yf]:
             for iv_pf in IV_PF[pf]:
                 fid.write(template.format(EL=el, YF=yf, PF=pf, IV_YF=iv_yf, IV_PF=iv_pf))
+    
+    # -------------------------------------------------------------------------
+    # Stiff Soil models
+    # -------------------------------------------------------------------------
+    fid.write("\n// =========================================\n")
+    fid.write("// Stiff Soil (Hardening Soil) Models\n")
+    fid.write("// =========================================\n")
+    
+    for model in STIFFSOIL_MODELS:
+        fid.write(stiffsoil_template.format(**model))
 
 print("Generated ASD_material_definitions.cpp")

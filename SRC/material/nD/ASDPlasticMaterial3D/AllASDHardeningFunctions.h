@@ -150,6 +150,23 @@ struct ArmstrongFrederickPolicy {
 };
 
 
+
+#include "StiffSoil_HardeningFunctions.h"
+
+// Plastic deviatoric strain for shear mechanism
+struct EpsQpShearName { static constexpr const char* name = "EpsQpShear"; };
+using EpsQpShear = InternalVariableType<VoigtScalar, StiffSoilShearHardeningFunction, EpsQpShearName>;
+
+// Cap pressure for volumetric mechanism  
+struct CapPressureName { static constexpr const char* name = "CapPressure"; };
+using CapPressure = InternalVariableType<VoigtScalar, StiffSoilCapHardeningFunction, CapPressureName>;
+
+// Cap pressure with linear hardening (alternative)
+using CapPressureLinear = InternalVariableType<VoigtScalar, StiffSoilCapLinearHardeningFunction, CapPressureName>;
+
+
+
+
 // Aliases for HardeningFunction with specific hardening policies
 using TensorLinearHardeningFunction = HardeningFunction<VoigtVector, LinearHardeningForTensorPolicy>;
 using ScalarLinearHardeningFunction = HardeningFunction<VoigtScalar, LinearHardeningForScalarPolicy>;
