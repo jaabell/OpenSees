@@ -83,7 +83,11 @@ using DP_xi_c = ModelParameterType<double, DP_xi_c_Name>;
 struct DP_etabar_Name { static constexpr const char* name = "DP_etabar";};   // for non-associated DP, slope from dilatancy angle 
 using DP_etabar = ModelParameterType<double, DP_etabar_Name>;
 
+#include "HoekBrown_ParameterTypes.h"
+
+
 // ============================================================================
+
 // Model Parameters associated with Plastic flow
 
 // ============================================================================

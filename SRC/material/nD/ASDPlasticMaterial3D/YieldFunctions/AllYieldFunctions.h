@@ -29,3 +29,4 @@
 // #include "RoundedMohrCoulomb_YF.h"
 #include "MohrCoulomb_YF.h"
 #include "TensionCutoff_YF.h"
+#include "HoekBrown_YF.h"

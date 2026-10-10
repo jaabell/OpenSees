@@ -27,6 +27,7 @@
 #include "ASDPlasticMaterial3DGlobals.h"
 #include <string>
 #include "InternalVariableType.h"
+#include "AllASDHardeningFunctions.h"
 
 //Definitions of possible internal variables
 struct BackStressName { static constexpr const char* name = "BackStress";};
