@@ -73,10 +73,17 @@ void print_usage(void)
        "    f_absolute_tol (double value)\\ \n"
        "    stress_absolute_tol (double value)\\ \n"
        "    n_max_iterations (int value)\\ \n"
-       "    return_to_yield_surface (0 or 1)\\ \n"
-       "    method (string) : Forward_Euler | Runge_Kutta_45_Error_Control\\ \n"
-       "    tangent (string) : Elastic | Numerical_Algorithmic_FirstOrder | Numerical_Algorithmic_SecondOrder\\ \n"
+       "    rk45_dT_min (double value)\\ \n"
+       "    rk45_niter_max (int value)\\ \n"
+       "    return_to_yield_surface (string) : Disabled | One_Step_Return (default) | Iterative_Return\\ \n"
+       "    integration_method (string) : Backward_Euler (default) | Backward_Euler_LineSearch | Forward_Euler |\n"
+       "        Forward_Euler_Subincrement | Modified_Euler_Error_Control | Runge_Kutta_45_Error_Control\\ \n"
+       "    tangent_type (string) : Secant (default) | Elastic | Continuum |\n"
+       "        Numerical_Algorithmic_FirstOrder | Numerical_Algorithmic_SecondOrder\\ \n"
        "End_Integration_Options \\ \n"
+       "\n"
+       "To list the available YF/PF/EL/IV combinations (optionally for one yield function):\n"
+       "nDMaterial ASDPlasticMaterial3D $tag list <YF_type>\n"
        "\n";
 }
 
@@ -428,7 +435,7 @@ void populate_ASDPlasticMaterial3D(T* instance)
                     else
                     {
                         cout << "\n\nWARNING! Unrecognised ASDPlasticMaterial3D_Constitutive_Integration_Method name " << method_name << endl;
-                        cout << "Available methods: Forward_Euler, Forward_Euler_Subincrement, Modified_Euler_Error_Control, Runge_Kutta_45_Error_Control\n\n" << endl;
+                        cout << "Available methods: Backward_Euler, Backward_Euler_LineSearch, Forward_Euler, Forward_Euler_Subincrement, Modified_Euler_Error_Control, Runge_Kutta_45_Error_Control\n\n" << endl;
                         cout << "Defaulting to Modified_Euler_Error_Control\n\n" << endl;
                         method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Modified_Euler_Error_Control;
                     }
