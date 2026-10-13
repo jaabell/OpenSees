@@ -31,5 +31,10 @@ add_subdirectory(profileSPD)
 #add_subdirectory(cg)
 #add_subdirectory(petsc)
 #add_subdirectory(mumps)
+# MKL PARDISO (system Pardiso): OPS_HAVE_PARDISO is set in the top-level
+# CMakeLists.txt when MKL is found on Windows or MKL_PARDISO_LINUX is ON.
+if(OPS_HAVE_PARDISO)
+  add_subdirectory(pardiso)
+endif()
 add_subdirectory(itpack)
 

@@ -356,6 +356,10 @@ extern void OPS_SetReliabilityDomain(ReliabilityDomain *);
 #include <SymSparseLinSolver.h>
 #include <UmfpackGenLinSOE.h>
 #include <UmfpackGenLinSolver.h>
+#ifdef _PARDISO
+#include <PARDISOGenLinSOE.h>
+#include <PARDISOGenLinSolver.h>
+#endif
 #include <EigenSOE.h>
 #include <EigenSolver.h>
 #include <ArpackSOE.h>
@@ -3524,6 +3528,100 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
     // theSOE = new UmfpackGenLinSOE(*theSolver, factLVALUE, factorOnce, printTime);      
     theSOE = new UmfpackGenLinSOE(*theSolver);      
   }
+
+#ifdef _PARDISO
+  // system Pardiso <-matrixType 0|1|2> <-symmetric> <-spd> <-krylov L> <-stats>
+  //                <-deterministic> <-cbwr BRANCH>
+  // Same options as the OpenSeesPy command (OPS_PARDISOGenLinSolver).
+  else if ((strcmp(argv[1],"Pardiso") == 0) || (strcmp(argv[1],"PARDISO") == 0)) {
+
+    int matType = 0;   // 0 unsymmetric, 1 SPD, 2 symmetric indefinite
+    int statsFlag = 0;
+    int krylovDigits = 0;
+    int cnrBranch = -1;
+    int cnrKeepEnv = 0;
+    int count = 2;
+
+    while (count < argc) {
+      if (strcmp(argv[count],"-matrixType") == 0) {
+	if (count+1 >= argc) {
+	  opserr << "Pardiso Warning: -matrixType given with no value. "
+		 << "Unsymmetric matrix assumed\n";
+	  count++;
+	  continue;
+	}
+	if (Tcl_GetInt(interp, argv[count+1], &matType) != TCL_OK)
+	  return TCL_ERROR;
+	if (matType < 0 || matType > 2) {
+	  opserr << "Pardiso Warning: wrong -matrixType value (" << matType
+		 << "). Unsymmetric matrix assumed\n";
+	  matType = 0;
+	}
+	count++;
+      } else if (strcmp(argv[count],"-symmetric") == 0) {
+	matType = 2;
+      } else if (strcmp(argv[count],"-spd") == 0) {
+	matType = 1;
+      } else if (strcmp(argv[count],"-stats") == 0) {
+	statsFlag = 1;
+      } else if (strcmp(argv[count],"-krylov") == 0) {
+	if (count+1 >= argc) {
+	  opserr << "Pardiso Warning: -krylov given with no value. "
+		 << "Preconditioned CGS disabled\n";
+	  count++;
+	  continue;
+	}
+	if (Tcl_GetInt(interp, argv[count+1], &krylovDigits) != TCL_OK)
+	  return TCL_ERROR;
+	count++;
+      } else if (strcmp(argv[count],"-deterministic") == 0) {
+	if (cnrBranch < 0) {
+	  cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName("AUTO");
+	  cnrKeepEnv = 1;
+	}
+      } else if (strcmp(argv[count],"-cbwr") == 0) {
+	if (count+1 >= argc) {
+	  opserr << "Pardiso Error: -cbwr given with no branch name "
+		 << "(e.g. -cbwr AVX2)\n";
+	  return TCL_ERROR;
+	}
+	cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName(argv[count+1]);
+	cnrKeepEnv = 0;
+	if (cnrBranch < 0) {
+	  opserr << "Pardiso Error: unknown -cbwr branch " << argv[count+1]
+		 << " (use the MKL_CBWR names: AUTO, COMPATIBLE, SSE4_2, AVX, "
+		 << "AVX2, AVX512, AVX512_E1, AVX10[,STRICT])\n";
+	  return TCL_ERROR;
+	}
+	count++;
+      } else {
+	opserr << "Pardiso Warning: unknown option " << argv[count]
+	       << ", ignored\n";
+      }
+      count++;
+    }
+
+    PARDISOGenLinSolver *theSolver = new PARDISOGenLinSolver();
+    theSolver->setStats(statsFlag);
+    theSolver->setKrylov(krylovDigits);
+    // stop if MKL refuses the mode; the warning names the fix
+    if (cnrBranch >= 0 &&
+        theSolver->setDeterministic(cnrBranch, cnrKeepEnv) < 0) {
+      delete theSolver;
+      return TCL_ERROR;
+    }
+    theSOE = new PARDISOGenLinSOE(*theSolver, matType);
+  }
+#else
+  // Refuse explicitly: falling through would keep a previously set SOE.
+  else if ((strcmp(argv[1],"Pardiso") == 0) || (strcmp(argv[1],"PARDISO") == 0)) {
+    opserr << "WARNING system Pardiso is not available in this build. It "
+              "requires MKL and is enabled in the serial OpenSees and "
+              "OpenSeesPy targets only.\n"
+              "  Use UmfPack, or Mumps in OpenSeesSP/OpenSeesMP.\n";
+    return TCL_ERROR;
+  }
+#endif
 
 #ifdef _ITPACK
   else if (strcmp(argv[1],"Itpack") == 0) {

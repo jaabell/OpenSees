@@ -112,6 +112,11 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #endif
 #include <BackgroundMesh.h>
 
+#ifdef _PARDISO
+#include <PARDISOGenLinSOE.h>
+#include <PARDISOGenLinSolver.h>
+#endif
+
 #ifdef _ITPACK
 #include <ItpackLinSOE.h>
 #include <ItpackLinSolver.h>
@@ -1543,6 +1548,10 @@ int OPS_System()
 #ifdef _ITPACK
     } else if (strcmp(type,"Itpack") == 0) {
         theSOE = (LinearSOE*)OPS_ItpackLinSolver();
+#endif
+#ifdef _PARDISO
+    } else if (strcmp(type,"Pardiso") == 0 || strcmp(type,"PARDISO") == 0) {
+        theSOE = (LinearSOE*)OPS_PARDISOGenLinSolver();
 #endif
     } else {
     	opserr<<"WARNING unknown system type "<<type<<"\n";
@@ -3504,6 +3513,95 @@ void* OPS_MumpsSolver() {
 #endif
     return 0;
 }
+
+#ifdef _PARDISO
+// system Pardiso <-matrixType 0|1|2> <-symmetric> <-spd> <-krylov L> <-stats>
+//                <-deterministic> <-cbwr BRANCH>
+//
+// Intel oneMKL PARDISO on the serial interpreter. The thread count comes from
+// MKL_NUM_THREADS (or OMP_NUM_THREADS). -matrixType uses the Mumps numbering:
+// 0 unsymmetric (default), 1 symmetric positive definite, 2 symmetric
+// indefinite; -symmetric and -spd are aliases for 2 and 1. -deterministic
+// turns on MKL conditional numerical reproducibility (AUTO branch, or the one
+// set by MKL_CBWR); -cbwr selects the branch and implies -deterministic.
+//
+// A parse error degrades to the default with a warning instead of returning
+// 0: a null SOE would leave the analysis on the default ProfileSPD solver.
+void* OPS_PARDISOGenLinSolver() {
+    int matType = 0;
+    int statsFlag = 0;
+    int krylovDigits = 0;
+    int cnrBranch = -1;
+    int cnrKeepEnv = 0;
+
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+        const char* opt = OPS_GetString();
+        int num = 1;
+        if (strcmp(opt, "-matrixType") == 0) {
+            if (OPS_GetIntInput(&num, &matType) < 0) {
+                opserr << "WARNING system Pardiso - failed to get -matrixType "
+                          "(pass an integer). Unsymmetric matrix assumed\n";
+                matType = 0;
+                continue;
+            }
+            if (matType < 0 || matType > 2) {
+                opserr << "WARNING system Pardiso - wrong -matrixType value ("
+                       << matType << "). Unsymmetric matrix assumed\n";
+                matType = 0;
+            }
+        } else if (strcmp(opt, "-symmetric") == 0) {
+            matType = 2;
+        } else if (strcmp(opt, "-spd") == 0) {
+            matType = 1;
+        } else if (strcmp(opt, "-stats") == 0) {
+            statsFlag = 1;
+        } else if (strcmp(opt, "-krylov") == 0) {
+            if (OPS_GetIntInput(&num, &krylovDigits) < 0) {
+                opserr << "WARNING system Pardiso - failed to get -krylov "
+                          "digits (pass an integer, e.g. -krylov 6). "
+                          "Preconditioned CGS disabled\n";
+                krylovDigits = 0;
+                continue;
+            }
+        } else if (strcmp(opt, "-deterministic") == 0) {
+            if (cnrBranch < 0) {
+                cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName("AUTO");
+                cnrKeepEnv = 1;
+            }
+        } else if (strcmp(opt, "-cbwr") == 0) {
+            if (OPS_GetNumRemainingInputArgs() < 1) {
+                opserr << "WARNING system Pardiso - -cbwr given with no branch "
+                          "name; using AUTO\n";
+                cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName("AUTO");
+                cnrKeepEnv = 0;
+                continue;
+            }
+            const char *name = OPS_GetString();
+            cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName(name);
+            cnrKeepEnv = 0;
+            if (cnrBranch < 0) {
+                opserr << "WARNING system Pardiso - unknown -cbwr branch " << name
+                       << " (use the MKL_CBWR names: AUTO, COMPATIBLE, SSE4_2, "
+                          "AVX, AVX2, AVX512, AVX512_E1, AVX10[,STRICT]); "
+                          "using AUTO\n";
+                cnrBranch = PARDISOGenLinSolver::cbwrBranchFromName("AUTO");
+            }
+        } else {
+            opserr << "WARNING system Pardiso - unknown option " << opt
+                   << ", ignored\n";
+        }
+    }
+
+    PARDISOGenLinSolver *theSolver = new PARDISOGenLinSolver();
+    theSolver->setStats(statsFlag);
+    theSolver->setKrylov(krylovDigits);
+    // a refused mode has warned; the run continues and the first solve
+    // reports CNR NOT ACTIVE
+    if (cnrBranch >= 0)
+        theSolver->setDeterministic(cnrBranch, cnrKeepEnv);
+    return new PARDISOGenLinSOE(*theSolver, matType);
+}
+#endif
 
 // Sensitivity:BEGIN /////////////////////////////////////////////
 

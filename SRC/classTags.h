@@ -1189,6 +1189,7 @@
 #define SOLVER_TAGS_CuSP                                31
 #define SOLVER_TAGS_PFEMQuasiSolver                     32
 #define SOLVER_TAGS_PFEMDiaSolver                       33
+#define SOLVER_TAGS_PARDISOGenLinSolver                 34
 #define SOLVER_TAGS_SparsePythonCompressedLinSolver     100201
 #define SOLVER_TAGS_SparsePythonCOOLinSolver            100202
 
