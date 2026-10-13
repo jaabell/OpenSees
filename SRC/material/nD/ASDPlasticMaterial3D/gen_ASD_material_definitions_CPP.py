@@ -26,7 +26,7 @@ YF = [
 PF = [
     "VonMises_PF",
     "DruckerPrager_PF",
-    # "ConstantDilatancy_PF",
+    "ConstantDilatancy_PF",
     "MohrCoulomb_PF",
     "HoekBrown_PF"
 ]
