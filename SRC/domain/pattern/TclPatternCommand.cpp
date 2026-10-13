@@ -536,7 +536,8 @@ TclPatternCommand(ClientData clientData, Tcl_Interp *interp,
               return TCL_ERROR;
         }
       }
-      double stuff[12];
+      // T00..T22 (rotation) and x00..x02 (offset): identity / zero unless all 12 are given (was uninitialized)
+      double stuff[12] = {1.0, 0.0, 0.0,  0.0, 1.0, 0.0,  0.0, 0.0, 1.0,  0.0, 0.0, 0.0};
       if(argc > 7+12)
       {
         for (int i = 0; i < 12; ++i)

@@ -70,6 +70,53 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <ThermalHeatSource.h>
 #include <ThermalBoundaryConditionTemperature.h>
 
+#ifdef _H5DRM
+#include <H5DRMLoadPattern.h>
+#include <string>
+// pattern('H5DRM', tag, filename, factor=1.0, crd_scale=1.0, distance_tolerance=1e-3,
+//         do_coordinate_transformation=1, T00, T01, T02, T10, T11, T12, T20, T21, T22, x00, x01, x02)
+// Same arguments as the Tcl command. The 12 transformation values are optional as a group and default to
+// the identity rotation and zero offset.
+static void* OPS_H5DRMPattern()
+{
+    if (OPS_GetNumRemainingInputArgs() < 2) {
+        opserr << "WARNING want: pattern('H5DRM', tag, filename, <factor, crd_scale, distance_tolerance, "
+                  "do_coordinate_transformation, T00, T01, T02, T10, T11, T12, T20, T21, T22, x00, x01, x02>)\n";
+        return 0;
+    }
+    int numData = 1;
+    int tag = 0;
+    if (OPS_GetIntInput(&numData, &tag) < 0) {
+        opserr << "WARNING pattern H5DRM: invalid tag\n";
+        return 0;
+    }
+    std::string filename = OPS_GetString();
+
+    double opts[3] = {1.0, 1.0, 1e-3};          // factor, crd_scale, distance_tolerance
+    for (int i = 0; i < 3 && OPS_GetNumRemainingInputArgs() > 0; i++) {
+        if (OPS_GetDoubleInput(&numData, &opts[i]) < 0) {
+            opserr << "WARNING pattern H5DRM " << tag << ": invalid factor/crd_scale/distance_tolerance\n";
+            return 0;
+        }
+    }
+    int do_transform = 1;
+    if (OPS_GetNumRemainingInputArgs() > 0 && OPS_GetIntInput(&numData, &do_transform) < 0) {
+        opserr << "WARNING pattern H5DRM " << tag << ": invalid do_coordinate_transformation\n";
+        return 0;
+    }
+    double T[12] = {1.0, 0.0, 0.0,  0.0, 1.0, 0.0,  0.0, 0.0, 1.0,  0.0, 0.0, 0.0};
+    if (OPS_GetNumRemainingInputArgs() > 0) {
+        int n = 12;
+        if (OPS_GetNumRemainingInputArgs() < 12 || OPS_GetDoubleInput(&n, T) < 0) {
+            opserr << "WARNING pattern H5DRM " << tag << ": the transformation needs 12 values (T00 .. T22, x00, x01, x02)\n";
+            return 0;
+        }
+    }
+    return new H5DRMLoadPattern(tag, filename, opts[0], opts[1], opts[2], do_transform != 0,
+                                T[0], T[1], T[2], T[3], T[4], T[5], T[6], T[7], T[8], T[9], T[10], T[11]);
+}
+#endif
+
 void* OPS_LoadPattern();
 void* OPS_UniformExcitationPattern();
 void* OPS_MultiSupportPattern();
@@ -113,6 +160,12 @@ int OPS_Pattern()
 	theActiveMultiSupportPattern = (MultiSupportPattern*)OPS_MultiSupportPattern();
 	pattern = theActiveMultiSupportPattern;
 
+#ifdef _H5DRM
+    } else if (strcmp(type, "H5DRM") == 0 || strcmp(type, "h5drm") == 0) {
+
+	pattern = (LoadPattern*)OPS_H5DRMPattern();
+
+#endif
     } else {
 	opserr<<"WARNING unknown pattern type"<<type<<"\n";
 	return -1;
