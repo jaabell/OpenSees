@@ -73,7 +73,7 @@ enum struct ASDPlasticMaterial3D_Tangent_Operator_Type : int
 
 };
 
-void printTensor1(std::string const& name, VoigtVector const& v)
+inline void printTensor1(std::string const& name, VoigtVector const& v)
 {
     // This is in good format but take 3 lines.
     // stderr will print immediately, not like cout (may be reordered by CPU).
@@ -82,7 +82,7 @@ void printTensor1(std::string const& name, VoigtVector const& v)
 
 }
 
-void printTensor2(std::string const& name, VoigtMatrix const& v)
+inline void printTensor2(std::string const& name, VoigtMatrix const& v)
 {
     std::cout << name << " = [ " ;
     for (int ii = 0; ii < 6; ii++)
