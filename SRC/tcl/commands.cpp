@@ -3066,8 +3066,10 @@ static ExternalClassFunction *theExternalStaticIntegratorCommands = NULL;
 static ExternalClassFunction *theExternalTransientIntegratorCommands = NULL;
 static ExternalClassFunction *theExternalAlgorithmCommands = NULL;
 
-int 
-specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+// Builds the system named in argv and stores it in theSOE. Called only from
+// specifySOE below, which clears theSOE first.
+static int
+specifySOEImpl(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
   // make sure at least one other argument to contain type of system
   if (argc < 2) {
@@ -3766,6 +3768,30 @@ specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   }
 }
 
+// The final check in specifySOEImpl reads theSOE. When a call creates
+// nothing (an unknown type, or system PFEM with an unknown option) and a
+// system was set before, theSOE still holds the previous system, so the call
+// returned TCL_OK. With an analysis present it also passed that same pointer
+// to setLinearSOE, which deletes the current system before storing the new
+// one, so the analysis kept a deleted system and the next analyze crashed.
+// theSOE is therefore cleared before the call and restored when no new
+// system was created.
+int
+specifySOE(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  LinearSOE *prevSOE = theSOE;
+  theSOE = 0;
+
+  int res = specifySOEImpl(clientData, interp, argc, argv);
+  if (theSOE != 0)
+    return res;
+
+  theSOE = prevSOE;
+  if (prevSOE != 0)
+    opserr << "WARNING failed to create system - previous system left unchanged\n";
+  return TCL_ERROR;
+}
+
 
 
 //
@@ -3896,9 +3922,13 @@ specifyConstraintHandler(ClientData clientData, Tcl_Interp *interp, int argc,
 
   else if (strcmp(argv[1],"Auto") == 0) {
       OPS_ResetInputNoBuilder(clientData, interp, 2, argc, argv, &theDomain);
-      theHandler = (ConstraintHandler*)OPS_AutoConstraintHandler();
-      if (theHandler == 0)
+      // keep the current handler when the options are rejected
+      ConstraintHandler *theAutoHandler = (ConstraintHandler*)OPS_AutoConstraintHandler();
+      if (theAutoHandler == 0) {
+          opserr << "WARNING failed to create constraint handler - previous constraint handler left unchanged\n";
           return TCL_ERROR;
+      }
+      theHandler = theAutoHandler;
   }
 
   else {
@@ -4314,8 +4344,21 @@ specifyCTest(ClientData clientData, Tcl_Interp *interp, int argc,
 //
 // command invoked to allow the Integrator object to be built
 //
-int 
-specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc, 
+
+// Passes the integrator to an existing analysis. A factory that rejects its
+// options returns null, and dereferencing it here would crash.
+template <class AnalysisType, class IntegratorType>
+static void
+setIntegratorIfAny(AnalysisType *theAnalysis, IntegratorType *theIntegrator)
+{
+  if (theAnalysis != 0 && theIntegrator != 0)
+    theAnalysis->setIntegrator(*theIntegrator);
+}
+
+// Builds the integrator named in argv and stores it in theStaticIntegrator or
+// theTransientIntegrator. Called only from specifyIntegrator below.
+static int
+specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
 		  TCL_Char **argv)
 {
 
@@ -4365,7 +4408,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
-    theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+    setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
       } else if (strcmp(argv[1],"StagedLoadControl") == 0) {
       double dLambda;
       double minIncr, maxIncr;
@@ -4393,7 +4436,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
   
       if (theStaticAnalysis != 0)
-        theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+        setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
       }
 
   //else if (strcmp(argv[1],"HarmonicSteadyState") == 0 || strcmp(argv[1],"HarmonicSS") == 0) {
@@ -4415,7 +4458,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
-    theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+    setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
 
   else if (strcmp(argv[1],"ArcLength1") == 0) {
@@ -4433,7 +4476,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
-    theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+    setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
   /************************added for HSConstraint*************************************/
   
@@ -4468,7 +4511,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	}
     // if the analysis exists - we want to change the Integrator
     if (theStaticAnalysis != 0)
-    	theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+    	setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
   /*********************************************************************************/
   
@@ -4506,7 +4549,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
       // if the analysis exists - we want to change the Integrator
       if (theStaticAnalysis != 0)
-	theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+	setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
 
   else if (strcmp(argv[1], "EQPath") == 0) {
@@ -4544,7 +4587,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
 		// if the analysis exists - we want to change the Integrator
 		if (theStaticAnalysis != 0)
-			theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+			setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }	
   
   else if (strcmp(argv[1],"DisplacementControl") == 0) {
@@ -4613,7 +4656,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
       // if the analysis exists - we want to change the Integrator
       if (theStaticAnalysis != 0) 
-	theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+	setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }  
 
 
@@ -4659,7 +4702,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
       // if the analysis exists - we want to change the Integrator
       if (theStaticAnalysis != 0)
-	theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+	setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
 #endif
 
@@ -4696,7 +4739,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
     
     // if the analysis exists - we want to change the Integrator
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"GimmeMCK") == 0 || strcmp(argv[1],"ZZTop") == 0) {
@@ -4707,42 +4750,42 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
     
     // if the analysis exists - we want to change the Integrator
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   else if (strcmp(argv[1],"PFEM") == 0) {
     theTransientIntegrator = new PFEMIntegrator();
 
     // if the analysis exists - we want to change the Integrator
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   } 
 
   else if (strcmp(argv[1],"NewmarkExplicit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_NewmarkExplicit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"NewmarkHSIncrReduct") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_NewmarkHSIncrReduct();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"NewmarkHSIncrLimit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_NewmarkHSIncrLimit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"NewmarkHSFixedNumIter") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_NewmarkHSFixedNumIter();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
 // #ifdef _RELIABILITY
@@ -4957,175 +5000,175 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
     theTransientIntegrator = (TransientIntegrator *)OPS_HHT();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHT_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHT_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTGeneralized") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTGeneralized();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTGeneralized_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTGeneralized_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTExplicit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTExplicit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTExplicit_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTExplicit_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTGeneralizedExplicit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTGeneralizedExplicit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTGeneralizedExplicit_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTGeneralizedExplicit_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSIncrLimit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSIncrLimit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSIncrLimit_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSIncrLimit_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSIncrReduct") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSIncrReduct();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSIncrReduct_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSIncrReduct_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSFixedNumIter") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSFixedNumIter();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"HHTHSFixedNumIter_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHTHSFixedNumIter_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"GeneralizedAlpha") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_GeneralizedAlpha();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"KRAlphaExplicit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_KRAlphaExplicit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"KRAlphaExplicit_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_KRAlphaExplicit_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"AlphaOS") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_AlphaOS();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"AlphaOS_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_AlphaOS_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"AlphaOSGeneralized") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_AlphaOSGeneralized();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"AlphaOSGeneralized_TP") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_AlphaOSGeneralized_TP();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"Collocation") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_Collocation();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"CollocationHSIncrReduct") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CollocationHSIncrReduct();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"CollocationHSIncrLimit") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CollocationHSIncrLimit();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"CollocationHSFixedNumIter") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CollocationHSFixedNumIter();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"Newmark1") == 0) {
@@ -5170,63 +5213,63 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
       // if the analysis exists - we want to change the Integrator
 	  if (theTransientAnalysis != 0)
-		theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+		setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"WilsonTheta") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_WilsonTheta();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"ExplicitDifference") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_ExplicitDifference();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
 
   else if (strcmp(argv[1],"CentralDifference") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CentralDifference();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }  
   
   else if (strcmp(argv[1], "Explicitdifference") == 0) {
   theTransientIntegrator = new ExplicitDifference();
 
   if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
 
   else if (strcmp(argv[1],"CentralDifferenceAlternative") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CentralDifferenceAlternative();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"CentralDifferenceNoDamping") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_CentralDifferenceNoDamping();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
 
   else if (strcmp(argv[1],"ExplicitBathe") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_ExplicitBathe();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
 
   else if (strcmp(argv[1],"ExplicitDifferenceStatic") == 0) {
     theTransientIntegrator = (TransientIntegrator *) OPS_ExplicitDifferenceStatic();
     
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
   else if (strcmp(argv[1],"Transient") == 0) {
@@ -5294,7 +5337,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
     // if the analysis exists - we want to change the Integrator
     if (theTransientAnalysis != 0)
-      theTransientAnalysis->setIntegrator(*theTransientIntegrator);
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
 
   else if (strcmp(argv[1],"Static") == 0) {
@@ -5362,7 +5405,7 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 
     // if the analysis exists - we want to change the Integrator
     if (theStaticAnalysis != 0)
-      theStaticAnalysis->setIntegrator(*theStaticIntegrator);
+      setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
 
   else {
@@ -5395,6 +5438,34 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 #endif
 
   return TCL_OK;
+}
+
+// Most branches of specifyIntegratorImpl store the factory result and return
+// TCL_OK without checking it. A refused integrator (for example Newmark
+// without gamma and beta) therefore left a null pointer in the global, and
+// the next analysis command silently built the default integrator. The
+// previous integrator is restored and the command fails when no new
+// integrator was created. A new object cannot have the address of the
+// previous one, which is still alive.
+int
+specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
+		  TCL_Char **argv)
+{
+  StaticIntegrator *prevStatic = theStaticIntegrator;
+  TransientIntegrator *prevTransient = theTransientIntegrator;
+
+  int res = specifyIntegratorImpl(clientData, interp, argc, argv);
+
+  bool created =
+    (theStaticIntegrator != 0 && theStaticIntegrator != prevStatic) ||
+    (theTransientIntegrator != 0 && theTransientIntegrator != prevTransient);
+  if (created)
+    return res;
+
+  theStaticIntegrator = prevStatic;
+  theTransientIntegrator = prevTransient;
+  opserr << "WARNING failed to create integrator - previous integrator left unchanged\n";
+  return TCL_ERROR;
 }
 
 
