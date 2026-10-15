@@ -22,6 +22,24 @@
 #include <string.h>
 #include <elementAPI.h>
 
+// setSubStrainRate() sizes the substep loop of getStress() as the octahedral
+// shear strain increment over 1e-5 or the volumetric strain increment over
+// 1e-5, converted to int, with no upper bound. A trial increment produced by a
+// divergent Newton iterate can ask for 1e8 or more substeps per call, so the
+// analysis does not return, and past INT_MAX the conversion is undefined.
+// Increments that need more than maxNumSubIncre substeps are rejected by
+// setTrialStrain() and setTrialStrainIncr(), and setSubStrainRate() caps the
+// loop for elements that ignore the return code. The check uses the same
+// expressions as setSubStrainRate(), so smaller increments are unaffected.
+static const double maxNumSubIncre = 1.0e5;
+
+static bool
+tooManySubIncre(const T2Vector &rate)
+{
+  return rate.octahedralShear(1) / 1.0e-5 > maxNumSubIncre
+    || rate.volume() / 1.e-5 > maxNumSubIncre;
+}
+
 int PressureDependMultiYield03::matCount=0;
 int* PressureDependMultiYield03::loadStagex = 0;  //=0 if elastic; =1 if plastic
 int* PressureDependMultiYield03::ndmx=0;  //num of dimensions (2 or 3)
@@ -593,6 +611,11 @@ int PressureDependMultiYield03::setTrialStrain (const Vector &strain)
   workV6 -= currentStrain.t2Vector(1);
   strainRate.setData(workV6, 1);
 
+  if (loadStagex[matN] == 1 && tooManySubIncre(strainRate)) {
+    opserr << "WARNING PressureDependMultiYield03::setTrialStrain - strain increment needs more than "
+           << maxNumSubIncre << " substeps; increment rejected\n";
+    return -1;
+  }
   return 0;
 }
 
@@ -625,6 +648,11 @@ int PressureDependMultiYield03::setTrialStrainIncr (const Vector &strain)
   }
 
   strainRate.setData(workV6,1);
+  if (loadStagex[matN] == 1 && tooManySubIncre(strainRate)) {
+    opserr << "WARNING PressureDependMultiYield03::setTrialStrainIncr - strain increment needs more than "
+           << maxNumSubIncre << " substeps; increment rejected\n";
+    return -1;
+  }
   return 0;
 }
 
@@ -2144,6 +2172,13 @@ int PressureDependMultiYield03::setSubStrainRate(void)
   double totalCross = 3.*workT2V.octahedralShear() / sqrt(2.);
   int numOfSub = totalCross/singleCross + 1;
   if (numOfSub > numOfSurfaces) numOfSub = numOfSurfaces;
+
+  if (tooManySubIncre(strainRate)) {
+    numOfSub = (int)maxNumSubIncre;
+    workV6.addVector(0.0, strainRate.t2Vector(), 1.0/numOfSub);
+    subStrainRate.setData(workV6);
+    return numOfSub;
+  }
 
   int numOfSub1 = strainRate.octahedralShear(1) / 1.0e-5;
   int numOfSub2 = strainRate.volume() / 1.e-5;
