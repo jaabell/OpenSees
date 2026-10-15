@@ -89,8 +89,11 @@ class BandSPDLinSOE : public LinearSOE
     int Asize, Bsize;
     int aFactored;
     bool factored;
+    bool asymWarned;  // unsymmetric element matrix already reported
+                      // since the last setSize()
     
   private:
+    void reportAsymmetry(double dev, double scale);
 };
 
 

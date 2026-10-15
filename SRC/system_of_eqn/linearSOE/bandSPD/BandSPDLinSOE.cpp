@@ -44,11 +44,52 @@
 #include <iostream>
 using std::nothrow;
 
+// Only the upper triangle of A is stored, so addA() keeps m(j,i) for
+// row <= col and drops the mirrored entry. For an unsymmetric element matrix
+// (non-associated plasticity, follower loads, contact) the system solved is
+// then not the system assembled, and nothing says so. addA() therefore
+// compares each stored off-diagonal entry with its mirror. Exactly symmetric
+// matrices cost one extra load and compare per stored entry; mirrored
+// entries that differ only by round-off are accepted with a tolerance
+// relative to the larger of the two entries and the geometric mean of the
+// two diagonal terms. The numbers assembled and solved are unchanged.
+static const double ASYM_REL_TOL = 1.0e-8;
+
+static inline bool
+mirrorDiffers(const Matrix &m, int j, int i, double &dev, double &scale)
+{
+    double u = m(j,i);
+    double v = m(i,j);
+    if (u == v)
+	return false;
+    double s = sqrt(fabs(m(i,i)*m(j,j)));
+    if (fabs(u) > s) s = fabs(u);
+    if (fabs(v) > s) s = fabs(v);
+    double dv = fabs(u - v);
+    if (dv <= ASYM_REL_TOL * s)
+	return false;
+    dev = dv;
+    scale = s;
+    return true;
+}
+
+void
+BandSPDLinSOE::reportAsymmetry(double dev, double scale)
+{
+    asymWarned = true;
+    opserr << "WARNING BandSPDLinSOE::addA() - unsymmetric element matrix (|m(i,j) - m(j,i)| = "
+	   << dev << " for entries of magnitude " << scale << ").\n"
+	   << "  This system stores only the upper triangle; the lower triangle is discarded\n"
+	   << "  and the solved system is the symmetric one built from the upper triangle.\n"
+	   << "  Use an unsymmetric system (BandGeneral, UmfPack, SparseGeneral, FullGeneral).\n"
+	   << "  Reported once until the system of equations is set up again.\n";
+}
+
 BandSPDLinSOE::BandSPDLinSOE(BandSPDLinSolver &the_Solver)
 :LinearSOE(the_Solver, LinSOE_TAGS_BandSPDLinSOE),
  size(0), half_band(0), A(0), B(0), X(0), vectX(0), vectB(0),
  Asize(0), Bsize(0),
- factored(false)
+ factored(false), asymWarned(false)
 {
     the_Solver.setLinearSOE(*this);
 }
@@ -58,7 +99,7 @@ BandSPDLinSOE::BandSPDLinSOE(BandSPDLinSolver &the_Solver, int classTag)
 :LinearSOE(the_Solver, classTag),
  size(0), half_band(0), A(0), B(0), X(0), vectX(0), vectB(0),
  Asize(0), Bsize(0),
- factored(false)
+ factored(false), asymWarned(false)
 {
 
 }
@@ -68,7 +109,7 @@ BandSPDLinSOE::BandSPDLinSOE(int classTag)
 :LinearSOE(classTag),
  size(0), half_band(0), A(0), B(0), X(0), vectX(0), vectB(0),
  Asize(0), Bsize(0),
- factored(false)
+ factored(false), asymWarned(false)
 {
 
 }
@@ -79,7 +120,7 @@ BandSPDLinSOE::BandSPDLinSOE(int N, int numSuper,
 :LinearSOE(the_Solver, LinSOE_TAGS_BandSPDLinSOE),
  size(0), half_band(0), A(0), B(0), X(0), vectX(0), vectB(0),
  Asize(0), Bsize(0),
- factored(false)
+ factored(false), asymWarned(false)
 {
     size = N;
     half_band = numSuper+1;
@@ -242,6 +283,9 @@ BandSPDLinSOE::setSize(Graph &theGraph)
 	return solverOK;
     }    
 
+    // a new analysis or a new equation numbering reports again
+    asymWarned = false;
+
     return result;    
 }
 
@@ -258,6 +302,10 @@ BandSPDLinSOE::addA(const Matrix &m, const ID &id, double fact)
 	return -1;
     }
 
+    bool checkSym = !asymWarned;
+    bool asymFound = false;
+    double asymDev = 0.0, asymScale = 0.0;
+
     if (fact == 1.0) { // do not need to multiply 
 	for (int i=0; i<idSize; i++) {
 	    int col = id(i);
@@ -270,6 +318,11 @@ BandSPDLinSOE::addA(const Matrix &m, const ID &id, double fact)
 			row <= col && row >= minColRow) { // only add upper
 			 double *APtr = coliiPtr + (row-col);
 			 *APtr += m(j,i);
+			if (checkSym && row < col &&
+			    mirrorDiffers(m, j, i, asymDev, asymScale)) {
+			    checkSym = false;
+			    asymFound = true;
+			}
 		     }
 		}  // for j
 	    } 
@@ -286,11 +339,20 @@ BandSPDLinSOE::addA(const Matrix &m, const ID &id, double fact)
 			row <= col && row >= minColRow) { // only add upper
 			 double *APtr = coliiPtr + (row-col);
 			 *APtr += m(j,i)*fact;
+			if (checkSym && row < col &&
+			    mirrorDiffers(m, j, i, asymDev, asymScale)) {
+			    checkSym = false;
+			    asymFound = true;
+			}
 		     }
 		}  // for j
 	    } 
 	}  // for i
     }
+
+    if (asymFound)
+	this->reportAsymmetry(asymDev, asymScale);
+
     return 0;
 }
 

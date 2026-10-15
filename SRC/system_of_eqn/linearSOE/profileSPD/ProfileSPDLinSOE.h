@@ -88,8 +88,11 @@ class ProfileSPDLinSOE : public LinearSOE
     int Asize, Bsize;
     bool isAfactored, isAcondensed;
     int numInt;
+    bool asymWarned;  // unsymmetric element matrix already reported
+                      // since the last setSize()
     
   private:
+    void reportAsymmetry(double dev, double scale);
 };
 
 
