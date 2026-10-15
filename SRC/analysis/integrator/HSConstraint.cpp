@@ -155,7 +155,10 @@ HSConstraint::newStep(void)
     // update model with delta lambda and delta U
     theModel->incrDisp(*deltaU);
     theModel->applyLoadDomain(currentLambda);
-    theModel->updateDomain();
+    if (theModel->updateDomain() < 0) {
+      opserr << "HSConstraint::newStep - model failed to update for new dU\n";
+      return -1;
+    }
 
     return 0;
 }
@@ -257,7 +260,10 @@ HSConstraint::update(const Vector &dU)
     // update the model
     theModel->incrDisp(*deltaU);
     theModel->applyLoadDomain(currentLambda);
-    theModel->updateDomain();
+    if (theModel->updateDomain() < 0) {
+      opserr << "HSConstraint::update - model failed to update for new dU\n";
+      return -1;
+    }
 
     // set the X soln in linearSOE to be deltaU for convergence Test
     theLinSOE->setX(*deltaU);

@@ -121,7 +121,10 @@ LoadPath::update(const Vector &deltaU)
     }
 
     myModel->incrDisp(deltaU);    
-    myModel->updateDomain();
+    if (myModel->updateDomain() < 0) {
+      opserr << "LoadPath::update - model failed to update for new dU\n";
+      return -1;
+    }
     return 0;
 }
 

@@ -216,7 +216,10 @@ ArcLength::newStep(void)
 
          /////
     theModel->applyLoadDomain(currentLambda);    
-    theModel->updateDomain();
+    if (theModel->updateDomain() < 0) {
+      opserr << "ArcLength::newStep - model failed to update for new dU\n";
+      return -1;
+    }
 //opserr<<" newStep:   end"<<endln;
 
     return 0;
@@ -302,7 +305,10 @@ dLAMBDA2=dLambda;
     theModel->applyLoadDomain(currentLambda);    
 
 
-    theModel->updateDomain();
+    if (theModel->updateDomain() < 0) {
+      opserr << "ArcLength::update - model failed to update for new dU\n";
+      return -1;
+    }
     
     // set the X soln in linearSOE to be deltaU for convergence Test
     theLinSOE->setX(*deltaU);
