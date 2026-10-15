@@ -93,7 +93,8 @@ ContactMaterial2D::ContactMaterial2D (int tag, double mu, double G, double c, do
  : NDMaterial(tag,ND_TAG_ContactMaterial2D),
    strain_vec(3),
    stress_vec(3),
-   tangent_matrix(3,3)
+   tangent_matrix(3,3),
+   initialTangent(3,3)
 {
 #ifdef DEBUG
         opserr << "ContactMaterial2D::ContactMaterial2D" << endln;
@@ -114,7 +115,8 @@ ContactMaterial2D::ContactMaterial2D ()
  : NDMaterial(0, ND_TAG_ContactMaterial2D),
    strain_vec(3),
    stress_vec(3),
-   tangent_matrix(3,3)
+   tangent_matrix(3,3),
+   initialTangent(3,3)
 {
         frictionCoeff = 0.0;
         stiffness = 1.0;
@@ -301,7 +303,15 @@ const Matrix & ContactMaterial2D::getInitialTangent ()
         opserr << "ContactMaterial2D::getInitialTangent()" << endln;
 #endif
 
-    return tangent_matrix;      //tangent is empty matrix
+    // Elastic (sticking) tangent in its own buffer. Returning
+    // tangent_matrix made the result depend on the last getTangent() call,
+    // and on a new material it was the zero matrix.
+    initialTangent.Zero();
+    initialTangent(0,2) = 1.0;
+    initialTangent(1,1) = stiffness;
+    initialTangent(2,0) = 1.0;
+
+    return initialTangent;
 }
 
 

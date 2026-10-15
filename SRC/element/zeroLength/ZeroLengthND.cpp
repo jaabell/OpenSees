@@ -394,11 +394,13 @@ ZeroLengthND::getTangentStiff(void)
 	double E;
 
 	// Compute element stiffness ... K = A^*kb*A
+	// The full i,j range is assembled because the NDMaterial tangent is
+	// not symmetric in general (non-associated flow, frictional sliding).
 	for (int k = 0; k < order; k++) {
 		for (int l = 0; l < order; l++) {
 			E = kb(k,l);
 			for (int i = 0; i < numDOF; i++)
-				for (int j = 0; j < i+1; j++)
+				for (int j = 0; j < numDOF; j++)
 					stiff(i,j) +=  tran(k,i) * E * tran(l,j);
 		}
 	}
@@ -413,14 +415,9 @@ ZeroLengthND::getTangentStiff(void)
 
 		// Compute element stiffness ... K = A^*kb*A
 		for (int i = 0; i < numDOF; i++)
-			for (int j = 0; j < i+1; j++)
+			for (int j = 0; j < numDOF; j++)
 				stiff(i,j) +=  tran(2,i) * E * tran(2,j);
 	}
-
-    // Complete symmetric stiffness matrix
-    for (int i = 0; i < numDOF; i++)
-		for(int j = 0; j < i; j++)
-		    stiff(j,i) = stiff(i,j);
 
 	return stiff;
 }
@@ -440,11 +437,13 @@ ZeroLengthND::getInitialStiff(void)
   double E;
   
   // Compute element stiffness ... K = A^*kb*A
+  // Full i,j range, as in getTangentStiff(): the initial tangent of an
+  // NDMaterial is not required to be symmetric either.
   for (int k = 0; k < order; k++) {
     for (int l = 0; l < order; l++) {
       E = kb(k,l);
       for (int i = 0; i < numDOF; i++)
-	for (int j = 0; j < i+1; j++)
+	for (int j = 0; j < numDOF; j++)
 	  stiff(i,j) +=  tran(k,i) * E * tran(l,j);
     }
   }
@@ -456,15 +455,10 @@ ZeroLengthND::getInitialStiff(void)
     
     // Compute element stiffness ... K = A^*kb*A
     for (int i = 0; i < numDOF; i++)
-      for (int j = 0; j < i+1; j++)
+      for (int j = 0; j < numDOF; j++)
 	stiff(i,j) +=  tran(2,i) * E * tran(2,j);
   }
 
-  // Complete symmetric stiffness matrix
-  for (int i = 0; i < numDOF; i++)
-    for(int j = 0; j < i; j++)
-      stiff(j,i) = stiff(i,j);
-  
   return stiff;
 }
 

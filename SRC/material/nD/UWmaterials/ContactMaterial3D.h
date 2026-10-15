@@ -166,6 +166,7 @@ class ContactMaterial3D : public NDMaterial
   // stress_vec(3) -> gap     ... current gap
   
   Matrix tangent_matrix;  // material tangent
+  Matrix initialTangent;  // initial (sticking) tangent
   
 };
 

@@ -98,7 +98,8 @@ ContactMaterial3D::ContactMaterial3D (int tag, double mu, double Gmod, double c,
    G(2,2),
    strain_vec(4),
    stress_vec(4),
-   tangent_matrix(4,4)
+   tangent_matrix(4,4),
+   initialTangent(4,4)
 {
 #ifdef DEBUG
   opserr << "ContactMaterial3D::ContactMaterial3D(...)" << endln;
@@ -125,7 +126,8 @@ ContactMaterial3D::ContactMaterial3D (const ContactMaterial3D &other)
     G(2,2),
     strain_vec(4),
     stress_vec(4),
-    tangent_matrix(4,4)
+    tangent_matrix(4,4),
+    initialTangent(4,4)
 {
 #ifdef DEBUG
   opserr << "ContactMaterial3D::ContactMaterial3D(...)" << endln;
@@ -152,7 +154,8 @@ ContactMaterial3D::ContactMaterial3D ()
     G(2,2),
     strain_vec(4),
     stress_vec(4),
-    tangent_matrix(4,4)
+    tangent_matrix(4,4),
+    initialTangent(4,4)
 {
 #ifdef DEBUG
   opserr << "ContactMaterial3D::ContactMaterial3D()" << endln;
@@ -374,7 +377,21 @@ const Matrix & ContactMaterial3D::getInitialTangent ()
 #ifdef DEBUG
   opserr << "ContactMaterial3D::getInitialTangent ()" << endln;
 #endif
-  return tangent_matrix;          //tangent is empty matrix
+
+  // Elastic (sticking) tangent in its own buffer: C_ss = stiffness*g,
+  // C_sl = 0, as in getTangent(). Returning tangent_matrix made the result
+  // depend on the last getTangent() call, and on a new material it was the
+  // zero matrix. The metric tensor g is set by the element through
+  // setMetricTensor().
+  initialTangent.Zero();
+  initialTangent(0,3) = 1;
+  initialTangent(1,1) = stiffness * g(0,0);
+  initialTangent(1,2) = stiffness * g(0,1);
+  initialTangent(2,1) = stiffness * g(1,0);
+  initialTangent(2,2) = stiffness * g(1,1);
+  initialTangent(3,0) = 1;
+
+  return initialTangent;
 }
 
 

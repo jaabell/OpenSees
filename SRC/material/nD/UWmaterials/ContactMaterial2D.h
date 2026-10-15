@@ -153,6 +153,7 @@ private:
         // stress_vec(2) -> gap     ... current gap
 
     Matrix tangent_matrix;  // material tangent
+    Matrix initialTangent;  // initial (sticking) tangent
 
 };
 
