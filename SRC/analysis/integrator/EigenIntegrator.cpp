@@ -165,7 +165,13 @@ EigenIntegrator::formM()
    // loop through the FE_Elements getting them to add the tangent    
     int result = 0;
     FE_EleIter &theEles2 = theAnalysisModel->getFEs();    
-    while((elePtr = theEles2()) != 0) {     
+    while((elePtr = theEles2()) != 0) {
+	// An FE_Element without an Element (the Penalty and Lagrange
+	// constraint FEs) carries no mass. Its getTangent ignores the
+	// integrator and returns the constraint stiffness, which would
+	// otherwise be assembled into M.
+	if (elePtr->getElement() == 0)
+	    continue;
 	if (theSOE->addM(elePtr->getTangent(this), elePtr->getID()) < 0) {
 	    opserr << "WARNING EigenIntegrator::formK -";
 	    opserr << " failed in addA for ID " << elePtr->getID();	    

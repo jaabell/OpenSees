@@ -339,7 +339,13 @@ DirectIntegrationAnalysis::eigen(int numMode, bool generalized, bool findSmalles
     if (generalized == true) {
       //      int result = 0;
       FE_EleIter &theEles2 = theAnalysisModel->getFEs();    
-      while((elePtr = theEles2()) != 0) {     
+      while((elePtr = theEles2()) != 0) {
+	// An FE_Element without an Element (the Penalty and Lagrange
+	// constraint FEs) carries no mass. Its getTangent ignores the
+	// integrator and returns the constraint stiffness, which would
+	// otherwise be assembled into M.
+	if (elePtr->getElement() == 0)
+	    continue;
 	elePtr->zeroTangent();
 	elePtr->addMtoTang(1.0);
 	if (theEigenSOE->addM(elePtr->getTangent(0), elePtr->getID()) < 0) {

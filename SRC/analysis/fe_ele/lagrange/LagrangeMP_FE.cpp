@@ -309,14 +309,20 @@ LagrangeMP_FE::getKi_Force(const Vector &disp, double fact)
 const Vector &
 LagrangeMP_FE::getC_Force(const Vector &disp, double fact)
 {
- opserr << "WARNING lagrangeMP_FE::getC_Force() - not yet implemented\n";
+ // A constraint carries no damping, so its C*x product is zero. Returning
+ // *resid here added the residual of the last analysis step to C*x.
+ resid->Zero();
  return *resid;
 }
 
 const Vector &
 LagrangeMP_FE::getM_Force(const Vector &disp, double fact)
 {
- opserr << "WARNING lagrangeMP_FE::getM_Force() - not yet implemented\n";
+ // A constraint carries no mass, so its M*x product is zero. Returning
+ // *resid here added the residual of the last analysis step to the M*x
+ // products of ArpackSolver::myMv and IncrementalIntegrator::doMv, which
+ // gave wrong eigenvalues and modal damping forces after a Newton step.
+ resid->Zero();
  return *resid;
 }
 

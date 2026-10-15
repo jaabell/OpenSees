@@ -272,14 +272,20 @@ PenaltyMP_FE::getKi_Force(const Vector &disp, double fact)
 const Vector &
 PenaltyMP_FE::getC_Force(const Vector &disp, double fact)
 {
- opserr << "WARNING PenaltyMP_FE::getC_Force() - not yet implemented\n";
+ // A constraint carries no damping, so its C*x product is zero. Returning
+ // *resid here added the residual of the last analysis step to C*x.
+ resid->Zero();
  return *resid;
 }
 
 const Vector &
 PenaltyMP_FE::getM_Force(const Vector &disp, double fact)
 {
-  // opserr << "WARNING PenaltyMP_FE::getM_Force() - not yet implemented\n";
+ // A constraint carries no mass, so its M*x product is zero. Returning
+ // *resid here added the residual of the last analysis step to the M*x
+ // products of ArpackSolver::myMv and IncrementalIntegrator::doMv, which
+ // gave wrong eigenvalues and modal damping forces after a Newton step.
+ resid->Zero();
  return *resid;
 }
 
