@@ -372,6 +372,26 @@ namespace {
         }
     }
     
+    // range of the signed det J of the H8 mapping over the 8 gauss points,
+    // on the nodes in the given order (the brick used by addKff and addRff).
+    // A sound brick keeps one sign of det J at all gauss points (positive or
+    // negative depending on the handedness of the node order).
+    inline void H8_detJRange(const std::vector<Node*>& nodes, double& dmin, double& dmax) {
+        Matrix P(3, 8);
+        Matrix dN(8, 3);
+        Matrix J(3, 3);
+        H8_nodeMatrix(nodes, P);
+        dmin = 0.0;
+        dmax = 0.0;
+        for (int g = 0; g < static_cast<int>(H8_GW.size()); ++g) {
+            H8_dN(H8_GX[g], H8_GY[g], H8_GZ[g], dN);
+            J.addMatrixProduct(0.0, P, dN, 1.0);
+            double d = H8_det3(J);
+            if (g == 0 || d < dmin) dmin = d;
+            if (g == 0 || d > dmax) dmax = d;
+        }
+    }
+
     // handle sorted node distortion
     inline void handleDistortion(std::vector<SortedNode>& nodes) {
 
@@ -725,6 +745,27 @@ void ASDAbsorbingBoundary3D::setDomain(Domain* theDomain)
             exit(-1);
         }
 
+    }
+
+    // reject a degenerate brick on vertical boundaries, the only ones that
+    // integrate the free-field column over the brick: det J changing sign
+    // between gauss points (folded or inverted brick) or collapsing
+    // (min |det J| < 1e-6 max |det J|). Either handedness of a sound brick
+    // is accepted, since the integrals use |det J|.
+    if (!(m_boundary & BND_BOTTOM)) {
+        double dmin = 0.0, dmax = 0.0;
+        H8_detJRange(m_nodes, dmin, dmax);
+        double amax = std::max(std::abs(dmin), std::abs(dmax));
+        double amin = (dmin > 0.0 || dmax < 0.0) ? std::min(std::abs(dmin), std::abs(dmax)) : 0.0;
+        if (!(amax > 0.0) || !(amin >= 1.0e-6 * amax)) {
+            opserr << "ASDAbsorbingBoundary3D Error in setDomain: element " << this->getTag()
+                << " is a degenerate brick (det J over the 8 gauss points: min = " << dmin
+                << ", max = " << dmax << "; it must keep one sign and not collapse). Nodes (as given):";
+            for (std::size_t i = 0; i < m_nodes.size(); ++i)
+                opserr << " " << m_node_ids(static_cast<int>(i));
+            opserr << "\n";
+            exit(-1);
+        }
     }
 
     // only on setDomain during creation, not after a recvSelf
@@ -2007,8 +2048,10 @@ void ASDAbsorbingBoundary3D::addKff(Matrix& K, double scale)
             }
         }
 
-        // integrate
-        double dV = detJ * gw * scale;
+        // integrate. The volume measure is |det J|: det J is negative when the
+        // nodes are given in a left-handed (mirrored) order, which is otherwise
+        // a valid input since the free-field mapping uses the sorted nodes.
+        double dV = std::abs(detJ) * gw * scale;
         K.addMatrixTripleProduct(1.0, BB, E, dV);
     }
 }
@@ -2083,8 +2126,8 @@ void ASDAbsorbingBoundary3D::addRff(Vector& R)
         // stress vector
         stress.addMatrixVector(0.0, E, strain, 1.0);
 
-        // integrate
-        double dV = detJ * gw;
+        // integrate (|det J|, see addKff)
+        double dV = std::abs(detJ) * gw;
         R.addMatrixTransposeVector(1.0, BB, stress, dV);
     }
 }
