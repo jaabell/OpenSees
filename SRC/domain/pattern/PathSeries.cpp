@@ -223,11 +223,11 @@ void *OPS_PathSeries() {
         Vector thePath(&values[0], (int)values.size());
         Vector theTime(&times[0], (int)times.size());
         return new PathTimeSeries(tag, thePath, theTime,
-                                  factor);
+                                  factor, useLast);
 
     } else if (fileTime != 0 && filePath != 0) {
         return new PathTimeSeries(tag, filePath, fileTime,
-                                  factor);
+                                  factor, useLast);
     } else if (fileName != 0) {
         return new PathTimeSeries(tag, fileName, factor,
                                   useLast);

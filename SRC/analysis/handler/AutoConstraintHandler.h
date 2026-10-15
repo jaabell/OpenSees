@@ -79,6 +79,11 @@ private:
     double auto_penalty_oom = 3.0;
     double user_penalty = 0.0;
     std::vector<TransformationDOF_Group*> theDOFs;
+    // FE_Elements connected to at least one SP-constrained node. applyLoad()
+    // calls updateElement() on them after enforceSPs(), as
+    // TransformationConstraintHandler does, so that the prescribed values
+    // are reflected in the element state before the first residual.
+    std::vector<FE_Element*> theFEs;
 };
 
 #endif

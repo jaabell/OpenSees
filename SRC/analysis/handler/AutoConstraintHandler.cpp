@@ -423,6 +423,18 @@ AutoConstraintHandler::handle(const ID* nodesLast)
 
 	// first standard elements
 	while ((elePtr = theEle()) != 0) {
+		// check whether this element is connected to an SP-constrained node
+		bool touchesConstrainedNode = false;
+		{
+			const ID& elenodes = elePtr->getExternalNodes();
+			for (int i = 0; i < elenodes.Size(); ++i) {
+				if (sp_map.find(elenodes(i)) != sp_map.end()) {
+					touchesConstrainedNode = true;
+					break;
+				}
+			}
+		}
+
 		// only create an FE_Element for a subdomain element if it does not
 		// do independent analysis .. then subdomain part of this analysis so create
 		// an FE_element & set subdomain to point to it.
@@ -432,12 +444,16 @@ AutoConstraintHandler::handle(const ID* nodesLast)
 				fePtr = new FE_Element(numFeEle++, elePtr);
 				theModel->addFE_Element(fePtr);
 				theSub->setFE_ElementPtr(fePtr);
+				if (touchesConstrainedNode)
+					theFEs.push_back(fePtr);
 			}
 		}
 		else {
 			// just a regular element .. create an FE_Element for it & add to AnalysisModel
 			fePtr = new FE_Element(numFeEle++, elePtr);
 			theModel->addFE_Element(fePtr);
+			if (touchesConstrainedNode)
+				theFEs.push_back(fePtr);
 		}
 	}
 
@@ -527,6 +543,8 @@ AutoConstraintHandler::clearAll(void)
 	// reset the TransformationDOF_Group vector
 	// don't delete the pointer inside the vector (owned by the model)
 	theDOFs.clear();
+	// same for the FE_Element vector (also owned by the model)
+	theFEs.clear();
 
 	// for the nodes reset the DOF_Group pointers to 0
 	Domain* theDomain = this->getDomainPtr();
@@ -580,6 +598,17 @@ AutoConstraintHandler::applyLoad(void)
 		theDOFs[numDOF - i]->enforceSPs(1);
 	for (std::size_t i = 1; i <= numDOF; i++)
 		theDOFs[numDOF - i]->enforceSPs(0);
+
+	// The SP-constrained DOFs are removed from the system of equations, so a
+	// non-homogeneous prescribed value reaches the residual only through the
+	// state of the elements connected to the constrained nodes. Without this
+	// update the first residual of each step does not include the prescribed
+	// increment, the first solution increment is close to zero, and a
+	// displacement- or energy-based convergence test accepts the step with
+	// only the constrained nodes displaced.
+	for (std::size_t i = 0; i < theFEs.size(); i++)
+		theFEs[i]->updateElement();
+
 	return 0;
 }
 

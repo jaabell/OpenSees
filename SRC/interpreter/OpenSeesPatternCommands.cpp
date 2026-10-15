@@ -1139,8 +1139,11 @@ int OPS_SP()
 	    isSpConst = true;
 	    
 	} else if (strcmp(type,"-subtractInit") == 0) {
-	  // allow user to ignore init disp values at the node
-	  retZeroInitValue = true;
+	  // make the imposed value incremental from the displacement of the
+	  // node when the constraint is added to the domain; the constraint
+	  // handlers add getInitialValue() to the prescribed value, and it
+	  // returns that displacement only when retZeroInitValue is false
+	  retZeroInitValue = false;
 
 	} else if(strcmp(type, "-pattern") == 0) {
 	    if (OPS_GetNumRemainingInputArgs() > 0) {
