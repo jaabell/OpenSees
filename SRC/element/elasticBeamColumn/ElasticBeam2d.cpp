@@ -1103,8 +1103,10 @@ ElasticBeam2d::getResistingForceIncInertia()
   
   if (theDamping) P += this->getDampingForce();
   
-  // subtract external load P = P - Q
-  P.addVector(1.0, Q, -1.0);
+  // Q is not subtracted here: getResistingForce() above already returns
+  // P - Q whenever rho != 0, and Q holds only the ground-motion inertia load
+  // -M*R*ag (it is non-zero only when rho != 0). A second subtraction drives
+  // the element mass with 2*ag under UniformExcitation.
   
   // add the damping forces if rayleigh damping
   if (alphaM != 0.0 || betaK != 0.0 || betaK0 != 0.0 || betaKc != 0.0)
