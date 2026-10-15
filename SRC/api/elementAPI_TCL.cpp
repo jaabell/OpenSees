@@ -490,10 +490,25 @@ const char* OPS_GetString(void)
     return res;
 }
 
+// Copies the next argument into the caller's buffer, as the Python
+// interpreter does: callers declare a local buffer and read it after the
+// call, so returning the argument without filling the buffer leaves them
+// reading uninitialised memory. The copy is truncated to len - 1 characters
+// and always terminated. With no argument left the return is 0, as before,
+// and the buffer is emptied.
 extern "C"
 const char* OPS_GetStringFromAll(char *buffer, int len)
 {
-  return OPS_GetString(); // Everything's a string in Tcl
+  const char* res = OPS_GetString(); // Everything's a string in Tcl
+  if (buffer == 0 || len <= 0)
+    return res;
+  if (res == 0) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  strncpy(buffer, res, (size_t)(len - 1));
+  buffer[len - 1] = '\0';
+  return buffer;
 }
 
 extern "C"

@@ -472,10 +472,13 @@ PyMethodDef *getmethodsFunc() {
     return wrapper->getMethods();
 }
 
+// Registered with Py_AtExit. It may be reached more than once, so it checks
+// the pointer before use and clears it after the delete.
 void cleanupFunc() {
-    module->getCmds().wipe();
     if (module != 0) {
+        module->getCmds().wipe();
         delete module;
+        module = 0;
     }
 }
 
@@ -569,7 +572,14 @@ initopensees(void)
 
     sserr.setError(st->error);
 
-    Py_AtExit(cleanupFunc);
+    // The module state size is nonzero, so the interpreter runs this init
+    // again when the module is imported after removal from sys.modules.
+    // The exit handler is registered on the first init only.
+    static bool cleanupRegistered = false;
+    if (!cleanupRegistered) {
+        Py_AtExit(cleanupFunc);
+        cleanupRegistered = true;
+    }
 
 #if PY_MAJOR_VERSION >= 3
     return pymodule;
