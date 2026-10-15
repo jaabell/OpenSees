@@ -112,6 +112,11 @@ Element::addInertiaLoadToUnbalance(const Vector &accel)
 }
 
 
+// The accessors below allocate the shared scratch storage on first use by
+// calling this method when index == -1. Those calls are qualified as
+// Element::setRayleighDampingFactors so that a subclass override that does
+// not forward to this method (Subdomain forwards to Domain instead) cannot
+// leave index at -1 and make the caller read theMatrices[-1].
 int
 Element::setRayleighDampingFactors(double alpham, double betak, double betak0, double betakc)
 {
@@ -211,7 +216,7 @@ const Matrix &
 Element::getDamp(void) 
 {
   if (index  == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   // now compute the damping matrix
@@ -236,7 +241,7 @@ const Matrix &
 Element::getMass(void)
 {
   if (index  == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   // zero the matrix & return it
@@ -249,7 +254,7 @@ const Vector &
 Element::getResistingForceIncInertia(void) 
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   Matrix *theMatrix = theMatrices[index]; 
@@ -316,7 +321,7 @@ Element::getRayleighDampingForces(void)
 {
 
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   Matrix *theMatrix = theMatrices[index]; 
@@ -489,8 +494,17 @@ Element::getResponse(int responseID, Information &eleInfo)
     return eleInfo.setVector(this->getRayleighDampingForces());
   case 333333:
     return eleInfo.setVector(this->getResistingForceIncInertia());
-  case 444444:
-    return eleInfo.setVector(this->getResistingForceIncInertia()-this->getRayleighDampingForces()-this->getResistingForce());
+  case 444444: {
+    // Evaluate the three terms in a fixed order into an owned vector. The
+    // accessors return references to element storage that the other calls
+    // overwrite (many elements return the same vector from getResistingForce
+    // and getResistingForceIncInertia), and a single expression leaves the
+    // call order to the compiler.
+    Vector inertial(this->getResistingForceIncInertia());
+    inertial -= this->getRayleighDampingForces();
+    inertial -= this->getResistingForce();
+    return eleInfo.setVector(inertial);
+  }
 
   default:
     return -1;
@@ -509,7 +523,7 @@ const Vector &
 Element::getResistingForceSensitivity(int gradIndex)
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   Vector *theVector = theVectors1[index];
@@ -522,7 +536,7 @@ const Matrix &
 Element::getTangentStiffSensitivity(int gradIndex)
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   static bool warningShown = false;
@@ -542,7 +556,7 @@ const Matrix &
 Element::getInitialStiffSensitivity(int gradIndex)
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   static bool warningShown = false;
@@ -561,7 +575,7 @@ const Matrix &
 Element::getCommittedStiffSensitivity(int gradIndex)
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   static bool warningShown = false;
@@ -580,7 +594,7 @@ const Matrix &
 Element::getMassSensitivity(int gradIndex)
 {
   if (index == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   Matrix *theMatrix = theMatrices[index];
@@ -610,7 +624,7 @@ const Matrix &
 Element::getDampSensitivity(int gradIndex) 
 {
   if (index  == -1) {
-    this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+    this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
   }
 
   // now compute the damping matrix
@@ -770,7 +784,7 @@ const Matrix &
 Element::getGeometricTangentStiff()
 {
     if (index == -1) {
-	this->setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
+	this->Element::setRayleighDampingFactors(alphaM, betaK, betaK0, betaKc);
     }
     
     Matrix *theMatrix = theMatrices[index];
