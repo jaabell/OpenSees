@@ -111,6 +111,13 @@ int BackwardEuler::newStep(double deltaT)
         return -3;	
     }
 
+    // the integration constants below divide by deltaT and deltaT^2
+    if (deltaT <= 0.0)  {
+        opserr << "BackwardEuler::newStep() - error in variable\n";
+        opserr << "dT = " << deltaT << endln;
+        return -2;
+    }
+
     // mark step as bootstrap or not
     if ( deltaT != dt )
         step = 0;
@@ -219,6 +226,13 @@ int BackwardEuler::formEleTangent(FE_Element *theEle)
         theEle->addKiToTang(c1);
         theEle->addCtoTang(c2);
         theEle->addMtoTang(c3);
+    } else if (statusFlag == HALL_TANGENT)  {
+        theEle->addKtToTang(c1*cFactor);
+        theEle->addKiToTang(c1*iFactor);
+        theEle->addCtoTang(c2);
+        theEle->addMtoTang(c3);
+    } else {
+      opserr << "BackwardEuler::formEleTangent - unknown FLAG\n";
     }
     
     return 0;

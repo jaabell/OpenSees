@@ -90,6 +90,13 @@ int TRBDF2::newStep(double deltaT)
     return -3;	
   }
 
+  // the integration constants below divide by deltaT and deltaT^2
+  if (deltaT <= 0.0)  {
+    opserr << "TRBDF2::newStep() - error in variable\n";
+    opserr << "dT = " << deltaT << endln;
+    return -2;
+  }
+
   // mark step as Trapezoidal (=0) or Backward Euler (=1)
 
   if (deltaT != dt || step == 1) {

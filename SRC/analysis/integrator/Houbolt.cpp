@@ -89,6 +89,13 @@ int Houbolt::newStep(double deltaT)
     return -3;	
   }
 
+  // the integration constants below divide by deltaT and deltaT^2
+  if (deltaT <= 0.0)  {
+    opserr << "Houbolt::newStep() - error in variable\n";
+    opserr << "dT = " << deltaT << endln;
+    return -2;
+  }
+
   // mark step as bootstrap or not
   if ( deltaT != dt )
       step = 0;
