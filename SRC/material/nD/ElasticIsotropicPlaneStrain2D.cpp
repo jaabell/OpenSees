@@ -133,6 +133,14 @@ ElasticIsotropicPlaneStrain2D::getStrain (void)
   return epsilon;
 }
 
+// sigma_zz = lambda*(eps_xx + eps_yy) under the plane-strain constraint
+double
+ElasticIsotropicPlaneStrain2D::getStressZZ (void)
+{
+  double lam = v*E/((1.0+v)*(1.0-2.0*v));
+  return lam*(epsilon(0) + epsilon(1));
+}
+
 int
 ElasticIsotropicPlaneStrain2D::commitState (void)
 {

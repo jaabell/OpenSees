@@ -222,6 +222,15 @@ PlaneStrainMaterial::getStress( )
   return this->stress ;
 }
 
+// the wrapped 3D material carries the full 6-component stress under the
+// plane-strain constraint; component 2 is sigma_zz
+double
+PlaneStrainMaterial::getStressZZ( )
+{
+  const Vector &threeDstress = theMaterial->getStress();
+  return threeDstress(2);
+}
+
 
 //send back the tangent 
 const Matrix&  
