@@ -55,6 +55,9 @@ double *TransformationFE::dataBuffer = 0;
 double *TransformationFE::localKbuffer = 0;          
 int    *TransformationFE::dofData = 0;    ;          
 int TransformationFE::sizeBuffer(0);            
+// number of entries allocated in dofData; the buffer holds one DOF count per
+// node of the element, so it must cover the largest node count
+static int sizeDofData = 0;
 
 //  TransformationFE(Element *, Integrator *theIntegrator);
 //	construictor that take the corresponding model element.
@@ -120,6 +123,7 @@ TransformationFE::TransformationFE(int tag, Element *ele)
 	dataBuffer = new double[MAX_NUM_DOF*MAX_NUM_DOF];
 	localKbuffer = new double[MAX_NUM_DOF*MAX_NUM_DOF];
 	dofData      = new int[MAX_NUM_DOF];
+	sizeDofData  = MAX_NUM_DOF;
 	sizeBuffer = MAX_NUM_DOF*MAX_NUM_DOF;
 	
 	if (modMatrices == 0 || modVectors == 0 || dataBuffer == 0 ||
@@ -131,6 +135,13 @@ TransformationFE::TransformationFE(int tag, Element *ele)
 	    modMatrices[i] = 0;
 	    modVectors[i] = 0;
 	}
+    }
+
+    // dofData holds one entry per node, which can exceed MAX_NUM_DOF
+    if (numNodes > sizeDofData) {
+	delete [] dofData;
+	dofData = new int[numNodes];
+	sizeDofData = numNodes;
     }
 
     // increment the number of transformations
@@ -186,6 +197,7 @@ TransformationFE::~TransformationFE()
 	dataBuffer = 0;
 	localKbuffer = 0;
 	dofData = 0;
+	sizeDofData = 0;
 	sizeTransformations = 0;
 	sizeBuffer = 0;
 	transCounter = 0;
