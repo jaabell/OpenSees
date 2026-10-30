@@ -100,6 +100,7 @@ protected:
 private:
     // private methods
     void setUp();
+    void formBasic();  // basic forces qb from the basic deformations and loads
     
     // private attributes - a copy for each object of the class
     ID connectedExternalNodes;  // contains the tags of the end nodes
@@ -137,6 +138,14 @@ private:
     static Matrix theMatrix;  // a class wide Matrix
     static Vector theVector;  // a class wide Vector
     Vector theLoad;
+
+    // basic system, used unless -geomNonlinear is given with a Linear transf
+    bool useBasic;
+    Matrix kb;    // basic stiffness [N, Mz1, Mz2, My1, My2, T]
+    Matrix kgb;   // basic P-delta matrix per unit axial force
+    Vector qb;    // basic forces
+    Vector q0b;   // basic fixed end forces from element loads
+    Vector p0b;   // reactions from element loads, CrdTransf convention
 };
 
 #endif
