@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <vector>
 #include <map>
+#include <set>
 #include <sstream>
 #include <fstream>
 #include <iomanip>
@@ -50,6 +51,8 @@
 #include <ElementIter.h>
 #include <Node.h>
 #include <NodeIter.h>
+#include <SP_Constraint.h>
+#include <SP_ConstraintIter.h>
 #include <elementAPI.h>
 
 #ifndef M_PI
@@ -210,6 +213,18 @@ namespace
                 nodes.resize(n);
                 node_ids.resize(n);
                 node_u_flags.resize(n);
+                // (node, dof) pairs carrying an SP constraint. A DOF_Group ID of -1
+                // means "no equation", but the Transformation handler also assigns it
+                // to the constrained DOFs of multi-point constraints, which keep their
+                // mass and are recovered from the retained node. Only DOFs with an SP
+                // constraint are fixed.
+                std::set<std::pair<int, int> > sp_dofs;
+                {
+                    SP_Constraint* sp;
+                    SP_ConstraintIter& theSPs = domain->getDomainAndLoadPatternSPs();
+                    while ((sp = theSPs()) != 0)
+                        sp_dofs.emplace(sp->getNodeTag(), sp->getDOF_Number());
+                }
                 Node* nodePtr;
                 NodeIter& theNodes = domain->getNodes();
                 size_t counter = 0;
@@ -233,7 +248,8 @@ namespace
                                 id(j) = DOF_EXCLUDED;
                             }
                             else {
-                                if (id_source(j) == -1)
+                                if (id_source(j) == -1 &&
+                                    sp_dofs.count(std::make_pair(nodePtr->getTag(), j)) > 0)
                                     id(j) = DOF_FIXED;
                                 else
                                     id(j) = offset;
