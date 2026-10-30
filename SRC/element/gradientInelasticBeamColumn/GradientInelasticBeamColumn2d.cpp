@@ -261,7 +261,9 @@ GradientInelasticBeamColumn2d::GradientInelasticBeamColumn2d(int tag, int nodeI,
 	}
 
 	double *secX = new double[numSections];
-	beamIntegr->getSectionLocations(numSections, L, secX);	// relative locations of sections (x/L)
+	// L is not known before setDomain; hinge-type rules divide by it. Section
+	// assignment only needs the locations for a unit length element.
+	beamIntegr->getSectionLocations(numSections, 1.0, secX);	// relative locations of sections (x/L)
 
 	for (int i = 0; i < numSections; i++) {
 		if (secX[i] >= 1.0 - secLR2)
