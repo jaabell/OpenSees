@@ -3171,6 +3171,11 @@ ForceBeamColumn2d::setResponse(const char **argv, int argc, OPS_Stream &output)
     theResponse = new ElementResponse(this, 14, 0.0);
   }
 
+  // Element local frame from the coordinate transformation, packed as
+  // the 9 direction cosines [x(3) y(3) z(3)]
+  if (theResponse == 0 && strcmp(argv[0], "localAxes") == 0)
+    theResponse = new ElementResponse(this, 30, Vector(9));
+
   if (theResponse == 0)
     theResponse = crdTransf->setResponse(argv, argc, output);
   
@@ -3184,6 +3189,18 @@ ForceBeamColumn2d::getResponse(int responseID, Information &eleInfo)
 {
   static Vector vp(3);
   static Matrix fe(3,3);
+
+  if (responseID == 30) { // local axes
+    static Vector axes(9);
+    static Vector xAxis(3), yAxis(3), zAxis(3);
+    crdTransf->getLocalAxes(xAxis, yAxis, zAxis);
+    for (int i = 0; i < 3; i++) {
+      axes(i)   = xAxis(i);
+      axes(i+3) = yAxis(i);
+      axes(i+6) = zAxis(i);
+    }
+    return eleInfo.setVector(axes);
+  }
 
   if (responseID == 1)
     return eleInfo.setVector(this->getResistingForce());
