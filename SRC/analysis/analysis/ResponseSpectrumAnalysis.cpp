@@ -573,6 +573,11 @@ int ResponseSpectrumAnalysis::solveMode()
 
 double ResponseSpectrumAnalysis::getSa(double T) const
 {
+	return m_scale * getSaUnscaled(T);
+}
+
+double ResponseSpectrumAnalysis::getSaUnscaled(double T) const
+{
 	// use the time series if provided
 	if (m_function)
 		return m_function->getFactor(T);

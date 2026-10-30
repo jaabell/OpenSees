@@ -60,6 +60,7 @@ private:
 	int endMode();
 	int solveMode();
 	double getSa(double T) const;
+	double getSaUnscaled(double T) const;
 
 private:
 	// the model
