@@ -199,6 +199,35 @@ class LadrunoContactDomain
         //    |rho - cap| < r cap.
         double smoothN     = 0.0;
         double smoothT     = 0.0;
+        // Edge-to-edge contact, set by setMortarEdgeEdge() (-edgeedge). A pair
+        // of facets that meet edge-on (normals more than 50 degrees apart, no
+        // slave vertex on the master face, at least one pair of boundary edges
+        // crossing within the band) is taken from the mortar lane and its
+        // crossing edge pairs get an edge-to-edge penalty adapter instead.
+        //  edgeKn:    edge penalty (<= 0: the mortar penalty of the pair;
+        //             edgeKnAuto: sized from the solid that owns the master facet)
+        //  edgeBand:  distance band of the routing (<= 0: a quarter of the mean
+        //             edge length of the master facet)
+        //  edgeMu, edgeKt, edgeCohesion, edgeTauMax, edgeConsistentTan: the
+        //             friction of the edge pairs, as for the other lanes
+        //             (edgeKt <= 0 with friction: the edge penalty)
+        //  edgeAlm:   one normal multiplier per edge pair, updated by commit()
+        //             like the mortar multipliers (gated by augmentMode);
+        //             edgeAugTol is recorded for scripts
+        bool   edgeEdge          = false;
+        double edgeKn            = 0.0;
+        bool   edgeKnAuto        = false;
+        double edgeBand          = 0.0;
+        double edgeMu            = 0.0;
+        double edgeKt            = 0.0;
+        double edgeCohesion      = 0.0;
+        double edgeTauMax        = 0.0;
+        bool   edgeConsistentTan = false;
+        bool   edgeAlm           = false;
+        double edgeAugTol        = 1e-8;
+        bool hasEdgeFriction(void) const {
+            return edgeMu > 0.0 || edgeCohesion > 0.0 || edgeTauMax > 0.0;
+        }
     };
     enum { AUG_COMMIT = 0, AUG_REQUEST = 1, AUG_NEVER = 2 };
     // set the controls of an existing mortar contact; < 0 if the tag is not a
@@ -209,6 +238,11 @@ class LadrunoContactDomain
     // options); < 0 with a message on a tie, an augmenting contact, -smoothT
     // without friction, or a value out of range
     int setMortarSmoothing(int tag, double smoothN, double smoothT);
+    // enable edge-to-edge contact on an existing mortar contact; < 0 with a
+    // message on a tie or a value out of range
+    int setMortarEdgeEdge(int tag, double edgeKn, bool edgeKnAuto, double edgeBand,
+                          double edgeMu, double edgeKt, double edgeCohesion, double edgeTauMax,
+                          bool edgeConsistentTan, bool edgeAlm, double edgeAugTol);
     int addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                          double kn, bool knAuto, double epsN, bool epsNAuto,
                          double augTol, int maxAug, int ngp, const double *outward = 0,
@@ -303,6 +337,41 @@ class LadrunoContactDomain
     void mortarNormalGCMark(int contactTag, int slaveNodeTag);
     void mortarNormalGCEnd(void);
 
+    // --- edge-to-edge pair state, keyed (contactTag, slave edge, master edge)
+    //     with the two node tags of each edge in ascending order, so an edge
+    //     shared by two facets maps to one slot. signN is the body-fixed sign
+    //     of the common-perpendicular normal, captured at the first engagement
+    //     (LadrunoEdgeKernel::edgeGap); the friction slots mirror
+    //     FrictionState; lambdaN is the multiplier of -edgeAlm, changed only by
+    //     commit(). The adapter writes gN and epsN at every residual evaluation
+    //     while -edgeAlm is on; they feed the commit-time Uzawa update and the
+    //     penetration query and stay 0 otherwise. ---
+    struct EdgeEdgeState {
+        int    signN;            // body-fixed normal sign (+1/-1); 0: not captured yet
+        int    signNcommitted;   // copy restored by revertToLastCommit()
+        double gpT[3], gpTtrial[3], gT0[3];   bool engaged;
+        double gT0committed[3];               bool engagedCommitted;
+        double lambdaN;          // committed normal multiplier (<= 0)
+        double gN;               // gap of the last evaluation (-edgeAlm only)
+        double epsN;             // penalty of the last evaluation (-edgeAlm only, else 0)
+        EdgeEdgeState() : signN(0), signNcommitted(0), engaged(false), engagedCommitted(false),
+                          lambdaN(0.0), gN(0.0), epsN(0.0) {
+            for (int d = 0; d < 3; d++) gpT[d] = gpTtrial[d] = gT0[d] = gT0committed[d] = 0.0;
+        }
+    };
+    EdgeEdgeState &getOrCreateEdgeEdgeState(int contactTag, int sNodeA, int sNodeB,
+                                            int mNodeA, int mNodeB);
+    int getNumEdgeEdgeStates(void) const { return (int)theEdgeEdgeStates.size(); }
+    // max of -gN over the -edgeAlm pairs with a compressive augmented pressure
+    // lambdaN + epsN gN < 0 (0 without such a pair): the convergence measure of
+    // a held-load augmentation loop (ladrunoEdgePenetration)
+    double getMaxEdgePenetration(void) const;
+    // collection of the slots of edge pairs not rebuilt by a handle(), as for
+    // the friction slots
+    void edgeGCBegin(void);
+    void edgeGCMark(int contactTag, int sNodeA, int sNodeB, int mNodeA, int mNodeB);
+    void edgeGCEnd(void);
+
     // --- node-to-segment normal force readout (ladrunoContactForce) ---
     // Each segment adapter writes its normal penalty force tn = kn <-gap>+ into a
     // (contactTag, slaveTag, segIndex) slot at every residual evaluation, and
@@ -367,7 +436,9 @@ class LadrunoContactDomain
         WARN_MORTAR_ORIENT,         // mortar automatic orientation degenerate (coincident facets)
         WARN_TIE_EXCLUDED,          // tie pairs excluded by the proximity guard
         WARN_EPST,                  // mortar friction without -epsT: the normal penalty is used
-        WARN_CSL                    // mortar -consistanttan needs a non-symmetric solver
+        WARN_CSL,                   // mortar -consistanttan needs a non-symmetric solver
+        WARN_EDGEKT,                // edge friction without -edgeKt: the edge penalty is used
+        WARN_EDGE_SIGN_DEFER        // edge sign capture deferred (reference perpendicular to n)
     };
     bool warnOnce(int contactTag, int topic);
 
@@ -425,6 +496,20 @@ class LadrunoContactDomain
     };
     std::map<MortarPairKey, MortarFrictionState> theMortarFrictionStates;
     std::set<MortarPairKey> liveMortarPairKeys;         // collection scratch (per handle())
+    // edge-to-edge state, keyed (contactTag, ordered slave edge, ordered master edge)
+    struct EdgeKey {
+        int c, sa, sb, ma, mb;
+        bool operator<(const EdgeKey &o) const {
+            if (c != o.c) return c < o.c;
+            if (sa != o.sa) return sa < o.sa;
+            if (sb != o.sb) return sb < o.sb;
+            if (ma != o.ma) return ma < o.ma;
+            return mb < o.mb;
+        }
+    };
+    static EdgeKey makeEdgeKey(int c, int sA, int sB, int mA, int mB);
+    std::map<EdgeKey, EdgeEdgeState> theEdgeEdgeStates;
+    std::set<EdgeKey> liveEdgeKeys;                     // collection scratch (per handle())
 };
 
 #endif

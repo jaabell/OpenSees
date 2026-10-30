@@ -255,6 +255,120 @@ LadrunoContactDomain::setMortarSmoothing(int tag, double smoothN, double smoothT
     return 0;
 }
 
+int
+LadrunoContactDomain::setMortarEdgeEdge(int tag, double edgeKn, bool edgeKnAuto, double edgeBand,
+                                        double edgeMu, double edgeKt, double edgeCohesion,
+                                        double edgeTauMax, bool edgeConsistentTan, bool edgeAlm,
+                                        double edgeAugTol)
+{
+    MortarContact *m = 0;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) { m = &theMortarContacts[i]; break; }
+    if (m == 0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarEdgeEdge() - contact " << tag
+               << " is not a -mortar contact\n";
+        return -1;
+    }
+    if (m->isTie) {
+        opserr << "WARNING LadrunoContactDomain::setMortarEdgeEdge() - contact " << tag
+               << ": -edgeedge does not apply to -tie (a tie bonds the facets it overlaps)\n";
+        return -1;
+    }
+    if (edgeKn < 0.0 || edgeBand < 0.0 || edgeMu < 0.0 || edgeKt < 0.0 || edgeCohesion < 0.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarEdgeEdge() - contact " << tag
+               << ": -edgeKn, -edgeBand, -edgeMu, -edgeKt and -edgeCohesion must be >= 0\n";
+        return -1;
+    }
+    if (edgeTauMax > 0.0 && edgeMu <= 0.0 && edgeCohesion <= 0.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarEdgeEdge() - contact " << tag
+               << ": -edgeTauMax without -edgeMu or -edgeCohesion gives the cone "
+                  "min(mu*N + c, tauMax) = 0 (free slip); for a shear-capped bond use "
+                  "-edgeCohesion <c>, optionally with -edgeTauMax\n";
+        return -1;
+    }
+    m->edgeEdge = true;
+    m->edgeKn = edgeKn;
+    m->edgeKnAuto = edgeKnAuto;
+    m->edgeBand = edgeBand;
+    m->edgeMu = edgeMu;
+    m->edgeKt = edgeKt;
+    m->edgeCohesion = edgeCohesion;
+    m->edgeTauMax = (edgeTauMax > 0.0) ? edgeTauMax : 0.0;
+    m->edgeConsistentTan = edgeConsistentTan;
+    m->edgeAlm = edgeAlm;
+    m->edgeAugTol = (edgeAugTol > 0.0) ? edgeAugTol : 1e-8;
+    return 0;
+}
+
+LadrunoContactDomain::EdgeKey
+LadrunoContactDomain::makeEdgeKey(int c, int sA, int sB, int mA, int mB)
+{
+    // the node tags of each edge in ascending order: an edge shared by two
+    // facets, or found again with its end nodes swapped, maps to one slot
+    EdgeKey k;
+    k.c  = c;
+    k.sa = (sA < sB) ? sA : sB;
+    k.sb = (sA < sB) ? sB : sA;
+    k.ma = (mA < mB) ? mA : mB;
+    k.mb = (mA < mB) ? mB : mA;
+    return k;
+}
+
+LadrunoContactDomain::EdgeEdgeState &
+LadrunoContactDomain::getOrCreateEdgeEdgeState(int contactTag, int sNodeA, int sNodeB,
+                                               int mNodeA, int mNodeB)
+{
+    // created zeroed (signN = 0) when absent
+    return theEdgeEdgeStates[makeEdgeKey(contactTag, sNodeA, sNodeB, mNodeA, mNodeB)];
+}
+
+void
+LadrunoContactDomain::edgeGCBegin(void)
+{
+    liveEdgeKeys.clear();
+}
+
+void
+LadrunoContactDomain::edgeGCMark(int contactTag, int sNodeA, int sNodeB, int mNodeA, int mNodeB)
+{
+    liveEdgeKeys.insert(makeEdgeKey(contactTag, sNodeA, sNodeB, mNodeA, mNodeB));
+}
+
+void
+LadrunoContactDomain::edgeGCEnd(void)
+{
+    for (std::map<EdgeKey, EdgeEdgeState>::iterator it = theEdgeEdgeStates.begin();
+         it != theEdgeEdgeStates.end(); ) {
+        if (liveEdgeKeys.find(it->first) == liveEdgeKeys.end())
+            theEdgeEdgeStates.erase(it++);
+        else
+            ++it;
+    }
+    liveEdgeKeys.clear();
+    // the inputs of the Uzawa update are written again by the next residual
+    // evaluation; a slot paired again must not read a gap of the previous pairing
+    for (std::map<EdgeKey, EdgeEdgeState>::iterator it = theEdgeEdgeStates.begin();
+         it != theEdgeEdgeStates.end(); ++it) {
+        it->second.gN = 0.0;
+        it->second.epsN = 0.0;
+    }
+}
+
+double
+LadrunoContactDomain::getMaxEdgePenetration(void) const
+{
+    double pen = 0.0;
+    for (std::map<EdgeKey, EdgeEdgeState>::const_iterator it = theEdgeEdgeStates.begin();
+         it != theEdgeEdgeStates.end(); ++it) {
+        const EdgeEdgeState &st = it->second;
+        if (st.epsN <= 0.0) continue;                // not an -edgeAlm pair
+        // a pair held open by its multiplier carries no pressure whatever its gap
+        if (st.lambdaN + st.epsN * st.gN < 0.0 && -st.gN > pen)
+            pen = -st.gN;
+    }
+    return pen;
+}
+
 LadrunoContactDomain::MortarNormalState &
 LadrunoContactDomain::getOrCreateMortarNormalState(int contactTag, int slaveNodeTag)
 {
@@ -627,6 +741,23 @@ LadrunoContactDomain::commit(bool augmenting)
         }
         st.engagedCommitted = st.engaged;
     }
+
+    // edge-to-edge pairs: the sign capture and the friction slip are path
+    // state and always promoted; the multiplier of -edgeAlm takes one Uzawa
+    // update lambdaN <- min(0, lambdaN + epsN gN) under the -augment mode of
+    // its contact (gN and epsN stay 0 without -edgeAlm, so lambdaN stays 0)
+    for (std::map<EdgeKey, EdgeEdgeState>::iterator it = theEdgeEdgeStates.begin();
+         it != theEdgeEdgeStates.end(); ++it) {
+        EdgeEdgeState &st = it->second;
+        st.signNcommitted = st.signN;
+        for (int d = 0; d < 3; d++) {
+            st.gpT[d] = st.gpTtrial[d];
+            st.gT0committed[d] = st.gT0[d];
+        }
+        st.engagedCommitted = st.engaged;
+        if (noAug.find(it->first.c) == noAug.end())
+            st.lambdaN = std::min(0.0, st.lambdaN + st.epsN * st.gN);
+    }
     return 0;
 }
 
@@ -657,6 +788,19 @@ LadrunoContactDomain::revertToLastCommit(void)
         }
         st.engaged = st.engagedCommitted;
     }
+    // edge-to-edge pairs: the sign is captured inside a residual evaluation,
+    // so a rejected step must not keep a sign captured at its trial
+    // configuration; lambdaN is changed only by commit()
+    for (std::map<EdgeKey, EdgeEdgeState>::iterator it = theEdgeEdgeStates.begin();
+         it != theEdgeEdgeStates.end(); ++it) {
+        EdgeEdgeState &st = it->second;
+        st.signN = st.signNcommitted;
+        for (int d = 0; d < 3; d++) {
+            st.gpTtrial[d] = st.gpT[d];
+            st.gT0[d] = st.gT0committed[d];
+        }
+        st.engaged = st.engagedCommitted;
+    }
     return 0;
 }
 
@@ -670,6 +814,7 @@ LadrunoContactDomain::revertToStart(void)
     theMortarNormalStates.clear();
     theMortarFacetContribs.clear();
     theMortarFrictionStates.clear();
+    theEdgeEdgeStates.clear();
     return 0;
 }
 

@@ -35,12 +35,16 @@
 //              -tauMax, -consistanttan as above)
 //              -augment commit|request|never, -maxGap d, -gapOffset g0,
 //              -adjust <tol>, -smoothN g0, -smoothT r
+//     edge-to-edge (with -mortar): -edgeedge, -edgeKn auto|val, -edgeBand d,
+//              -edgeMu mu, -edgeKt kt, -edgeCohesion c, -edgeTauMax tau,
+//              -edgeConsistentTan, -edgeAlm, -edgeAugTol tol
 //     -consistentTan is accepted as an alias of -consistanttan.
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
 //   ladrunoContactInfo            -> numContacts numCommits numReverts numMortarContacts
 //   ladrunoContactForce slaveTag  -> summed normal contact force on the node
 //   ladrunoMortarPenetration      -> max mortar penetration on the active set
 //   ladrunoMortarTieResidual      -> max weighted relative displacement of the mortar ties
+//   ladrunoEdgePenetration        -> max penetration of the -edgeAlm edge pairs in contact
 //   ladrunoBeginAugment, ladrunoEndAugment
 //                                 -> open / close a held-load augmentation sweep
 //
@@ -258,10 +262,61 @@ int OPS_LadrunoContact()
     double maxGap = 0.0, gapOffset = 0.0, adjustTol = 0.0;
     bool   adjust = false;
     double smoothN = 0.0, smoothT = 0.0;   // smoothed law (setMortarSmoothing)
+    // edge-to-edge contact (setMortarEdgeEdge)
+    bool   edgeEdge = false, edgeKnAuto = false, edgeConsistentTan = false, edgeAlm = false;
+    bool   hasEdgeOpt = false;     // an -edge* option other than -edgeedge was given
+    double edgeKn = 0.0, edgeBand = 0.0, edgeMu = 0.0, edgeKt = 0.0;
+    double edgeCohesion = 0.0, edgeTauMax = 0.0, edgeAugTol = 0.0;
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-mortar") == 0) {
             isMortar = true;
+        } else if (opt != 0 && strcmp(opt, "-edgeedge") == 0) {
+            // edge-to-edge contact for facets that meet edge-on (mortar only)
+            edgeEdge = true;
+        } else if (opt != 0 && strcmp(opt, "-edgeKn") == 0) {
+            // edge penalty; auto sizes it from the solid that owns the master facet
+            const char *e = (OPS_GetNumRemainingInputArgs() > 0) ? OPS_GetString() : 0;
+            if (e != 0 && strcmp(e, "auto") == 0) {
+                edgeKnAuto = true;
+            } else {
+                if (e != 0) OPS_ResetCurrentInputArg(-1);
+                double v[1]; int m = 1;
+                if (e == 0 || OPS_GetDoubleInput(&m, v) < 0) {
+                    opserr << "WARNING contact -edgeKn - need auto or a value\n";
+                    return -1;
+                }
+                edgeKn = v[0];
+            }
+            hasEdgeOpt = true;
+        } else if (opt != 0 && (strcmp(opt, "-edgeBand") == 0 || strcmp(opt, "-edgeMu") == 0 ||
+                                strcmp(opt, "-edgeKt") == 0 || strcmp(opt, "-edgeCohesion") == 0 ||
+                                strcmp(opt, "-edgeTauMax") == 0 ||
+                                strcmp(opt, "-edgeAugTol") == 0)) {
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0) {
+                opserr << "WARNING contact " << opt << " - need a value\n";
+                return -1;
+            }
+            if (strcmp(opt, "-edgeBand") == 0)          edgeBand = v[0];
+            else if (strcmp(opt, "-edgeMu") == 0)       edgeMu = v[0];
+            else if (strcmp(opt, "-edgeKt") == 0)       edgeKt = v[0];
+            else if (strcmp(opt, "-edgeCohesion") == 0) edgeCohesion = v[0];
+            else if (strcmp(opt, "-edgeTauMax") == 0)   edgeTauMax = v[0];
+            else                                        edgeAugTol = v[0];
+            hasEdgeOpt = true;
+        } else if (opt != 0 && strcmp(opt, "-edgeConsistentTan") == 0) {
+            edgeConsistentTan = true;
+            hasEdgeOpt = true;
+        } else if (opt != 0 && strcmp(opt, "-edgeAlm") == 0) {
+            // augmented Lagrangian on the edge pairs (one multiplier per pair)
+            edgeAlm = true;
+            hasEdgeOpt = true;
+        } else if (opt != 0 && strcmp(opt, "-edgeSoft") == 0) {
+            opserr << "WARNING contact -edgeSoft - the soft penalty is sized from the time step "
+                      "of an explicit integrator, and no integrator in this build reports one; "
+                      "use -edgeKn\n";
+            return -1;
         } else if (opt != 0 && strcmp(opt, "-tie") == 0) {
             // a permanent mesh tie (mortar only, checked below)
             isTie = true;
@@ -443,7 +498,9 @@ int OPS_LadrunoContact()
                    << "' (expected -outward, -cell, -geomtan, -mu, -cohesion, -tauMax, "
                       "-consistanttan, -visc, -mortar, -tie, -epsN, -epsTie, -epsT, -augTol, "
                       "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust, -smoothN, "
-                      "-smoothT or end of arguments)\n";
+                      "-smoothT, -edgeedge, -edgeKn, -edgeBand, -edgeMu, -edgeKt, "
+                      "-edgeCohesion, -edgeTauMax, -edgeConsistentTan, -edgeAlm, -edgeAugTol "
+                      "or end of arguments)\n";
             return -1;
         }
     }
@@ -468,6 +525,37 @@ int OPS_LadrunoContact()
         opserr << "WARNING contact -tie requires -mortar (mesh tying is a mortar formulation)\n";
         return -1;
     }
+    if (edgeEdge && !isMortar) {
+        opserr << "WARNING contact -edgeedge requires -mortar (edge-to-edge contact is routed "
+                  "from the facet pairs of a mortar contact)\n";
+        return -1;
+    }
+    if (hasEdgeOpt && !edgeEdge) {
+        opserr << "WARNING contact -edgeKn/-edgeBand/-edgeMu/-edgeKt/-edgeCohesion/-edgeTauMax/"
+                  "-edgeConsistentTan/-edgeAlm/-edgeAugTol need -edgeedge\n";
+        return -1;
+    }
+    if (edgeEdge && isTie) {
+        opserr << "WARNING contact -edgeedge does not apply to -tie (a tie bonds the facets it "
+                  "overlaps)\n";
+        return -1;
+    }
+    if (edgeEdge && (edgeKn < 0.0 || edgeBand < 0.0 || edgeMu < 0.0 || edgeKt < 0.0 ||
+                     edgeCohesion < 0.0)) {
+        opserr << "WARNING contact -edgeKn, -edgeBand, -edgeMu, -edgeKt and -edgeCohesion must "
+                  "be >= 0\n";
+        return -1;
+    }
+    if (edgeEdge && edgeTauMax > 0.0 && edgeMu <= 0.0 && edgeCohesion <= 0.0) {
+        opserr << "WARNING contact -edgeTauMax without -edgeMu or -edgeCohesion gives the cone "
+                  "min(mu*N + c, tauMax) = 0 (free slip); for a shear-capped bond use "
+                  "-edgeCohesion <c>, optionally with -edgeTauMax\n";
+        return -1;
+    }
+    if (edgeEdge && edgeConsistentTan && (edgeMu > 0.0 || edgeCohesion > 0.0 || edgeTauMax > 0.0))
+        opserr << "WARNING contact -edgeConsistentTan: the non-symmetric edge friction tangent "
+                  "needs a non-symmetric solver (system FullGeneral/UmfPack/BandGeneral); "
+                  "symmetric solvers will silently corrupt it.\n";
     if (hasMortarOpt && !isMortar) {
         opserr << "WARNING contact -epsN/-epsTie/-epsT/-augTol/-maxAug/-ngp are -mortar "
                   "options; add -mortar or remove them\n";
@@ -527,6 +615,10 @@ int OPS_LadrunoContact()
                                                adjust, adjustTol);
         if (mres == 0 && (smoothN > 0.0 || smoothT > 0.0))
             mres = cd->setMortarSmoothing(idata[0], smoothN, smoothT);
+        if (mres == 0 && edgeEdge)
+            mres = cd->setMortarEdgeEdge(idata[0], edgeKn, edgeKnAuto, edgeBand, edgeMu, edgeKt,
+                                         edgeCohesion, edgeTauMax, edgeConsistentTan, edgeAlm,
+                                         edgeAugTol);
         return mres;
     }
     return cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
@@ -642,6 +734,25 @@ int OPS_LadrunoMortarTieResidual()
     }
     int one = 1;
     if (OPS_SetDoubleOutput(&one, &res, true) < 0)
+        return -1;
+    return 0;
+}
+
+// ladrunoEdgePenetration -> the largest normal penetration max(0, -gN) over
+// the edge-to-edge pairs of -edgeAlm contacts with a compressive augmented
+// pressure (0 without such a pair). The convergence measure of a held-load
+// augmentation loop on edge-to-edge contact.
+int OPS_LadrunoEdgePenetration()
+{
+    Domain *theDomain = OPS_GetDomain();
+    double pen = 0.0;
+    if (theDomain != 0) {
+        LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
+        if (cd != 0)
+            pen = cd->getMaxEdgePenetration();
+    }
+    int one = 1;
+    if (OPS_SetDoubleOutput(&one, &pen, true) < 0)
         return -1;
     return 0;
 }

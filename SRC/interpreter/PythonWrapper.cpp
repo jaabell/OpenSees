@@ -842,6 +842,16 @@ static PyObject* Py_ops_ladrunoMortarTieResidual(PyObject* self, PyObject* args)
     return wrapper->getResults();
 }
 
+static PyObject* Py_ops_ladrunoEdgePenetration(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoEdgePenetration() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
 static PyObject* Py_ops_ladrunoBeginAugment(PyObject* self, PyObject* args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3220,6 +3230,7 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("ladrunoContactForce", &Py_ops_ladrunoContactForce);
     addCommand("ladrunoMortarPenetration", &Py_ops_ladrunoMortarPenetration);
     addCommand("ladrunoMortarTieResidual", &Py_ops_ladrunoMortarTieResidual);
+    addCommand("ladrunoEdgePenetration", &Py_ops_ladrunoEdgePenetration);
     addCommand("ladrunoBeginAugment", &Py_ops_ladrunoBeginAugment);
     addCommand("ladrunoEndAugment", &Py_ops_ladrunoEndAugment);
     addCommand("nDMaterial", &Py_ops_nDMaterial);

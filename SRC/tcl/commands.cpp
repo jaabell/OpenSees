@@ -262,6 +262,7 @@ extern int OPS_LadrunoContactInfo(void);
 extern int OPS_LadrunoContactForce(void);
 extern int OPS_LadrunoMortarPenetration(void);
 extern int OPS_LadrunoMortarTieResidual(void);
+extern int OPS_LadrunoEdgePenetration(void);
 extern int OPS_LadrunoBeginAugment(void);
 extern int OPS_LadrunoEndAugment(void);
 
@@ -944,6 +945,8 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
     Tcl_CreateCommand(interp, "ladrunoMortarPenetration", &ladrunoMortarPenetration,
         (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
     Tcl_CreateCommand(interp, "ladrunoMortarTieResidual", &ladrunoMortarTieResidual,
+        (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
+    Tcl_CreateCommand(interp, "ladrunoEdgePenetration", &ladrunoEdgePenetration,
         (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
     Tcl_CreateCommand(interp, "ladrunoBeginAugment", &ladrunoBeginAugment,
         (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
@@ -5976,6 +5979,15 @@ ladrunoMortarTieResidual(ClientData clientData, Tcl_Interp* interp, int argc, TC
 {
     OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
     if (OPS_LadrunoMortarTieResidual() < 0)
+	    return TCL_ERROR;
+    return TCL_OK;
+}
+
+int
+ladrunoEdgePenetration(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv)
+{
+    OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+    if (OPS_LadrunoEdgePenetration() < 0)
 	    return TCL_ERROR;
     return TCL_OK;
 }

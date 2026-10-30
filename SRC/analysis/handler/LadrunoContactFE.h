@@ -33,6 +33,8 @@
 //   Simo, J.C. and Laursen, T.A. (1992). An augmented Lagrangian treatment of
 //     contact problems involving friction. Computers & Structures, 42(1),
 //     97-116. doi:10.1016/0045-7949(92)90540-G
+//   Ericson, C. (2005). Real-Time Collision Detection. Morgan Kaufmann,
+//     San Francisco, Section 5.1.9. doi:10.1201/b14581
 //
 // Description: LadrunoContactFE, an FE_Element adapter that adds contact
 // contributions to the assembly without a Domain Element behind it
@@ -57,6 +59,12 @@
 //            (slave x slave), M (slave x master) and the weighted gap gt.
 //            Connectivity {slave facet nodes, master facet nodes},
 //            ndof = 3 (npsS + npsM).
+//   EDGE_EDGE  edge-to-edge penalty contact of one slave edge against one
+//            master edge, for facets that meet edge-on: the closest points of
+//            the two segments (Ericson 2005, Section 5.1.9), the common
+//            perpendicular as normal and a body-fixed sign
+//            (LadrunoEdgeKernel). Connectivity {slave edge nodes, master edge
+//            nodes}, ndof = 12.
 //
 // With myEle == 0 the FE_Element getResidual()/getTangent() and the force
 // helpers have no element to call, so this class owns its buffers and
@@ -127,6 +135,21 @@ class LadrunoContactFE : public FE_Element
                      bool isTie = false, double mu = 0.0, double epsT = 0.0,
                      double cohesion = 0.0, double tauMax = 0.0, bool consistentTan = false,
                      int masterFacetIndex = 0);
+    // Edge-to-edge penalty contact of ONE slave edge (sNodeA, sNodeB) against
+    // ONE master edge (mNodeA, mNodeB). Connectivity = {sa, sb, ma, mb}.
+    //   epsN: normal penalty; orientDir: reference direction of the first sign
+    //     capture (toward the slave's allowed side).
+    //   contactTag, theDomain: the engine keys and lookup (the sign, friction
+    //     and multiplier state is per edge pair on the engine).
+    //   mu, kt, cohesion, tauMax, consistentTan: friction, as for the other
+    //     modes; all of mu, cohesion, tauMax <= 0: frictionless.
+    //   edgeAlm: use the committed multiplier of the pair, p = min(0,
+    //     lambdaN + epsN gN) (augmented Lagrangian, updated by commit()).
+    LadrunoContactFE(int tag, Node *sNodeA, Node *sNodeB, Node *mNodeA, Node *mNodeB,
+                     double epsN, const double orientDir[3], int contactTag,
+                     Domain *theDomain, double mu = 0.0, double kt = 0.0,
+                     double cohesion = 0.0, double tauMax = 0.0, bool consistentTan = false,
+                     bool edgeAlm = false);
     ~LadrunoContactFE();
 
     // Mortar normal-gap shift: gbar_I -> gbar_I + gapOffset, and with adjust
@@ -245,10 +268,31 @@ class LadrunoContactFE : public FE_Element
     // the same band and dchi = dchi/dx.
     void mortarSmoothLaw(double pr, double &P, double &dP, double &chi, double &dchi) const;
 
+    // Edge-to-edge geometry at the current trial configuration
+    // (LadrunoEdgeKernel::closestPtSegSeg). Returns false unless the edges are
+    // non-parallel, of non-zero length and cross strictly inside both (a pair
+    // near a vertex belongs to the other lanes). Fills the signed gap gN, the
+    // oriented common-perpendicular normal n, the closest-point parameters s
+    // and t and the gap operator B[4][3] = [(1-s) n, s n, -(1-t) n, -t n].
+    // committedSign (+1/-1) is applied as given; 0 orients n by orientDir and
+    // returns the chosen sign in *outSign for the caller to keep.
+    bool edgeGeom(double &gN, double n[3], double &s, double &t, double B[4][3],
+                  int committedSign, int *outSign) const;
+
+    // Tangential slip of the edge pair at its closest points: the tangential
+    // part of the relative displacement (1-s) u_a0 + s u_a1 - (1-t) u_b0 - t u_b1
+    // (the closest-point construction makes the relative position purely
+    // normal, so positions carry no tangential information).
+    void edgeSlip(double s, double t, const double n[3], double gT[3]) const;
+
+    // Edge-to-edge tangent: epsN B^T B on the active set of the residual plus
+    // the friction block; initialStiff uses the stick block.
+    void addEdgeTang(double fact, bool initialStiff);
+
     Vector resid;
     Matrix tang;
 
-    enum Mode { RIGID_PLANE = 1, SEGMENT = 2, MORTAR = 3 };
+    enum Mode { RIGID_PLANE = 1, SEGMENT = 2, MORTAR = 3, EDGE_EDGE = 4 };
     Mode mode;
     Node *theSlave;
     int ndm;
@@ -299,6 +343,10 @@ class LadrunoContactFE : public FE_Element
     // smoothed law (setMortarSmoothing); 0: off
     double smoothBand;              // g0
     double smoothSlip;              // r
+
+    // EDGE_EDGE binding (kn holds epsN)
+    Node *edgeNode[4];      // slave edge nodes A, B, master edge nodes A, B
+    bool  edgeAlm;          // use the committed multiplier of the pair
 };
 
 #endif
