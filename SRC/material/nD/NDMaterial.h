@@ -72,6 +72,12 @@ class NDMaterial : public Material
     virtual const Vector &getStress(void);
     virtual const Vector &getStrain(void);
 
+    // Out-of-plane normal stress sigma_zz of a plane-strain material. The
+    // value is held internally under the eps_zz = 0 constraint and is not
+    // part of the 3-component getStress() vector. The default returns quiet
+    // NaN (not available), so a material without it never reports 0.
+    virtual double getStressZZ(void);
+
     virtual int commitState(void) = 0;
     virtual int revertToLastCommit(void) = 0;
     virtual int revertToStart(void) = 0;

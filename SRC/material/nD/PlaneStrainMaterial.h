@@ -75,6 +75,9 @@ class PlaneStrainMaterial: public NDMaterial{
     //send back the stress 
     const Vector& getStress( ) ;
 
+    //send back the out-of-plane stress sigma_zz
+    double getStressZZ( ) ;
+
     //send back the tangent 
     const Matrix& getTangent( ) ;
 

@@ -58,6 +58,7 @@ class ElasticIsotropicPlaneStrain2D : public ElasticIsotropicMaterial
 
     const Vector &getStress (void);
     const Vector &getStrain (void);
+    double getStressZZ (void);
     
     int commitState (void);
     int revertToLastCommit (void);

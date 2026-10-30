@@ -117,6 +117,13 @@ DruckerPragerPlaneStrain::getStress()
  	return stress;
 }
 
+// sigma_zz from the internal 6-component stress
+double
+DruckerPragerPlaneStrain::getStressZZ()
+{
+	return mSigma(2);
+}
+
 //send back the tangent 
 const Matrix& 
 DruckerPragerPlaneStrain::getTangent() 

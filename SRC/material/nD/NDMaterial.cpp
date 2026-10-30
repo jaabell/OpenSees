@@ -47,6 +47,7 @@
 #include <BeamFiberMaterial2dPS.h>
 #include <PlateFiberMaterial.h>
 #include <string.h>
+#include <limits>
 #include <TaggedObject.h>
 #include <MapOfTaggedObjects.h>
 
@@ -218,6 +219,12 @@ NDMaterial::getStrain(void)
 {
    opserr << "NDMaterial::getStrain -- subclass responsibility\n";
    return errVector;    
+}
+
+double
+NDMaterial::getStressZZ(void)
+{
+   return std::numeric_limits<double>::quiet_NaN();
 }
 
 //Functions for obtaining and updating temperature-dependent information Added by L.Jiang [SIF]
