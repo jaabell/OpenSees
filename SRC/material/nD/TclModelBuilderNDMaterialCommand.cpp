@@ -90,6 +90,10 @@ extern  void *OPS_CycLiqCPMaterial(void);
 extern  void *OPS_CycLiqCPSPMaterial(void);
 extern  void *OPS_InitStressNDMaterial(void);
 extern  void *OPS_InitStrainNDMaterial(void);
+extern  void *OPS_LogStrainNDMaterial(void);
+extern  void *OPS_LogStrain2D(void);
+extern  void *OPS_InitDefGradNDMaterial(void);
+extern  void *OPS_StagedStrainNDMaterial(void);
 extern  void *OPS_StressDensityMaterial(void);
 extern  void *OPS_SimplifiedJ2(void);
 extern  void *OPS_PlaneStressSimplifiedJ2(void);
@@ -237,6 +241,43 @@ TclModelBuilderNDMaterialCommand (ClientData clientData, Tcl_Interp *interp, int
       if (theMat != 0) 
         theMaterial = (NDMaterial *)theMat;
       else 
+        return TCL_ERROR;
+    }
+
+    else if ((strcmp(argv[1],"LogStrain") == 0) ||
+             (strcmp(argv[1],"LogStrainNDMaterial") == 0)) {
+      void *theMat = OPS_LogStrainNDMaterial();
+      if (theMat != 0)
+        theMaterial = (NDMaterial *)theMat;
+      else
+        return TCL_ERROR;
+    }
+
+    else if (strcmp(argv[1],"LogStrain2D") == 0) {
+      void *theMat = OPS_LogStrain2D();
+      if (theMat != 0)
+        theMaterial = (NDMaterial *)theMat;
+      else
+        return TCL_ERROR;
+    }
+
+    else if ((strcmp(argv[1],"InitDefGrad") == 0) ||
+             (strcmp(argv[1],"InitDefGradNDMaterial") == 0) ||
+             (strcmp(argv[1],"StagedDefGrad") == 0) ||
+             (strcmp(argv[1],"StagedDefGradNDMaterial") == 0)) {
+      void *theMat = OPS_InitDefGradNDMaterial();
+      if (theMat != 0)
+        theMaterial = (NDMaterial *)theMat;
+      else
+        return TCL_ERROR;
+    }
+
+    else if ((strcmp(argv[1],"StagedStrain") == 0) ||
+             (strcmp(argv[1],"StagedStrainNDMaterial") == 0)) {
+      void *theMat = OPS_StagedStrainNDMaterial();
+      if (theMat != 0)
+        theMaterial = (NDMaterial *)theMat;
+      else
         return TCL_ERROR;
     }
 
