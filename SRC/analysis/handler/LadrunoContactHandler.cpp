@@ -720,14 +720,36 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                             return ladrunoContactFatal();
                         }
                     }
+                    // friction: epsT auto is the normal penalty of the pair; friction
+                    // without a tangential penalty would stick with zero force, so
+                    // the normal penalty is used then, with a message
+                    bool wantFric = mc.hasFriction();
+                    double epsTuse = mc.epsTAuto ? epsUse : mc.epsT;
+                    if (wantFric && epsTuse <= 0.0) {
+                        epsTuse = epsUse;
+                        if (cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_EPST))
+                            opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << ": friction without -epsT; the tangential "
+                                      "penalty is the normal penalty (-epsT auto)\n";
+                    }
+                    if (wantFric && mc.consistentTan &&
+                        cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_CSL))
+                        opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                               << mc.tag << ": -consistanttan (non-symmetric friction tangent) "
+                                  "needs a non-symmetric solver (system FullGeneral/UmfPack/"
+                                  "BandGeneral); symmetric solvers will silently corrupt it.\n";
                     LadrunoContactFE *fe =
                         new LadrunoContactFE(numFe++, sNodes, npsS, mNodes, npsM, epsUse,
                                              orientDir, mc.tag, sf, theDomain, mc.ngp,
-                                             mc.isTie);
+                                             mc.isTie, mc.mu, epsTuse, mc.cohesion, mc.tauMax,
+                                             mc.consistentTan, seg);
                     if (fe == 0) return -5;
                     theModel->addFE_Element(fe);
-                    for (int k = 0; k < npsS; k++)
+                    for (int k = 0; k < npsS; k++) {
                         cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));
+                        if (wantFric)        // one friction slot per (node, facet pair)
+                            cd->mortarFrictionGCMark(mc.tag, sTags(sf * npsS + k), sf, seg);
+                    }
                 }
             }
             if (nTieExcluded > 0 && cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_TIE_EXCLUDED))

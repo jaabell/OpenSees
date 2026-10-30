@@ -159,11 +159,22 @@ class LadrunoContactDomain
         // (normal and tangential) is driven to zero, with no active set and no
         // clamp; epsN is the tie penalty.
         bool   isTie = false;
+        // Coulomb/Tresca friction on the cone min(mu N + cohesion, tauMax), the
+        // option set of the node-to-segment lane; all <= 0: frictionless.
+        double mu = 0.0;
+        double epsT = 0.0;      // tangential penalty of the augmented Lagrangian
+        bool   epsTAuto = false;// epsT = the normal penalty of the pair
+        double cohesion = 0.0;
+        double tauMax = 0.0;    // <= 0: no cap
+        bool   consistentTan = false;  // non-symmetric consistent friction tangent
+        bool hasFriction(void) const { return mu > 0.0 || cohesion > 0.0 || tauMax > 0.0; }
     };
     int addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                          double kn, bool knAuto, double epsN, bool epsNAuto,
                          double augTol, int maxAug, int ngp, const double *outward = 0,
-                         bool isTie = false);
+                         bool isTie = false, double mu = 0.0, double epsT = 0.0,
+                         bool epsTAuto = false, double cohesion = 0.0, double tauMax = 0.0,
+                         bool consistentTan = false);
     int getNumMortarContacts(void) const { return (int)theMortarContacts.size(); }
     const MortarContact &getMortarContact(int i) const { return theMortarContacts[i]; }
 
@@ -210,6 +221,39 @@ class LadrunoContactDomain
     // on a tie (ladrunoMortarTieResidual)
     double getMaxMortarTieResidual(void) const;
     int  getNumMortarNormalStates(void) const { return (int)theMortarNormalStates.size(); }
+
+    // --- mortar friction state, one slot per (contact, slave node, slave
+    //     facet, master facet). Each facet pair runs its own return map on its
+    //     own weighted slip gbarT = tangential part of r_I / a_I, in the tangent
+    //     plane of its own master facet, so it owns the state it reads back: the
+    //     committed slip gpT, the engagement origin gT0 and the tangential
+    //     multiplier lambdaT. A slot per slave node would let the pairs that
+    //     share the node overwrite each other's trial state (the committed state
+    //     would depend on the order of evaluation) and, on a curved or creased
+    //     interface, read back a slip lying in the tangent plane of another
+    //     facet. Both facet ordinals are stable across rebuilds. gpT, lambdaT
+    //     and the committed engagement change only in commit(); the trial
+    //     values are functions of the committed state. ---
+    struct MortarFrictionState {
+        double gpT[3];          // committed plastic slip
+        double gpTtrial[3];     // trial slip (written at every residual evaluation)
+        double gT0[3];          // tangential origin at engagement (captured once)
+        bool   engaged;
+        double lambdaT[3];      // committed tangential multiplier
+        double lambdaTtrial[3]; // trial multiplier (minus the friction force)
+        double gT0committed[3]; // copies restored by revertToLastCommit()
+        bool   engagedCommitted;
+        MortarFrictionState() : engaged(false), engagedCommitted(false) {
+            for (int d = 0; d < 3; d++)
+                gpT[d] = gpTtrial[d] = gT0[d] = lambdaT[d] = lambdaTtrial[d] = gT0committed[d] = 0.0;
+        }
+    };
+    MortarFrictionState &getOrCreateMortarFrictionState(int contactTag, int slaveNodeTag,
+                                                        int slaveFacet, int masterFacet);
+    int  getNumMortarFrictionStates(void) const { return (int)theMortarFrictionStates.size(); }
+    // marked between mortarNormalGCBegin() and mortarNormalGCEnd() for every
+    // frictional (node, facet pair) built; the unmarked slots are erased
+    void mortarFrictionGCMark(int contactTag, int slaveNodeTag, int slaveFacet, int masterFacet);
     // Collection of the multipliers of slave nodes that no longer belong to a
     // built pair: the handler calls mortarNormalGCBegin(), mortarNormalGCMark()
     // for every slave node of every pair it builds, and mortarNormalGCEnd(),
@@ -280,7 +324,9 @@ class LadrunoContactDomain
     enum WarnTopic {
         WARN_VISC_STATIC = 0,       // -visc under a static integrator: dashpot disabled
         WARN_MORTAR_ORIENT,         // mortar automatic orientation degenerate (coincident facets)
-        WARN_TIE_EXCLUDED           // tie pairs excluded by the proximity guard
+        WARN_TIE_EXCLUDED,          // tie pairs excluded by the proximity guard
+        WARN_EPST,                  // mortar friction without -epsT: the normal penalty is used
+        WARN_CSL                    // mortar -consistanttan needs a non-symmetric solver
     };
     bool warnOnce(int contactTag, int topic);
 
@@ -326,6 +372,18 @@ class LadrunoContactDomain
         FacetContrib() : gt(0.0), a(0.0) { r[0] = r[1] = r[2] = 0.0; }
     };
     std::map<PairKey, FacetContrib> theMortarFacetContribs;
+    // mortar friction state, keyed (contactTag, slaveNodeTag, slave facet, master facet)
+    struct MortarPairKey {
+        int c, n, sf, mf;
+        bool operator<(const MortarPairKey &o) const {
+            if (c != o.c) return c < o.c;
+            if (n != o.n) return n < o.n;
+            if (sf != o.sf) return sf < o.sf;
+            return mf < o.mf;
+        }
+    };
+    std::map<MortarPairKey, MortarFrictionState> theMortarFrictionStates;
+    std::set<MortarPairKey> liveMortarPairKeys;         // collection scratch (per handle())
 };
 
 #endif

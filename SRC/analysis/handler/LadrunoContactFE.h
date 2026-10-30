@@ -116,10 +116,17 @@ class LadrunoContactFE : public FE_Element
     //   ngp: order of the triangle rule on the clipped overlap.
     //   isTie: a mesh tie (permanent bond of the full relative displacement,
     //     epsN is then the tie penalty).
+    //   mu, epsT, cohesion, tauMax: Coulomb/Tresca friction on the cone
+    //     min(mu N + cohesion, tauMax) with tangential penalty epsT; all of mu,
+    //     cohesion, tauMax <= 0: frictionless, no engine state is touched.
+    //   consistentTan: the non-symmetric consistent friction tangent.
+    //   masterFacetIndex: ordinal of the master facet (the friction state key).
     LadrunoContactFE(int tag, Node **slaveNodes, int npsS, Node **masterNodes, int npsM,
                      double epsN, const double orientDir[3], int contactTag,
                      int slaveFacetIndex, Domain *theDomain, int ngp = 2,
-                     bool isTie = false);
+                     bool isTie = false, double mu = 0.0, double epsT = 0.0,
+                     double cohesion = 0.0, double tauMax = 0.0, bool consistentTan = false,
+                     int masterFacetIndex = 0);
     ~LadrunoContactFE();
 
     // Fill myID with the first ndm equations of each node (the translations).
@@ -207,6 +214,17 @@ class LadrunoContactFE : public FE_Element
     void addMortarTieForce(const double D[4][4], const double M[4][4],
                            class LadrunoContactDomain *cd);
 
+    // Mortar friction force (the tangent is in addMortarTang). For every slave
+    // node in normal contact (p_normal[I] < 0): the weighted relative
+    // displacement r_I, its tangential part over a_I as the slip (positions
+    // carry no tangential information after the projection), measured from the
+    // engagement origin and offset by lambdaT / epsT (augmented trial traction
+    // lambdaT + epsT (gTeff - gpT)), the return map of LadrunoFrictionKernel
+    // with N = -p_normal[I], and the scatter +D tF on the slave facet and
+    // -M^T tF on the master facet.
+    void addMortarFriction(const double D[4][4], const double M[4][4], const double n[3],
+                           const double p_normal[4], class LadrunoContactDomain *cd);
+
     Vector resid;
     Matrix tang;
 
@@ -248,6 +266,7 @@ class LadrunoContactFE : public FE_Element
     int slaveFacetIndex;    // ordinal of the slave facet in its surface (stable across rebuilds)
     int mortarOrder;        // order of the triangle rule on the clipped overlap
     bool isTie;             // mesh tie
+    int masterFacetIndex;   // ordinal of the master facet in its surface (stable across rebuilds)
 };
 
 #endif
