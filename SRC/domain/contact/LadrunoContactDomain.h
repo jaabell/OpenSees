@@ -190,12 +190,25 @@ class LadrunoContactDomain
         double gapOffset   = 0.0;
         bool   adjust      = false;
         double adjustTol   = 0.0;
+        // Smoothed contact law, set by setMortarSmoothing() (penalty only, it
+        // needs augmentMode == AUG_NEVER):
+        //  smoothN (> 0, a length g0): C1 quadratic onset of the normal
+        //    pressure over |gbar| < g0, and a C1 onset of the friction traction
+        //    over the same band;
+        //  smoothT (0 < r < 1): the stick/slip corner rounded over
+        //    |rho - cap| < r cap.
+        double smoothN     = 0.0;
+        double smoothT     = 0.0;
     };
     enum { AUG_COMMIT = 0, AUG_REQUEST = 1, AUG_NEVER = 2 };
     // set the controls of an existing mortar contact; < 0 if the tag is not a
     // mortar contact or a value is refused (a gap shift on a tie, maxGap < 0)
     int setMortarContactOptions(int tag, int augmentMode, double maxGap, double gapOffset,
                                 bool adjust, double adjustTol);
+    // set -smoothN / -smoothT on an existing mortar contact (after its
+    // options); < 0 with a message on a tie, an augmenting contact, -smoothT
+    // without friction, or a value out of range
+    int setMortarSmoothing(int tag, double smoothN, double smoothT);
     int addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                          double kn, bool knAuto, double epsN, bool epsNAuto,
                          double augTol, int maxAug, int ngp, const double *outward = 0,

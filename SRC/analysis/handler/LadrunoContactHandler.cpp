@@ -770,6 +770,8 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                     if (fe == 0) return -5;
                     if (mc.gapOffset != 0.0 || mc.adjust)
                         fe->setMortarGapShift(mc.gapOffset, mc.adjust, mc.adjustTol);
+                    if (mc.smoothN > 0.0 || mc.smoothT > 0.0)
+                        fe->setMortarSmoothing(mc.smoothN, mc.smoothT);
                     theModel->addFE_Element(fe);
                     for (int k = 0; k < npsS; k++) {
                         cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));

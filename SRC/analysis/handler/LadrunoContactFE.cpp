@@ -52,7 +52,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, int ndm_,
     kt(0.0), mu(0.0), cohesion(0.0), tauMax(0.0), consistentTan(false),
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
     isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
-    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false)
+    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
+    smoothBand(0.0), smoothSlip(0.0)
 {
     // Connectivity = the slave node's DOF_Group; setID() fills myID with its
     // first ndm equation numbers (the translations), as for PenaltySP_FE.
@@ -79,7 +80,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes,
     kt(kt_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
     isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
-    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false)
+    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
+    smoothBand(0.0), smoothSlip(0.0)
 {
     // Connectivity = slave DOF_Group + each segment-node DOF_Group; setID() fills
     // myID = [slave xyz | seg_1 xyz | ... | seg_nps xyz], the layout B assumes.
@@ -116,7 +118,7 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
     muc(0.0), npsS(nps_s), npsM(nps_m), slaveFacetIndex(slaveFacetIndex_),
     mortarOrder(ngp_ >= 1 ? ngp_ : 2), isTie(isTie_), masterFacetIndex(masterFacetIndex_),
     hasGapShift(false), gapShiftOffset(0.0), gapShiftAdjust(false), gapShiftAdjTol(0.0),
-    gapShiftRefReady(false)
+    gapShiftRefReady(false), smoothBand(0.0), smoothSlip(0.0)
 {
     for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
     // Connectivity = each slave facet DOF_Group, then each master facet
@@ -155,6 +157,27 @@ LadrunoContactFE::setMortarGapShift(double gapOffset, bool adjust, double adjust
     hasGapShift = (gapOffset != 0.0) || adjust;
     gapShiftRefReady = false;
     for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
+}
+
+void
+LadrunoContactFE::setMortarSmoothing(double smoothN, double smoothT)
+{
+    smoothBand = (smoothN > 0.0) ? smoothN : 0.0;
+    smoothSlip = (smoothT > 0.0) ? smoothT : 0.0;
+}
+
+void
+LadrunoContactFE::mortarSmoothLaw(double pr, double &P, double &dP, double &chi,
+                                  double &dchi) const
+{
+    double x = -pr, S = kn * smoothBand;
+    if (x <= -S) { P = 0.0; dP = 0.0; chi = 0.0; dchi = 0.0; return; }
+    if (x >= S)  { P = x;   dP = 1.0; chi = 1.0; dchi = 0.0; return; }
+    double t = (x + S) / (2.0 * S);
+    P = (x + S) * (x + S) / (4.0 * S);
+    dP = t;
+    chi = t * t * (3.0 - 2.0 * t);
+    dchi = 6.0 * t * (1.0 - t) / (2.0 * S);
 }
 
 double
@@ -433,6 +456,12 @@ LadrunoContactFE::addMortarTang(double fact, bool initialStiff)
             ? cd->getOrCreateMortarNormalState(contactTag, mortarSlave[I]->getTag()).lambdaN
             : 0.0;
         double pr = lambdaI + kn * (g[I] / aFacet);
+        if (smoothBand > 0.0) {                       // W_I = P'(x) / a_I, 0..1 over the band
+            double P, dP, ch, dch;
+            mortarSmoothLaw(pr, P, dP, ch, dch);
+            W[I] = dP / aFacet;
+            continue;
+        }
         if (pr < 0.0) W[I] = 1.0 / aFacet;            // active in compression
         // a shifted node exactly at p = 0 (every adjusted node at the start)
         // takes the closed branch of the kink, where the residual is zero on
@@ -480,8 +509,14 @@ LadrunoContactFE::addMortarTang(double fact, bool initialStiff)
         const LadrunoContactDomain::MortarNormalState &nst =
             cd->getOrCreateMortarNormalState(contactTag, mortarSlave[I]->getTag());
         double pr = nst.lambdaN + kn * (g[I] / aFacet);
-        if (pr >= 0.0) continue;                      // friction only in normal contact
-        double N_I = -pr;
+        double N_I = -pr, knN = kn, chiI = 1.0, dchiI = 0.0;
+        if (smoothBand > 0.0) {
+            double dP;
+            mortarSmoothLaw(pr, N_I, dP, chiI, dchiI);
+            if (N_I <= 0.0) continue;                 // open beyond the band
+            knN = kn * dP;                            // dN/dz of the smoothed law
+        } else if (pr >= 0.0)
+            continue;                                 // friction only in normal contact
         LadrunoContactDomain::MortarFrictionState &st = cd->getOrCreateMortarFrictionState(
             contactTag, mortarSlave[I]->getTag(), slaveFacetIndex, masterFacetIndex);
         double r[3] = {0.0, 0.0, 0.0};
@@ -496,8 +531,33 @@ LadrunoContactFE::addMortarTang(double fact, bool initialStiff)
         const double *gtForKss = initialStiff ? st.gpT : gTeff;
         bool useConsistent = consistentTan && !initialStiff;
         double Kss[3][3];
-        LadrunoFrictionKernel::frictionTangentBlock(gtForKss, st.gpT, n, N_I, kn, kt, mu,
-                                                    useConsistent, Kss, cohesion, tauMax);
+        if (smoothSlip > 0.0)
+            LadrunoFrictionKernel::frictionTangentBlockSmooth(gtForKss, st.gpT, n, N_I, knN, kt,
+                                                              mu, useConsistent, Kss, cohesion,
+                                                              tauMax, smoothSlip);
+        else
+            LadrunoFrictionKernel::frictionTangentBlock(gtForKss, st.gpT, n, N_I, knN, kt, mu,
+                                                        useConsistent, Kss, cohesion, tauMax);
+        if (smoothBand > 0.0) {
+            // d(chi tF)/du = chi dtF/du + tF (x) dchi/du: the block is scaled by
+            // chi, and the consistent path adds the onset coupling
+            // kn chi'(x) tF (x) n (non-symmetric; the scatter below supplies
+            // dz/du = -b n / a), tF the unscaled traction
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++) Kss[i][j] *= chiI;
+            if (useConsistent && dchiI > 0.0) {
+                double tF[3], gpTr[3];
+                if (smoothSlip > 0.0)
+                    LadrunoFrictionKernel::frictionReturnMapSmooth(gTeff, st.gpT, N_I, kt, mu, tF,
+                                                                   gpTr, cohesion, tauMax,
+                                                                   smoothSlip);
+                else
+                    LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, N_I, kt, mu, tF,
+                                                             gpTr, cohesion, tauMax);
+                for (int i = 0; i < 3; i++)
+                    for (int j = 0; j < 3; j++) Kss[i][j] += kn * dchiI * tF[i] * n[j];
+            }
+        }
         for (int A = 0; A < nN; A++) {
             double bIA = (A < npsS) ? D[I][A] : -M[I][A - npsS];
             if (bIA == 0.0) continue;
@@ -623,6 +683,7 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
         }
         if (mortarActive(D, M, g, n)) {
             double p[4] = {0.0, 0.0, 0.0, 0.0};
+            double chi[4] = {0.0, 0.0, 0.0, 0.0};        // friction onset of the smoothed law
             for (int I = 0; I < npsS; I++) {
                 double aFacet = 0.0;                      // a_I = sum_J D_IJ = int N_I over the overlap
                 for (int J = 0; J < npsS; J++) aFacet += D[I][J];
@@ -638,7 +699,12 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                     lambdaI = cd->getOrCreateMortarNormalState(contactTag, nodeTag).lambdaN;
                 }
                 double pr = lambdaI + kn * (g[I] / aFacet);
-                p[I] = (pr < 0.0) ? pr : 0.0;             // active in compression
+                if (smoothBand > 0.0) {                   // C1 quadratic onset
+                    double P, dP, dchi;
+                    mortarSmoothLaw(pr, P, dP, chi[I], dchi);
+                    p[I] = -P;
+                } else
+                    p[I] = (pr < 0.0) ? pr : 0.0;         // active in compression
             }
             for (int K = 0; K < npsS; K++) {              // slave block: -(D p)_K n
                 double Dp = 0.0;
@@ -652,7 +718,7 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
             }
             // Coulomb/Tresca friction; a frictionless pair touches no state
             if (hasFriction() && cd != 0)
-                addMortarFriction(D, M, n, p, cd);
+                addMortarFriction(D, M, n, p, cd, (smoothBand > 0.0) ? chi : 0);
         } else if (cd != 0) {
             // empty overlap at this evaluation: withdraw this pair's part of the
             // summed gap of its slave nodes
@@ -667,7 +733,8 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
 
 void
 LadrunoContactFE::addMortarFriction(const double D[4][4], const double M[4][4], const double n[3],
-                                    const double p_normal[4], LadrunoContactDomain *cd)
+                                    const double p_normal[4], LadrunoContactDomain *cd,
+                                    const double *chi)
 {
     double us[4][3], um[4][3];
     for (int i = 0; i < npsS; i++) {
@@ -705,8 +772,14 @@ LadrunoContactFE::addMortarFriction(const double D[4][4], const double M[4][4], 
         double gTeff[3];
         for (int d = 0; d < 3; d++) gTeff[d] = (gbarT[d] - st.gT0[d]) + st.lambdaT[d] * invEpsT;
         double tF[3], gpTtrial[3];
-        LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, N_I, kt, mu, tF, gpTtrial,
-                                                 cohesion, tauMax);
+        if (smoothSlip > 0.0)                         // rounded stick/slip corner
+            LadrunoFrictionKernel::frictionReturnMapSmooth(gTeff, st.gpT, N_I, kt, mu, tF,
+                                                           gpTtrial, cohesion, tauMax, smoothSlip);
+        else
+            LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, N_I, kt, mu, tF, gpTtrial,
+                                                     cohesion, tauMax);
+        if (chi != 0)                                 // friction onset over the band
+            for (int d = 0; d < 3; d++) tF[d] *= chi[I];
         for (int d = 0; d < 3; d++) {
             st.gpTtrial[d] = gpTtrial[d];
             st.lambdaTtrial[d] = -tF[d];

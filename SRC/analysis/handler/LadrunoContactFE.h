@@ -135,6 +135,12 @@ class LadrunoContactFE : public FE_Element
     // reference gap is integrated at the first evaluation.
     void setMortarGapShift(double gapOffset, bool adjust, double adjustTol);
 
+    // Smoothed mortar contact law: smoothN > 0 (a length g0) replaces the kink
+    // of p = min(0, epsN gbar) by a C1 quadratic onset over |gbar| < g0 and
+    // fades the friction traction in over the same band; 0 < smoothT < 1 rounds
+    // the stick/slip corner (LadrunoFrictionKernel::frictionReturnMapSmooth).
+    void setMortarSmoothing(double smoothN, double smoothT);
+
     // Fill myID with the first ndm equations of each node (the translations).
     // FE_Element::setID() copies each node's whole DOF_Group ID, which on a
     // node with ndf > ndm (a beam or shell node, a u-p node) overflows the
@@ -228,8 +234,16 @@ class LadrunoContactFE : public FE_Element
     // lambdaT + epsT (gTeff - gpT)), the return map of LadrunoFrictionKernel
     // with N = -p_normal[I], and the scatter +D tF on the slave facet and
     // -M^T tF on the master facet.
+    // chi (null: 1): the onset weights of the smoothed law, scaling the traction.
     void addMortarFriction(const double D[4][4], const double M[4][4], const double n[3],
-                           const double p_normal[4], class LadrunoContactDomain *cd);
+                           const double p_normal[4], class LadrunoContactDomain *cd,
+                           const double *chi = 0);
+
+    // Smoothed normal law at the augmented argument pr = lambda + epsN gbar,
+    // x = -pr, S = epsN g0: P = 0 (x <= -S), (x + S)^2 / (4 S) (|x| < S),
+    // x (x >= S); dP = dP/dx; chi = C1 smoothstep of the friction onset over
+    // the same band and dchi = dchi/dx.
+    void mortarSmoothLaw(double pr, double &P, double &dP, double &chi, double &dchi) const;
 
     Vector resid;
     Matrix tang;
@@ -281,6 +295,10 @@ class LadrunoContactFE : public FE_Element
     double gapShiftAdjTol;          // 0: adjust every node of the pair
     mutable bool   gapShiftRefReady;
     mutable double gapShiftRef[4];  // -gbar_I at the reference configuration
+
+    // smoothed law (setMortarSmoothing); 0: off
+    double smoothBand;              // g0
+    double smoothSlip;              // r
 };
 
 #endif

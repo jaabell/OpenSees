@@ -209,6 +209,52 @@ LadrunoContactDomain::setMortarContactOptions(int tag, int augmentMode, double m
     return 0;
 }
 
+int
+LadrunoContactDomain::setMortarSmoothing(int tag, double smoothN, double smoothT)
+{
+    MortarContact *m = 0;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) { m = &theMortarContacts[i]; break; }
+    if (m == 0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << " is not a -mortar contact\n";
+        return -1;
+    }
+    if (smoothN < 0.0 || smoothT < 0.0 || smoothT >= 1.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN needs a band g0 > 0 and -smoothT a ratio 0 < r < 1\n";
+        return -1;
+    }
+    if (smoothN == 0.0 && smoothT == 0.0) {
+        m->smoothN = 0.0; m->smoothT = 0.0;
+        return 0;
+    }
+    if (m->isTie) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN/-smoothT do not apply to -tie (a bond has no active set and no "
+                  "stick/slip switch to smooth)\n";
+        return -1;
+    }
+    if (m->augmentMode != AUG_NEVER) {
+        // With the Uzawa update lambda <- -P(x), the fixed point of a node whose
+        // pressure is below epsN g0 is an open gap held by a positive pressure:
+        // the smoothing would not vanish as the multiplier converges.
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN/-smoothT are pure-penalty laws; add -augment never (the Uzawa "
+                  "update is not defined for the smoothed law)\n";
+        return -1;
+    }
+    if (smoothT > 0.0 && !m->hasFriction()) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothT smooths the stick/slip corner, but this contact has no friction "
+                  "(-mu/-cohesion); remove -smoothT\n";
+        return -1;
+    }
+    m->smoothN = smoothN;
+    m->smoothT = smoothT;
+    return 0;
+}
+
 LadrunoContactDomain::MortarNormalState &
 LadrunoContactDomain::getOrCreateMortarNormalState(int contactTag, int slaveNodeTag)
 {

@@ -34,7 +34,7 @@
 //              -tie, -epsTie auto|val, -epsT auto|val (friction: -mu, -cohesion,
 //              -tauMax, -consistanttan as above)
 //              -augment commit|request|never, -maxGap d, -gapOffset g0,
-//              -adjust <tol>
+//              -adjust <tol>, -smoothN g0, -smoothT r
 //     -consistentTan is accepted as an alias of -consistanttan.
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
 //   ladrunoContactInfo            -> numContacts numCommits numReverts numMortarContacts
@@ -257,6 +257,7 @@ int OPS_LadrunoContact()
     bool   hasControls = false;
     double maxGap = 0.0, gapOffset = 0.0, adjustTol = 0.0;
     bool   adjust = false;
+    double smoothN = 0.0, smoothT = 0.0;   // smoothed law (setMortarSmoothing)
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-mortar") == 0) {
@@ -296,6 +297,18 @@ int OPS_LadrunoContact()
                 return -1;
             }
             hasControls = true;
+        } else if (opt != 0 && (strcmp(opt, "-smoothN") == 0 || strcmp(opt, "-smoothT") == 0)) {
+            // band g0 > 0 of the smoothed normal onset / ratio 0 < r < 1 of the
+            // rounded stick/slip corner
+            bool isN = (strcmp(opt, "-smoothN") == 0);
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0 || v[0] <= 0.0 || (!isN && v[0] >= 1.0)) {
+                opserr << (isN ? "WARNING contact -smoothN - need a band g0 > 0 (a length)\n"
+                               : "WARNING contact -smoothT - need a ratio 0 < r < 1\n");
+                return -1;
+            }
+            if (isN) smoothN = v[0];
+            else     smoothT = v[0];
         } else if (opt != 0 && strcmp(opt, "-maxGap") == 0) {
             double v[1]; int m = 1;
             if (OPS_GetDoubleInput(&m, v) < 0 || v[0] <= 0.0) {
@@ -429,8 +442,8 @@ int OPS_LadrunoContact()
             opserr << "WARNING contact - unexpected token '" << (opt ? opt : "")
                    << "' (expected -outward, -cell, -geomtan, -mu, -cohesion, -tauMax, "
                       "-consistanttan, -visc, -mortar, -tie, -epsN, -epsTie, -epsT, -augTol, "
-                      "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust or end of "
-                      "arguments)\n";
+                      "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust, -smoothN, "
+                      "-smoothT or end of arguments)\n";
             return -1;
         }
     }
@@ -444,6 +457,11 @@ int OPS_LadrunoContact()
     if (hasControls && !isMortar) {
         opserr << "WARNING contact -augment/-maxGap/-gapOffset/-adjust are -mortar options; "
                   "add -mortar or remove them\n";
+        return -1;
+    }
+    if ((smoothN > 0.0 || smoothT > 0.0) && !isMortar) {
+        opserr << "WARNING contact -smoothN/-smoothT are -mortar options; add -mortar or "
+                  "remove them\n";
         return -1;
     }
     if (isTie && !isMortar) {
@@ -477,6 +495,25 @@ int OPS_LadrunoContact()
                       "the relative displacement, so the as-meshed gap is already strain-free\n";
             return -1;
         }
+        // the refusals of setMortarSmoothing(), checked before the contact is
+        // added so that a refused command leaves no definition behind
+        if (smoothN > 0.0 || smoothT > 0.0) {
+            if (isTie) {
+                opserr << "WARNING contact -smoothN/-smoothT do not apply to -tie (a bond has no "
+                          "active set and no stick/slip switch to smooth)\n";
+                return -1;
+            }
+            if (augmentMode != LadrunoContactDomain::AUG_NEVER) {
+                opserr << "WARNING contact -smoothN/-smoothT are pure-penalty laws; add -augment "
+                          "never (the Uzawa update is not defined for the smoothed law)\n";
+                return -1;
+            }
+            if (smoothT > 0.0 && mu <= 0.0 && cohesion <= 0.0 && tauMax <= 0.0) {
+                opserr << "WARNING contact -smoothT smooths the stick/slip corner, but this "
+                          "contact has no friction (-mu/-cohesion); remove -smoothT\n";
+                return -1;
+            }
+        }
         // the friction options are those of the node-to-segment lane (-mu or
         // the positional mu, -cohesion, -tauMax); a positional kt is the
         // tangential penalty when -epsT is not given
@@ -488,6 +525,8 @@ int OPS_LadrunoContact()
         if (mres == 0 && hasControls)
             mres = cd->setMortarContactOptions(idata[0], augmentMode, maxGap, gapOffset,
                                                adjust, adjustTol);
+        if (mres == 0 && (smoothN > 0.0 || smoothT > 0.0))
+            mres = cd->setMortarSmoothing(idata[0], smoothN, smoothT);
         return mres;
     }
     return cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
