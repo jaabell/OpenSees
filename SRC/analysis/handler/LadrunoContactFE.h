@@ -114,9 +114,12 @@ class LadrunoContactFE : public FE_Element
     //   contactTag, slaveFacetIndex: the engine keys; theDomain is the engine
     //     lookup (null: penalty only, no multiplier).
     //   ngp: order of the triangle rule on the clipped overlap.
+    //   isTie: a mesh tie (permanent bond of the full relative displacement,
+    //     epsN is then the tie penalty).
     LadrunoContactFE(int tag, Node **slaveNodes, int npsS, Node **masterNodes, int npsM,
                      double epsN, const double orientDir[3], int contactTag,
-                     int slaveFacetIndex, Domain *theDomain, int ngp = 2);
+                     int slaveFacetIndex, Domain *theDomain, int ngp = 2,
+                     bool isTie = false);
     ~LadrunoContactFE();
 
     // Fill myID with the first ndm equations of each node (the translations).
@@ -195,6 +198,15 @@ class LadrunoContactFE : public FE_Element
     // included (exact for flat facets that do not slide).
     void addMortarTang(double fact, bool initialStiff = false);
 
+    // Mesh-tie force: for every slave node of the pair the weighted relative
+    // displacement r_I = sum_J D_IJ u_s,J - sum_K M_IK u_m,K (from the trial
+    // displacements: the bond holds the as-built configuration), the traction
+    // t_I = lambdaTie_I + epsTie r_I / a_I (all three components, no clamp),
+    // scattered as the normal force: f^s_K = -sum_I D_KI t_I,
+    // f^m_L = +sum_I M_IL t_I.
+    void addMortarTieForce(const double D[4][4], const double M[4][4],
+                           class LadrunoContactDomain *cd);
+
     Vector resid;
     Matrix tang;
 
@@ -235,6 +247,7 @@ class LadrunoContactFE : public FE_Element
     int npsS, npsM;         // nodes per slave / master facet
     int slaveFacetIndex;    // ordinal of the slave facet in its surface (stable across rebuilds)
     int mortarOrder;        // order of the triangle rule on the clipped overlap
+    bool isTie;             // mesh tie
 };
 
 #endif

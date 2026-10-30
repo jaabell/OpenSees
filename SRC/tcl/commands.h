@@ -148,6 +148,8 @@ ladrunoContactForce(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Cha
 int
 ladrunoMortarPenetration(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
 int
+ladrunoMortarTieResidual(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
 ladrunoBeginAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
 int
 ladrunoEndAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);

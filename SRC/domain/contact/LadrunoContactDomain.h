@@ -154,10 +154,16 @@ class LadrunoContactDomain
         int    ngp;             // order of the triangle rule on the clipped overlap (2: 3 points)
         bool   hasOutward;
         double outward[3];      // direction toward the slave's allowed half-space
+        // Mesh tying: a permanent bond, the zero-gap limit of contact. The full
+        // weighted relative displacement r_I = sum_J D_IJ u_s,J - sum_K M_IK u_m,K
+        // (normal and tangential) is driven to zero, with no active set and no
+        // clamp; epsN is the tie penalty.
+        bool   isTie = false;
     };
     int addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                          double kn, bool knAuto, double epsN, bool epsNAuto,
-                         double augTol, int maxAug, int ngp, const double *outward = 0);
+                         double augTol, int maxAug, int ngp, const double *outward = 0,
+                         bool isTie = false);
     int getNumMortarContacts(void) const { return (int)theMortarContacts.size(); }
     const MortarContact &getMortarContact(int i) const { return theMortarContacts[i]; }
 
@@ -169,13 +175,21 @@ class LadrunoContactDomain
     //     The update uses the weighted gap and area summed over every facet pair
     //     that integrates the node; the adapters report their part through
     //     accumulateMortarGap(). A per-facet multiplier would differ between the
-    //     facets of a shared node and fail the patch test. ---
+    //     facets of a shared node and fail the patch test.
+    //     A tie node carries the vector multiplier lambdaTie instead, updated
+    //     without clamp from the summed weighted relative displacement:
+    //     lambdaTie <- lambdaTie + epsTie rtGlobal / aGlobal. ---
     struct MortarNormalState {
         double lambdaN;   // committed normal multiplier (<= 0)
         double gtGlobal;  // sum over facet pairs of the weighted gap gt_I at the current trial
         double aGlobal;   // sum over facet pairs of a_I
         double epsN;      // penalty of the update (max over the facet pairs)
-        MortarNormalState() : lambdaN(0.0), gtGlobal(0.0), aGlobal(0.0), epsN(0.0) {}
+        double lambdaTie[3];  // committed tie multiplier (changed only by commit())
+        double rtGlobal[3];   // sum over facet pairs of r_I at the current trial
+        bool   isTie;         // a node of a mesh tie
+        MortarNormalState() : lambdaN(0.0), gtGlobal(0.0), aGlobal(0.0), epsN(0.0), isTie(false) {
+            for (int d = 0; d < 3; d++) lambdaTie[d] = rtGlobal[d] = 0.0;
+        }
     };
     MortarNormalState &getOrCreateMortarNormalState(int contactTag, int slaveNodeTag);
     // A facet pair reports its weighted gap and area at a slave node. The entry
@@ -187,6 +201,14 @@ class LadrunoContactDomain
     // max(0, -gbar_I) (0 without mortar contact): the convergence measure of a
     // held-load augmentation loop (ladrunoMortarPenetration)
     double getMaxMortarPenetration(void) const;
+    // A tie facet pair reports its weighted relative displacement r_I and area
+    // at a slave node (same replacement rule as accumulateMortarGap).
+    void accumulateMortarTie(int contactTag, int slaveNodeTag, int feTag,
+                             const double rFacet[3], double aFacet, double epsTie);
+    // max over the tie slave nodes and components of |rtGlobal / aGlobal| (0
+    // without a tie): the convergence measure of a held-load augmentation loop
+    // on a tie (ladrunoMortarTieResidual)
+    double getMaxMortarTieResidual(void) const;
     int  getNumMortarNormalStates(void) const { return (int)theMortarNormalStates.size(); }
     // Collection of the multipliers of slave nodes that no longer belong to a
     // built pair: the handler calls mortarNormalGCBegin(), mortarNormalGCMark()
@@ -257,7 +279,8 @@ class LadrunoContactDomain
     // with the same condition is still reported. True exactly once per key.
     enum WarnTopic {
         WARN_VISC_STATIC = 0,       // -visc under a static integrator: dashpot disabled
-        WARN_MORTAR_ORIENT          // mortar automatic orientation degenerate (coincident facets)
+        WARN_MORTAR_ORIENT,         // mortar automatic orientation degenerate (coincident facets)
+        WARN_TIE_EXCLUDED           // tie pairs excluded by the proximity guard
     };
     bool warnOnce(int contactTag, int topic);
 
@@ -299,8 +322,8 @@ class LadrunoContactDomain
     // contribution of one adapter to one slave node, keyed (contactTag,
     // slaveNodeTag, adapter tag); cleared at every handle()
     struct FacetContrib {
-        double gt, a;
-        FacetContrib() : gt(0.0), a(0.0) {}
+        double gt, a, r[3];     // gt: normal contact, r: tie (a node is one or the other)
+        FacetContrib() : gt(0.0), a(0.0) { r[0] = r[1] = r[2] = 0.0; }
     };
     std::map<PairKey, FacetContrib> theMortarFacetContribs;
 };

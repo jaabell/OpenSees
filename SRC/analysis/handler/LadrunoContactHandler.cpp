@@ -29,6 +29,7 @@
 #include <LadrunoContactSurface.h>
 #include <LadrunoContactProjection.h>
 #include <LadrunoContactBucketSort.h>
+#include <LadrunoMortarKernel.h>
 #include <Matrix.h>
 #include <Domain.h>
 #include <AnalysisModel.h>
@@ -546,6 +547,16 @@ LadrunoContactHandler::handle(const ID *nodesLast)
     // the centroid of an extended slave facet would miss overlaps when the slave
     // facet is coarser than the master buckets. The clip of the adapter rejects
     // a non-overlapping pair at each evaluation (zero force).
+    //
+    // A mesh tie (-tie) binds the pairs that overlap in the reference
+    // configuration, and only those whose mean |gap| over the overlap is at most
+    // 0.5 sqrt(A_s), A_s the area of the slave facet. The clip accepts an
+    // anti-parallel facet across a closed or folded surface (the far side of a
+    // tube projects onto the auxiliary plane of a near facet), and without the
+    // proximity condition every slave facet would also be tied to the antipodal
+    // master facets; their separation is of the order of the surface diameter,
+    // that of the facing pairs of the order of the facet sagitta. This is the
+    // exclusion of the mortar generator of LadrunoTie with a tolerance factor 1.
     if (cd != 0) {
         cd->mortarNormalGCBegin();   // multiplier slots of nodes not rebuilt below are collected
         for (int c = 0; c < cd->getNumMortarContacts(); c++) {
@@ -585,9 +596,11 @@ LadrunoContactHandler::handle(const ID *nodesLast)
             const ID &sTags = ss->getNodeTags();
             int nSegM = mTags.Size() / npsM;
             int nSegS = sTags.Size() / npsS;
+            int nTieExcluded = 0;
 
             for (int sf = 0; sf < nSegS; sf++) {
                 Node *sNodes[4]; double scen[3] = {0.0, 0.0, 0.0};
+                double Sx[4][3];                              // reference coordinates
                 for (int k = 0; k < npsS; k++) {
                     Node *sn = theDomain->getNode(sTags(sf * npsS + k));
                     if (sn == 0 || sn->getNumberDOF() < 3) {
@@ -600,9 +613,20 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                     }
                     sNodes[k] = sn;
                     const Vector &Xk = sn->getCrds();
-                    for (int d = 0; d < 3; d++) scen[d] += Xk(d);
+                    for (int d = 0; d < 3; d++) { Sx[k][d] = Xk(d); scen[d] += Xk(d); }
                 }
                 for (int d = 0; d < 3; d++) scen[d] /= npsS;     // slave facet centroid
+                // tie proximity tolerance 0.5 sqrt(A_s) (A_s from the facet clipped
+                // with itself); < 0: the facet is degenerate, no exclusion
+                double tieGapTol = -1.0;
+                if (mc.isTie) {
+                    double nS[3];
+                    ladrunoFacetNormalNewell(npsS, Sx, nS);
+                    LadrunoMortarKernel::PairResult prSelf;
+                    if (LadrunoMortarKernel::integratePair(npsS, Sx, npsS, Sx, nS, prSelf,
+                                                           mc.ngp) == 0 && prSelf.area > 1e-300)
+                        tieGapTol = 0.5 * std::sqrt(prSelf.area);
+                }
 
                 for (int seg = 0; seg < nSegM; seg++) {
                     Node *mNodes[4]; double mcen[3] = {0.0, 0.0, 0.0};
@@ -629,6 +653,21 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                     double orientDir[3];
                     if (mc.hasOutward) {
                         for (int d = 0; d < 3; d++) orientDir[d] = mc.outward[d];
+                    } else if (mc.isTie) {
+                        // The bond of a tie does not depend on the normal sign. The
+                        // projection refuses a point whose reference direction is within
+                        // 1e-12 of the facet plane, so a degenerate automatic direction
+                        // (zero on a coincident pair, tangential on a zero-gap non-matching
+                        // pair, where the normal component is round-off) takes the master
+                        // facet normal. The test is relative and 1e3 above that threshold.
+                        for (int d = 0; d < 3; d++) orientDir[d] = scen[d] - mcen[d];
+                        double nM[3];
+                        ladrunoFacetNormalNewell(npsM, Mx, nM);
+                        double odn = nM[0]*orientDir[0] + nM[1]*orientDir[1] + nM[2]*orientDir[2];
+                        double od = std::sqrt(orientDir[0]*orientDir[0] + orientDir[1]*orientDir[1]
+                                              + orientDir[2]*orientDir[2]);
+                        if (std::fabs(odn) <= 1e-9 * od)
+                            for (int d = 0; d < 3; d++) orientDir[d] = nM[d];
                     } else {
                         for (int d = 0; d < 3; d++) orientDir[d] = scen[d] - mcen[d];
                         // The kernel flips the facet normal toward orientDir. On a
@@ -659,6 +698,16 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                       "the facet winding and may be attractive. Give -outward.\n";
                         }
                     }
+                    if (mc.isTie) {
+                        LadrunoMortarKernel::PairResult pr0;
+                        if (LadrunoMortarKernel::integratePair(npsS, Sx, npsM, Mx, orientDir,
+                                                               pr0, mc.ngp) != 0)
+                            continue;                     // no overlap as built: not bonded
+                        if (tieGapTol > 0.0 && pr0.gapL1 > tieGapTol * pr0.area) {
+                            nTieExcluded++;               // a distant (antipodal) pair
+                            continue;
+                        }
+                    }
                     double epsUse = epsFixed;
                     if (epsAuto) {
                         epsUse = ladrunoResolveAutoKn(theDomain, mNodes, npsM, orientDir);
@@ -673,13 +722,19 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                     }
                     LadrunoContactFE *fe =
                         new LadrunoContactFE(numFe++, sNodes, npsS, mNodes, npsM, epsUse,
-                                             orientDir, mc.tag, sf, theDomain, mc.ngp);
+                                             orientDir, mc.tag, sf, theDomain, mc.ngp,
+                                             mc.isTie);
                     if (fe == 0) return -5;
                     theModel->addFE_Element(fe);
                     for (int k = 0; k < npsS; k++)
                         cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));
                 }
             }
+            if (nTieExcluded > 0 && cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_TIE_EXCLUDED))
+                opserr << "LadrunoContactHandler::handle() - mortar tie " << mc.tag << ": "
+                       << nTieExcluded << " overlapping facet pair(s) farther apart than half "
+                          "the slave facet size were not tied (the far side of a closed or "
+                          "folded surface)\n";
         }
         cd->mortarNormalGCEnd();     // erase the multiplier slots no live pair referenced
     }

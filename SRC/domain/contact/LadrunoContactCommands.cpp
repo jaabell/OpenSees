@@ -30,11 +30,13 @@
 //   contact tag masterSurfTag slaveSurfTag <kn | kn kt mu | auto <kt mu>> <options>
 //     options: -outward ox oy oz, -cell frac, -geomtan, -mu mu, -cohesion c,
 //              -tauMax tau, -consistanttan, -visc muc
-//     mortar:  -mortar, -epsN auto|val, -augTol tol, -maxAug n, -ngp order
+//     mortar:  -mortar, -epsN auto|val, -augTol tol, -maxAug n, -ngp order,
+//              -tie, -epsTie auto|val
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
 //   ladrunoContactInfo            -> numContacts numCommits numReverts numMortarContacts
 //   ladrunoContactForce slaveTag  -> summed normal contact force on the node
 //   ladrunoMortarPenetration      -> max mortar penetration on the active set
+//   ladrunoMortarTieResidual      -> max weighted relative displacement of the mortar ties
 //   ladrunoBeginAugment, ladrunoEndAugment
 //                                 -> open / close a held-load augmentation sweep
 //
@@ -243,15 +245,20 @@ int OPS_LadrunoContact()
     bool epsNAuto = false;          // -epsN auto
     double augTol = 1e-8;           // -augTol
     int maxAug = 20, ngp = 2;       // -maxAug, -ngp
+    bool isTie = false;             // -tie
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-mortar") == 0) {
             isMortar = true;
-        } else if (opt != 0 && strcmp(opt, "-epsN") == 0) {
-            // normal penalty of the mortar augmented Lagrangian; auto sizes it
-            // from the solid that owns the master facet, as kn auto
+        } else if (opt != 0 && strcmp(opt, "-tie") == 0) {
+            // a permanent mesh tie (mortar only, checked below)
+            isTie = true;
+        } else if (opt != 0 && (strcmp(opt, "-epsN") == 0 || strcmp(opt, "-epsTie") == 0)) {
+            // normal penalty of the mortar augmented Lagrangian, or the penalty
+            // of a tie (-epsTie, the same slot: a tie has one penalty); auto
+            // sizes it from the solid that owns the master facet, as kn auto
             if (OPS_GetNumRemainingInputArgs() < 1) {
-                opserr << "WARNING contact -epsN - need auto or a value\n";
+                opserr << "WARNING contact " << opt << " - need auto or a value\n";
                 return -1;
             }
             const char *e = OPS_GetString();
@@ -261,7 +268,7 @@ int OPS_LadrunoContact()
                 OPS_ResetCurrentInputArg(-1);
                 double v[1]; int m = 1;
                 if (OPS_GetDoubleInput(&m, v) < 0) {
-                    opserr << "WARNING contact -epsN - need auto or a value\n";
+                    opserr << "WARNING contact " << opt << " - need auto or a value\n";
                     return -1;
                 }
                 epsN = v[0];
@@ -356,9 +363,13 @@ int OPS_LadrunoContact()
         opserr << "WARNING contact - define a contactSurface first\n";
         return -1;
     }
+    if (isTie && !isMortar) {
+        opserr << "WARNING contact -tie requires -mortar (mesh tying is a mortar formulation)\n";
+        return -1;
+    }
     if (hasMortarOpt && !isMortar) {
-        opserr << "WARNING contact -epsN/-augTol/-maxAug/-ngp are -mortar options; add "
-                  "-mortar or remove them\n";
+        opserr << "WARNING contact -epsN/-epsTie/-augTol/-maxAug/-ngp are -mortar options; "
+                  "add -mortar or remove them\n";
         return -1;
     }
     if (isMortar) {
@@ -383,7 +394,7 @@ int OPS_LadrunoContact()
             return -1;
         }
         return cd->addMortarContact(idata[0], idata[1], idata[2], kn, knAuto, epsN, epsNAuto,
-                                    augTol, maxAug, ngp, hasOutward ? outward : 0);
+                                    augTol, maxAug, ngp, hasOutward ? outward : 0, isTie);
     }
     return cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
                           hasOutward ? outward : 0, knAuto, cellFrac, consistentTan,
@@ -480,6 +491,24 @@ int OPS_LadrunoMortarPenetration()
     }
     int one = 1;
     if (OPS_SetDoubleOutput(&one, &pen, true) < 0)
+        return -1;
+    return 0;
+}
+
+// ladrunoMortarTieResidual -> the largest component of the weighted relative
+// displacement |r_I / a_I| over the mortar tie slave nodes (0 without a tie).
+// The convergence measure of a held-load augmentation loop on a tie.
+int OPS_LadrunoMortarTieResidual()
+{
+    Domain *theDomain = OPS_GetDomain();
+    double res = 0.0;
+    if (theDomain != 0) {
+        LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
+        if (cd != 0)
+            res = cd->getMaxMortarTieResidual();
+    }
+    int one = 1;
+    if (OPS_SetDoubleOutput(&one, &res, true) < 0)
         return -1;
     return 0;
 }

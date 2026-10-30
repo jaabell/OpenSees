@@ -102,7 +102,7 @@ int
 LadrunoContactDomain::addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                                        double kn, bool knAuto, double epsN, bool epsNAuto,
                                        double augTol, int maxAug, int ngp,
-                                       const double *outward)
+                                       const double *outward, bool isTie)
 {
     LadrunoContactSurface *ms = getSurface(masterSurfTag);
     LadrunoContactSurface *ss = getSurface(slaveSurfTag);
@@ -143,6 +143,7 @@ LadrunoContactDomain::addMortarContact(int tag, int masterSurfTag, int slaveSurf
     m.ngp = (ngp >= 1) ? ngp : 2;
     m.hasOutward = (outward != 0);
     for (int d = 0; d < 3; d++) m.outward[d] = (outward != 0) ? outward[d] : 0.0;
+    m.isTie = isTie;
     theMortarContacts.push_back(m);
     return 0;
 }
@@ -180,7 +181,7 @@ LadrunoContactDomain::getMaxMortarPenetration(void) const
     for (std::map<NodeKey, MortarNormalState>::const_iterator it = theMortarNormalStates.begin();
          it != theMortarNormalStates.end(); ++it) {
         const MortarNormalState &st = it->second;
-        if (st.aGlobal <= 1e-300) continue;
+        if (st.isTie || st.aGlobal <= 1e-300) continue;  // a tie node has no normal gap
         double gbar = st.gtGlobal / st.aGlobal;          // < 0: penetration
         // only nodes with a compressive augmented pressure count: a node held
         // open by its multiplier carries no pressure whatever its raw gap
@@ -188,6 +189,42 @@ LadrunoContactDomain::getMaxMortarPenetration(void) const
             pen = -gbar;
     }
     return pen;
+}
+
+void
+LadrunoContactDomain::accumulateMortarTie(int contactTag, int slaveNodeTag, int feTag,
+                                          const double rFacet[3], double aFacet, double epsTie)
+{
+    // r_I is linear in the displacements, so the sum over the facet pairs does
+    // not depend on the order in which they are evaluated
+    PairKey fk; fk.c = contactTag; fk.s = slaveNodeTag; fk.g = feTag;
+    FacetContrib &fc = theMortarFacetContribs[fk];
+    NodeKey nk; nk.c = contactTag; nk.n = slaveNodeTag;
+    MortarNormalState &st = theMortarNormalStates[nk];
+    for (int d = 0; d < 3; d++) {
+        st.rtGlobal[d] += rFacet[d] - fc.r[d];
+        fc.r[d] = rFacet[d];
+    }
+    st.aGlobal += aFacet - fc.a;
+    fc.a = aFacet;
+    st.isTie = true;
+    if (epsTie > st.epsN) st.epsN = epsTie;   // largest over the facet pairs, as for the gap
+}
+
+double
+LadrunoContactDomain::getMaxMortarTieResidual(void) const
+{
+    double res = 0.0;
+    for (std::map<NodeKey, MortarNormalState>::const_iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ++it) {
+        const MortarNormalState &st = it->second;
+        if (!st.isTie || st.aGlobal <= 1e-300) continue;
+        for (int d = 0; d < 3; d++) {
+            double rbar = std::fabs(st.rtGlobal[d] / st.aGlobal);
+            if (rbar > res) res = rbar;
+        }
+    }
+    return res;
 }
 
 void
@@ -223,6 +260,7 @@ LadrunoContactDomain::mortarNormalGCEnd(void)
         it->second.gtGlobal = 0.0;
         it->second.aGlobal = 0.0;
         it->second.epsN = 0.0;
+        for (int d = 0; d < 3; d++) it->second.rtGlobal[d] = 0.0;
     }
 }
 
@@ -422,6 +460,13 @@ LadrunoContactDomain::commit(bool)
          it != theMortarNormalStates.end(); ++it) {
         MortarNormalState &st = it->second;
         if (st.aGlobal <= 1e-300) continue;          // not integrated this step
+        if (st.isTie) {
+            // mesh tie: an equality, so the update has no clamp and drives the
+            // weighted relative displacement to zero at a finite epsTie
+            for (int d = 0; d < 3; d++)
+                st.lambdaTie[d] += st.epsN * (st.rtGlobal[d] / st.aGlobal);
+            continue;
+        }
         double gbar = st.gtGlobal / st.aGlobal;
         st.lambdaN = std::min(0.0, st.lambdaN + st.epsN * gbar);
     }

@@ -50,7 +50,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, int ndm_,
     mode(RIGID_PLANE), theSlave(slaveNode), ndm(ndm_), kn(kn_), nps(0),
     theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
     kt(0.0), mu(0.0), cohesion(0.0), tauMax(0.0), consistentTan(false),
-    muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2)
+    muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
+    isTie(false)
 {
     // Connectivity = the slave node's DOF_Group; setID() fills myID with its
     // first ndm equation numbers (the translations), as for PenaltySP_FE.
@@ -75,7 +76,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes,
     theDomain(dom), contactTag(contactTag_), segIndex(segIndex_),
     consistentNormal(consistentNormal_),
     kt(kt_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
-    muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2)
+    muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
+    isTie(false)
 {
     // Connectivity = slave DOF_Group + each segment-node DOF_Group; setID() fills
     // myID = [slave xyz | seg_1 xyz | ... | seg_nps xyz], the layout B assumes.
@@ -101,14 +103,14 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes,
 LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
                                    Node **masterNodes, int nps_m, double epsN,
                                    const double odir[3], int contactTag_, int slaveFacetIndex_,
-                                   Domain *dom, int ngp_)
+                                   Domain *dom, int ngp_, bool isTie_)
   : FE_Element(tag, /*numDOF_Group=*/nps_s + nps_m, /*ndof=*/3 * (nps_s + nps_m)),
     resid(3 * (nps_s + nps_m)), tang(3 * (nps_s + nps_m), 3 * (nps_s + nps_m)),
     mode(MORTAR), theSlave(0), ndm(3), kn(epsN), nps(0),
     theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
     kt(0.0), mu(0.0), cohesion(0.0), tauMax(0.0), consistentTan(false), muc(0.0),
     npsS(nps_s), npsM(nps_m), slaveFacetIndex(slaveFacetIndex_),
-    mortarOrder(ngp_ >= 1 ? ngp_ : 2)
+    mortarOrder(ngp_ >= 1 ? ngp_ : 2), isTie(isTie_)
 {
     // Connectivity = each slave facet DOF_Group, then each master facet
     // DOF_Group; setID() fills myID = [slave_0 xyz | ... | master_0 xyz | ...],
@@ -336,6 +338,31 @@ LadrunoContactFE::addMortarTang(double fact, bool)
     if (!mortarActive(D, M, g, n)) return;
     int nN = npsS + npsM;
     LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    if (isTie) {
+        // mesh tie: K = epsTie Bt^T diag(1 / a_I) Bt (x) I3, every slave node
+        // active and all three components tied; symmetric positive semidefinite,
+        // constant (the variation of D and M is not included)
+        double Wt[4] = {0.0, 0.0, 0.0, 0.0};
+        for (int I = 0; I < npsS; I++) {
+            double aFacet = 0.0;
+            for (int J = 0; J < npsS; J++) aFacet += D[I][J];
+            if (aFacet > 1e-300) Wt[I] = 1.0 / aFacet;
+        }
+        for (int A = 0; A < nN; A++)
+            for (int B = 0; B < nN; B++) {
+                double Ks = 0.0;
+                for (int I = 0; I < npsS; I++) {
+                    double bIA = (A < npsS) ? D[I][A] : -M[I][A - npsS];
+                    double bIB = (B < npsS) ? D[I][B] : -M[I][B - npsS];
+                    Ks += bIA * Wt[I] * bIB;
+                }
+                Ks *= kn;
+                if (Ks == 0.0) continue;
+                for (int d = 0; d < 3; d++)
+                    tang(3 * A + d, 3 * B + d) += fact * Ks;
+            }
+        return;
+    }
     // W_I = act_I / a_I with the same per-pair pressure p_I = min(0, lambda_I +
     // epsN gbar_I) as the residual, so the tangent is the derivative of the
     // augmented residual on its active set; lambda_I is constant within the
@@ -463,6 +490,19 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
         // F^s_K = -(D p)_K n, F^m_L = +(M^T p)_L n.
         double D[4][4], M[4][4], g[4], n[3];
         LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+        if (isTie) {
+            if (mortarActive(D, M, g, n)) {
+                addMortarTieForce(D, M, cd);
+            } else if (cd != 0) {
+                // empty overlap: withdraw this pair's part of the summed r
+                double z[3] = {0.0, 0.0, 0.0};
+                for (int I = 0; I < npsS; I++)
+                    if (mortarSlave[I] != 0)
+                        cd->accumulateMortarTie(contactTag, mortarSlave[I]->getTag(),
+                                                this->getTag(), z, 0.0, kn);
+            }
+            return resid;
+        }
         if (mortarActive(D, M, g, n)) {
             double p[4] = {0.0, 0.0, 0.0, 0.0};
             for (int I = 0; I < npsS; I++) {
@@ -502,6 +542,59 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
         }
     }
     return resid;
+}
+
+void
+LadrunoContactFE::addMortarTieForce(const double D[4][4], const double M[4][4],
+                                    LadrunoContactDomain *cd)
+{
+    double us[4][3], um[4][3];
+    for (int i = 0; i < npsS; i++) {
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        for (int d = 0; d < 3; d++) us[i][d] = u(d);
+    }
+    for (int i = 0; i < npsM; i++) {
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        for (int d = 0; d < 3; d++) um[i][d] = u(d);
+    }
+    double t[4][3] = {{0.0}};
+    for (int I = 0; I < npsS; I++) {
+        double aFacet = 0.0;
+        for (int J = 0; J < npsS; J++) aFacet += D[I][J];
+        int nodeTag = mortarSlave[I]->getTag();
+        double r[3] = {0.0, 0.0, 0.0};
+        if (aFacet <= 1e-300) {                     // node not covered by this overlap
+            if (cd != 0)
+                cd->accumulateMortarTie(contactTag, nodeTag, this->getTag(), r, 0.0, kn);
+            continue;
+        }
+        for (int J = 0; J < npsS; J++)
+            for (int d = 0; d < 3; d++) r[d] += D[I][J] * us[J][d];
+        for (int K = 0; K < npsM; K++)
+            for (int d = 0; d < 3; d++) r[d] -= M[I][K] * um[K][d];
+        double lamTie[3] = {0.0, 0.0, 0.0};
+        if (cd != 0) {
+            // the summed r feeds the commit-time update and the residual query
+            // only; this pair's force uses its own r (order-independent residual)
+            cd->accumulateMortarTie(contactTag, nodeTag, this->getTag(), r, aFacet, kn);
+            const LadrunoContactDomain::MortarNormalState &st =
+                cd->getOrCreateMortarNormalState(contactTag, nodeTag);
+            for (int d = 0; d < 3; d++) lamTie[d] = st.lambdaTie[d];
+        }
+        for (int d = 0; d < 3; d++) t[I][d] = lamTie[d] + kn * (r[d] / aFacet);
+    }
+    for (int K = 0; K < npsS; K++)
+        for (int d = 0; d < 3; d++) {
+            double s = 0.0;
+            for (int I = 0; I < npsS; I++) s += D[K][I] * t[I][d];
+            resid(3 * K + d) = -s;
+        }
+    for (int L = 0; L < npsM; L++)
+        for (int d = 0; d < 3; d++) {
+            double s = 0.0;
+            for (int I = 0; I < npsS; I++) s += M[I][L] * t[I][d];
+            resid(3 * (npsS + L) + d) = s;
+        }
 }
 
 const Matrix &
