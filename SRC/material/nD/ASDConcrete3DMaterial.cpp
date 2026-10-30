@@ -1289,6 +1289,22 @@ ASDConcrete3DMaterial::HardeningLawStorage::PointerType ASDConcrete3DMaterial::H
 	return nullptr;
 }
 
+void ASDConcrete3DMaterial::HardeningLawStorage::clear()
+{
+	m_tension.clear();
+	m_compression.clear();
+}
+
+// The registry keeps the original law per material tag and stores only into an empty
+// slot, and HardeningLaw::regularize() copies it back over the instance. Without a
+// reset on wipe, the first material defined with a given tag owns that tag for the
+// life of the process: a later model reusing the tag runs on the earlier laws,
+// elastic modulus included. Laws are copied by value, so nothing points into the maps.
+void asdConcrete3DResetStorage(void)
+{
+	ASDConcrete3DMaterial::HardeningLawStorage::instance().clear();
+}
+
 ASDConcrete3DMaterial::CrackPlanesStorage& ASDConcrete3DMaterial::CrackPlanesStorage::instance()
 {
 	static CrackPlanesStorage _instance;

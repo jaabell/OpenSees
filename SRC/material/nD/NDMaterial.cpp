@@ -82,9 +82,13 @@ NDMaterial *OPS_getNDMaterial(int tag)
   return theMat;
 }
 
+// Defined in ASDConcrete3DMaterial.cpp.
+extern void asdConcrete3DResetStorage(void);
+
 void OPS_clearAllNDMaterial(void)
 {
     theNDMaterialObjects.clearAll();
+    asdConcrete3DResetStorage();
 }
 
 void OPS_printNDMaterial(OPS_Stream &s, int flag) {
