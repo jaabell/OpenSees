@@ -557,6 +557,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
     // master facets; their separation is of the order of the surface diameter,
     // that of the facing pairs of the order of the facet sagitta. This is the
     // exclusion of the mortar generator of LadrunoTie with a tolerance factor 1.
+    // An explicit -maxGap replaces it.
     if (cd != 0) {
         cd->mortarNormalGCBegin();   // multiplier slots of nodes not rebuilt below are collected
         for (int c = 0; c < cd->getNumMortarContacts(); c++) {
@@ -698,12 +699,35 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                       "the facet winding and may be attractive. Give -outward.\n";
                         }
                     }
+                    // -maxGap: no pair whose slave centroid lies farther than maxGap
+                    // from the plane of the master facet, in the configuration of
+                    // this handle(); a pairing decision, never switched within a step
+                    if (mc.maxGap > 0.0) {
+                        double xm[4][3], cs[3] = {0.0, 0.0, 0.0}, cm[3] = {0.0, 0.0, 0.0};
+                        for (int k = 0; k < npsS; k++) {
+                            const Vector &u = sNodes[k]->getTrialDisp();
+                            for (int d = 0; d < 3; d++) cs[d] += (Sx[k][d] + u(d)) / npsS;
+                        }
+                        for (int k = 0; k < npsM; k++) {
+                            const Vector &u = mNodes[k]->getTrialDisp();
+                            for (int d = 0; d < 3; d++) {
+                                xm[k][d] = Mx[k][d] + u(d);
+                                cm[d] += xm[k][d] / npsM;
+                            }
+                        }
+                        double nM[3];
+                        ladrunoFacetNormalNewell(npsM, xm, nM);
+                        double dist = std::fabs(nM[0] * (cs[0] - cm[0]) + nM[1] * (cs[1] - cm[1])
+                                                + nM[2] * (cs[2] - cm[2]));
+                        if (dist > mc.maxGap) continue;
+                    }
                     if (mc.isTie) {
                         LadrunoMortarKernel::PairResult pr0;
                         if (LadrunoMortarKernel::integratePair(npsS, Sx, npsM, Mx, orientDir,
                                                                pr0, mc.ngp) != 0)
                             continue;                     // no overlap as built: not bonded
-                        if (tieGapTol > 0.0 && pr0.gapL1 > tieGapTol * pr0.area) {
+                        if (mc.maxGap <= 0.0 && tieGapTol > 0.0 &&
+                            pr0.gapL1 > tieGapTol * pr0.area) {
                             nTieExcluded++;               // a distant (antipodal) pair
                             continue;
                         }
@@ -744,6 +768,8 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                              mc.isTie, mc.mu, epsTuse, mc.cohesion, mc.tauMax,
                                              mc.consistentTan, seg);
                     if (fe == 0) return -5;
+                    if (mc.gapOffset != 0.0 || mc.adjust)
+                        fe->setMortarGapShift(mc.gapOffset, mc.adjust, mc.adjustTol);
                     theModel->addFE_Element(fe);
                     for (int k = 0; k < npsS; k++) {
                         cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));

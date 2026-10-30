@@ -168,7 +168,34 @@ class LadrunoContactDomain
         double tauMax = 0.0;    // <= 0: no cap
         bool   consistentTan = false;  // non-symmetric consistent friction tangent
         bool hasFriction(void) const { return mu > 0.0 || cohesion > 0.0 || tauMax > 0.0; }
+        // Controls set by setMortarContactOptions():
+        //  augmentMode: when the Uzawa updates of lambdaN, lambdaT and lambdaTie
+        //    run. AUG_COMMIT (default): at every commit. AUG_REQUEST: only inside
+        //    a ladrunoBeginAugment / ladrunoEndAugment bracket, so a physical step
+        //    is pure penalty (a linear tie is then independent of the number of
+        //    load steps) and the held-load loop augments on request. AUG_NEVER:
+        //    pure penalty.
+        //  maxGap (> 0): pairing guard; a pair whose slave facet centroid lies
+        //    farther than maxGap from the plane of the master facet (current
+        //    configuration at handle()) is not built. For a tie it replaces the
+        //    default proximity condition.
+        //  gapOffset: constant shift of the normal gap, gbar -> gbar + gapOffset
+        //    (negative: a prescribed interference fit).
+        //  adjust (adjustTol, 0: unlimited): the weighted gap of the reference
+        //    configuration is subtracted per pair and node, so the interface as
+        //    meshed starts closed and stress-free; with adjustTol > 0 only nodes
+        //    with |gbar_ref| <= adjustTol are adjusted.
+        int    augmentMode = 0;
+        double maxGap      = 0.0;
+        double gapOffset   = 0.0;
+        bool   adjust      = false;
+        double adjustTol   = 0.0;
     };
+    enum { AUG_COMMIT = 0, AUG_REQUEST = 1, AUG_NEVER = 2 };
+    // set the controls of an existing mortar contact; < 0 if the tag is not a
+    // mortar contact or a value is refused (a gap shift on a tie, maxGap < 0)
+    int setMortarContactOptions(int tag, int augmentMode, double maxGap, double gapOffset,
+                                bool adjust, double adjustTol);
     int addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
                          double kn, bool knAuto, double epsN, bool epsNAuto,
                          double augTol, int maxAug, int ngp, const double *outward = 0,
@@ -308,8 +335,9 @@ class LadrunoContactDomain
 
     // --- lifecycle (driven by Domain::commit / revertToLastCommit / revertToStart) ---
     // augmenting: the Domain's within-step augmentation flag
-    // (ladrunoBeginAugment / ladrunoEndAugment). Every commit performs one
-    // Uzawa update of the mortar multipliers.
+    // (ladrunoBeginAugment / ladrunoEndAugment). A commit performs one Uzawa
+    // update of the mortar multipliers of every contact whose augmentMode
+    // allows it (AUG_REQUEST: only while augmenting).
     int commit(bool augmenting = false);
     int revertToLastCommit(void);
     // Drop all path-dependent state so that Domain::revertToStart() returns

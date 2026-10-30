@@ -51,7 +51,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, int ndm_,
     theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
     kt(0.0), mu(0.0), cohesion(0.0), tauMax(0.0), consistentTan(false),
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
-    isTie(false), masterFacetIndex(0)
+    isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
+    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false)
 {
     // Connectivity = the slave node's DOF_Group; setID() fills myID with its
     // first ndm equation numbers (the translations), as for PenaltySP_FE.
@@ -77,7 +78,8 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes,
     consistentNormal(consistentNormal_),
     kt(kt_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
-    isTie(false), masterFacetIndex(0)
+    isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
+    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false)
 {
     // Connectivity = slave DOF_Group + each segment-node DOF_Group; setID() fills
     // myID = [slave xyz | seg_1 xyz | ... | seg_nps xyz], the layout B assumes.
@@ -112,8 +114,11 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
     theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
     kt(epsT_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
     muc(0.0), npsS(nps_s), npsM(nps_m), slaveFacetIndex(slaveFacetIndex_),
-    mortarOrder(ngp_ >= 1 ? ngp_ : 2), isTie(isTie_), masterFacetIndex(masterFacetIndex_)
+    mortarOrder(ngp_ >= 1 ? ngp_ : 2), isTie(isTie_), masterFacetIndex(masterFacetIndex_),
+    hasGapShift(false), gapShiftOffset(0.0), gapShiftAdjust(false), gapShiftAdjTol(0.0),
+    gapShiftRefReady(false)
 {
+    for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
     // Connectivity = each slave facet DOF_Group, then each master facet
     // DOF_Group; setID() fills myID = [slave_0 xyz | ... | master_0 xyz | ...],
     // the [slave block | master block] layout of the residual and tangent.
@@ -139,6 +144,17 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
 
 LadrunoContactFE::~LadrunoContactFE()
 {
+}
+
+void
+LadrunoContactFE::setMortarGapShift(double gapOffset, bool adjust, double adjustTol)
+{
+    gapShiftOffset = gapOffset;
+    gapShiftAdjust = adjust;
+    gapShiftAdjTol = (adjustTol > 0.0) ? adjustTol : 0.0;
+    hasGapShift = (gapOffset != 0.0) || adjust;
+    gapShiftRefReady = false;
+    for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
 }
 
 double
@@ -328,6 +344,45 @@ LadrunoContactFE::mortarActive(double D[4][4], double M[4][4], double g[4], doub
         g[i] = pr.g[i];
         for (int j = 0; j < 4; j++) { D[i][j] = pr.D[i][j]; M[i][j] = pr.M[i][j]; }
     }
+    // Gap shift, applied here so that every consumer sees one gap:
+    // gt_I <- (gt_I / a_I + s_I) a_I. At the reference configuration the adjust
+    // term cancels the gap exactly (the same double minus itself), so an
+    // adjusted contact starts with zero pressure, not a round-off residue.
+    if (hasGapShift) {
+        if (gapShiftAdjust && !gapShiftRefReady) {
+            // reference gap of this pair; an empty reference overlap leaves the
+            // pair unadjusted (it was not in contact as meshed)
+            double Xs0[4][3], Xm0[4][3];
+            for (int i = 0; i < npsS; i++) {
+                const Vector &X = mortarSlave[i]->getCrds();
+                for (int d = 0; d < 3; d++) Xs0[i][d] = X(d);
+            }
+            for (int i = 0; i < npsM; i++) {
+                const Vector &X = mortarMaster[i]->getCrds();
+                for (int d = 0; d < 3; d++) Xm0[i][d] = X(d);
+            }
+            LadrunoMortarKernel::PairResult pr0;
+            if (LadrunoMortarKernel::integratePair(npsS, Xs0, npsM, Xm0, orientDir, pr0,
+                                                   mortarOrder) == 0) {
+                for (int I = 0; I < npsS; I++) {
+                    double a0 = 0.0;
+                    for (int J = 0; J < npsS; J++) a0 += pr0.D[I][J];
+                    if (a0 <= 1e-300) continue;
+                    double gbar0 = pr0.g[I] / a0;
+                    if (gapShiftAdjTol <= 0.0 || std::fabs(gbar0) <= gapShiftAdjTol)
+                        gapShiftRef[I] = -gbar0;
+                }
+            }
+            gapShiftRefReady = true;
+        }
+        for (int I = 0; I < npsS; I++) {
+            double a = 0.0;
+            for (int J = 0; J < npsS; J++) a += D[I][J];
+            if (a <= 1e-300) continue;
+            double gbar = g[I] / a + gapShiftRef[I];
+            g[I] = (gbar + gapShiftOffset) * a;
+        }
+    }
     // the master facet normal oriented by orientDir, the normal the weighted
     // gap was measured along (flat facets)
     return LadrunoMortarKernel::facetNormal(npsM, Xm, orientDir, n);
@@ -379,6 +434,10 @@ LadrunoContactFE::addMortarTang(double fact, bool initialStiff)
             : 0.0;
         double pr = lambdaI + kn * (g[I] / aFacet);
         if (pr < 0.0) W[I] = 1.0 / aFacet;            // active in compression
+        // a shifted node exactly at p = 0 (every adjusted node at the start)
+        // takes the closed branch of the kink, where the residual is zero on
+        // both sides, so the first iteration sees the interface stiffness
+        else if (hasGapShift && pr == 0.0) W[I] = 1.0 / aFacet;
     }
     for (int A = 0; A < nN; A++) {
         for (int B = 0; B < nN; B++) {

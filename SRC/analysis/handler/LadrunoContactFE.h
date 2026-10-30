@@ -129,6 +129,12 @@ class LadrunoContactFE : public FE_Element
                      int masterFacetIndex = 0);
     ~LadrunoContactFE();
 
+    // Mortar normal-gap shift: gbar_I -> gbar_I + gapOffset, and with adjust
+    // the weighted gap of this pair at the reference configuration is
+    // subtracted (only where |gbar_ref| <= adjustTol when adjustTol > 0). The
+    // reference gap is integrated at the first evaluation.
+    void setMortarGapShift(double gapOffset, bool adjust, double adjustTol);
+
     // Fill myID with the first ndm equations of each node (the translations).
     // FE_Element::setID() copies each node's whole DOF_Group ID, which on a
     // node with ndf > ndm (a beam or shell node, a u-p node) overflows the
@@ -267,6 +273,14 @@ class LadrunoContactFE : public FE_Element
     int mortarOrder;        // order of the triangle rule on the clipped overlap
     bool isTie;             // mesh tie
     int masterFacetIndex;   // ordinal of the master facet in its surface (stable across rebuilds)
+
+    // mortar gap shift (setMortarGapShift); off unless an option was given
+    bool   hasGapShift;
+    double gapShiftOffset;
+    bool   gapShiftAdjust;
+    double gapShiftAdjTol;          // 0: adjust every node of the pair
+    mutable bool   gapShiftRefReady;
+    mutable double gapShiftRef[4];  // -gbar_I at the reference configuration
 };
 
 #endif

@@ -171,6 +171,44 @@ LadrunoContactDomain::addMortarContact(int tag, int masterSurfTag, int slaveSurf
     return 0;
 }
 
+int
+LadrunoContactDomain::setMortarContactOptions(int tag, int augmentMode, double maxGap,
+                                              double gapOffset, bool adjust, double adjustTol)
+{
+    MortarContact *m = 0;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) { m = &theMortarContacts[i]; break; }
+    if (m == 0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << " is not a -mortar contact\n";
+        return -1;
+    }
+    if (augmentMode < AUG_COMMIT || augmentMode > AUG_NEVER) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": bad augment mode " << augmentMode << "\n";
+        return -1;
+    }
+    if (maxGap < 0.0 || adjustTol < 0.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": -maxGap and the -adjust tolerance must be >= 0\n";
+        return -1;
+    }
+    if (m->isTie && (gapOffset != 0.0 || adjust)) {
+        // a tie bonds the relative displacement, never the gap, so the gap as
+        // meshed is already stress-free
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": -gapOffset/-adjust do not apply to -tie (a tie bonds the relative "
+                  "displacement, so the as-meshed gap is already strain-free)\n";
+        return -1;
+    }
+    m->augmentMode = augmentMode;
+    m->maxGap = maxGap;
+    m->gapOffset = gapOffset;
+    m->adjust = adjust;
+    m->adjustTol = adjustTol;
+    return 0;
+}
+
 LadrunoContactDomain::MortarNormalState &
 LadrunoContactDomain::getOrCreateMortarNormalState(int contactTag, int slaveNodeTag)
 {
@@ -483,7 +521,7 @@ LadrunoContactDomain::frictionGCEnd(void)
 }
 
 int
-LadrunoContactDomain::commit(bool)
+LadrunoContactDomain::commit(bool augmenting)
 {
     // promote the trial plastic slip and the engagement origin of every slot;
     // the counter lets a test check that the Domain::commit() hook fires
@@ -504,10 +542,19 @@ LadrunoContactDomain::commit(bool)
     // load steps this augments with a stock Newton; a held-load loop
     // (ladrunoBeginAugment, analyze at a zero load increment, ladrunoEndAugment)
     // repeats it within a step until ladrunoMortarPenetration is small.
+    // The -augment mode of each contact gates the multiplier updates only; the
+    // promotion of the friction slip below is path state and always runs.
+    std::set<int> noAug;
+    for (size_t i = 0; i < theMortarContacts.size(); i++) {
+        const MortarContact &mc = theMortarContacts[i];
+        if (mc.augmentMode == AUG_NEVER || (mc.augmentMode == AUG_REQUEST && !augmenting))
+            noAug.insert(mc.tag);
+    }
     for (std::map<NodeKey, MortarNormalState>::iterator it = theMortarNormalStates.begin();
          it != theMortarNormalStates.end(); ++it) {
         MortarNormalState &st = it->second;
         if (st.aGlobal <= 1e-300) continue;          // not integrated this step
+        if (noAug.find(it->first.c) != noAug.end()) continue;
         if (st.isTie) {
             // mesh tie: an equality, so the update has no clamp and drives the
             // weighted relative displacement to zero at a finite epsTie
@@ -526,9 +573,10 @@ LadrunoContactDomain::commit(bool)
     for (std::map<MortarPairKey, MortarFrictionState>::iterator it = theMortarFrictionStates.begin();
          it != theMortarFrictionStates.end(); ++it) {
         MortarFrictionState &st = it->second;
+        const bool aug = (noAug.find(it->first.c) == noAug.end());
         for (int d = 0; d < 3; d++) {
             st.gpT[d] = st.gpTtrial[d];
-            st.lambdaT[d] = st.lambdaTtrial[d];
+            if (aug) st.lambdaT[d] = st.lambdaTtrial[d];
             st.gT0committed[d] = st.gT0[d];
         }
         st.engagedCommitted = st.engaged;

@@ -33,6 +33,8 @@
 //     mortar:  -mortar, -epsN auto|val, -augTol tol, -maxAug n, -ngp order,
 //              -tie, -epsTie auto|val, -epsT auto|val (friction: -mu, -cohesion,
 //              -tauMax, -consistanttan as above)
+//              -augment commit|request|never, -maxGap d, -gapOffset g0,
+//              -adjust <tol>
 //     -consistentTan is accepted as an alias of -consistanttan.
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
 //   ladrunoContactInfo            -> numContacts numCommits numReverts numMortarContacts
@@ -250,6 +252,11 @@ int OPS_LadrunoContact()
     bool isTie = false;             // -tie
     double epsT = 0.0;              // -epsT value
     bool epsTAuto = false;          // -epsT auto
+    // controls of the mortar contact (setMortarContactOptions)
+    int    augmentMode = LadrunoContactDomain::AUG_COMMIT;
+    bool   hasControls = false;
+    double maxGap = 0.0, gapOffset = 0.0, adjustTol = 0.0;
+    bool   adjust = false;
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-mortar") == 0) {
@@ -278,6 +285,52 @@ int OPS_LadrunoContact()
                 epsN = v[0];
             }
             hasMortarOpt = true;
+        } else if (opt != 0 && strcmp(opt, "-augment") == 0) {
+            // when the Uzawa updates of the mortar multipliers run
+            const char *m = (OPS_GetNumRemainingInputArgs() > 0) ? OPS_GetString() : 0;
+            if (m != 0 && strcmp(m, "commit") == 0)       augmentMode = LadrunoContactDomain::AUG_COMMIT;
+            else if (m != 0 && strcmp(m, "request") == 0) augmentMode = LadrunoContactDomain::AUG_REQUEST;
+            else if (m != 0 && strcmp(m, "never") == 0)   augmentMode = LadrunoContactDomain::AUG_NEVER;
+            else {
+                opserr << "WARNING contact -augment - need commit|request|never\n";
+                return -1;
+            }
+            hasControls = true;
+        } else if (opt != 0 && strcmp(opt, "-maxGap") == 0) {
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0 || v[0] <= 0.0) {
+                opserr << "WARNING contact -maxGap - need a distance > 0\n";
+                return -1;
+            }
+            maxGap = v[0];
+            hasControls = true;
+        } else if (opt != 0 && strcmp(opt, "-gapOffset") == 0) {
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0) {
+                opserr << "WARNING contact -gapOffset - need a value (negative = interference)\n";
+                return -1;
+            }
+            gapOffset = v[0];
+            hasControls = true;
+        } else if (opt != 0 && strcmp(opt, "-adjust") == 0) {
+            // optional tolerance; a flag or the end of the arguments: adjust all
+            adjust = true;
+            hasControls = true;
+            if (OPS_GetNumRemainingInputArgs() > 0) {
+                const char *p = OPS_GetString();
+                bool isFlag = (p != 0 && p[0] == '-' &&
+                               ((p[1] >= 'a' && p[1] <= 'z') || (p[1] >= 'A' && p[1] <= 'Z')));
+                OPS_ResetCurrentInputArg(-1);
+                if (!isFlag) {
+                    double v[1]; int m = 1;
+                    if (OPS_GetDoubleInput(&m, v) < 0 || v[0] <= 0.0) {
+                        opserr << "WARNING contact -adjust - optional tolerance must be a value "
+                                  "> 0 (or omit it to adjust every paired node)\n";
+                        return -1;
+                    }
+                    adjustTol = v[0];
+                }
+            }
         } else if (opt != 0 && strcmp(opt, "-epsT") == 0) {
             // tangential penalty of the mortar friction; auto: the normal penalty
             if (OPS_GetNumRemainingInputArgs() < 1) {
@@ -376,7 +429,8 @@ int OPS_LadrunoContact()
             opserr << "WARNING contact - unexpected token '" << (opt ? opt : "")
                    << "' (expected -outward, -cell, -geomtan, -mu, -cohesion, -tauMax, "
                       "-consistanttan, -visc, -mortar, -tie, -epsN, -epsTie, -epsT, -augTol, "
-                      "-maxAug, -ngp or end of arguments)\n";
+                      "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust or end of "
+                      "arguments)\n";
             return -1;
         }
     }
@@ -385,6 +439,11 @@ int OPS_LadrunoContact()
     LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
     if (cd == 0) {
         opserr << "WARNING contact - define a contactSurface first\n";
+        return -1;
+    }
+    if (hasControls && !isMortar) {
+        opserr << "WARNING contact -augment/-maxGap/-gapOffset/-adjust are -mortar options; "
+                  "add -mortar or remove them\n";
         return -1;
     }
     if (isTie && !isMortar) {
@@ -413,14 +472,23 @@ int OPS_LadrunoContact()
                       "with -mortar\n";
             return -1;
         }
+        if (isTie && (gapOffset != 0.0 || adjust)) {
+            opserr << "WARNING contact -gapOffset/-adjust do not apply to -tie: a tie bonds "
+                      "the relative displacement, so the as-meshed gap is already strain-free\n";
+            return -1;
+        }
         // the friction options are those of the node-to-segment lane (-mu or
         // the positional mu, -cohesion, -tauMax); a positional kt is the
         // tangential penalty when -epsT is not given
         if (!epsTAuto && epsT <= 0.0 && kt > 0.0)
             epsT = kt;
-        return cd->addMortarContact(idata[0], idata[1], idata[2], kn, knAuto, epsN, epsNAuto,
-                                    augTol, maxAug, ngp, hasOutward ? outward : 0, isTie,
-                                    mu, epsT, epsTAuto, cohesion, tauMax, consistentTan);
+        int mres = cd->addMortarContact(idata[0], idata[1], idata[2], kn, knAuto, epsN, epsNAuto,
+                                        augTol, maxAug, ngp, hasOutward ? outward : 0, isTie,
+                                        mu, epsT, epsTAuto, cohesion, tauMax, consistentTan);
+        if (mres == 0 && hasControls)
+            mres = cd->setMortarContactOptions(idata[0], augmentMode, maxGap, gapOffset,
+                                               adjust, adjustTol);
+        return mres;
     }
     return cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
                           hasOutward ? outward : 0, knAuto, cellFrac, consistentTan,
