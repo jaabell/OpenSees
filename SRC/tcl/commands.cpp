@@ -138,6 +138,7 @@ extern "C" int         OPS_ResetInputNoBuilder(ClientData clientData, Tcl_Interp
 
 // convergence tests
 #include <CTestNormUnbalance.h>
+#include <LadrunoStabilizedUnbalance.h>
 #include <CTestNormDispIncr.h>
 #include <CTestEnergyIncr.h>
 #include <CTestRelativeNormUnbalance.h>
@@ -177,6 +178,7 @@ extern void* OPS_AutoConstraintHandler(void);
 #include <LoadControl.h>
 #include <StagedLoadControl.h>
 #include <ArcLength.h>
+#include <LadrunoSolverQuery.h>
 #include <ArcLength1.h>
 #include <HSConstraint.h>
 #include <MinUnbalDispNorm.h>
@@ -219,6 +221,9 @@ extern void *OPS_ExplicitDifference(void);
 extern void *OPS_CentralDifference(void);
 extern void *OPS_ExplicitBathe(void);
 extern void *OPS_ExplicitDifferenceStatic(void);
+extern void *OPS_LadrunoDynamicRelaxation(void);
+extern void *OPS_LadrunoArcLength(void);
+extern void *OPS_LadrunoIndirectControl(void);
 extern void *OPS_CentralDifferenceAlternative(void);
 extern void *OPS_CentralDifferenceNoDamping(void);
 extern void *OPS_Collocation(void);
@@ -904,6 +909,10 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);	
     Tcl_CreateCommand(interp, "testIter", &getCTestIter, 
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);    
+    Tcl_CreateCommand(interp, "ladrunoArcLength", &ladrunoArcLength,
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
+    Tcl_CreateCommand(interp, "ladrunoDR", &ladrunoDR,
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
 
     Tcl_CreateCommand(interp, "integrator", &specifyIntegrator, 
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
@@ -4387,6 +4396,8 @@ specifyCTest(ClientData clientData, Tcl_Interp *interp, int argc,
     }
     if (strcmp(argv[1],"NormUnbalance") == 0) 
       theNewTest = new CTestNormUnbalance(tol,numIter,printIt,normType,maxIncr, maxTol);       
+    else if (strcmp(argv[1],"LadrunoStabilizedUnbalance") == 0)
+      theNewTest = new LadrunoStabilizedUnbalance(tol,numIter,printIt,normType,maxTol);
     else if (strcmp(argv[1],"NormDispIncr") == 0) 
       theNewTest = new CTestNormDispIncr(tol,numIter,printIt,normType, maxTol);             
     else if (strcmp(argv[1],"NormDispAndUnbalance") == 0) 
@@ -4575,6 +4586,18 @@ specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
     setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
+  }
+
+  else if (strcmp(argv[1],"LadrunoArcLength") == 0) {
+    theStaticIntegrator = (StaticIntegrator *)OPS_LadrunoArcLength();
+    if (theStaticIntegrator != 0 && theStaticAnalysis != 0)
+      setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
+  }
+
+  else if (strcmp(argv[1],"LadrunoIndirectControl") == 0) {
+    theStaticIntegrator = (StaticIntegrator *)OPS_LadrunoIndirectControl();
+    if (theStaticIntegrator != 0 && theStaticAnalysis != 0)
+      setIntegratorIfAny(theStaticAnalysis, theStaticIntegrator);
   }
   /************************added for HSConstraint*************************************/
   
@@ -5367,6 +5390,12 @@ specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
     theTransientIntegrator = (TransientIntegrator *) OPS_ExplicitDifferenceStatic();
     
     if (theTransientAnalysis != 0)
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
+  }
+
+  else if (strcmp(argv[1],"LadrunoDynamicRelaxation") == 0) {
+    theTransientIntegrator = (TransientIntegrator *)OPS_LadrunoDynamicRelaxation();
+    if (theTransientIntegrator != 0 && theTransientAnalysis != 0)
       setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
   
@@ -6238,6 +6267,29 @@ getCTestIter(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **arg
 
   opserr << "ERROR testIter - no convergence test!\n";
   return TCL_ERROR;
+}
+
+// ladrunoArcLength <sub <value>>: the dispatch is shared with the Python and
+// Tcl wrappers (LadrunoSolverQuery.h); this interpreter passes its own
+// static integrator.
+int
+ladrunoArcLength(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+  if (Ladruno::arcLengthCommand(theStaticIntegrator) < 0)
+    return TCL_ERROR;
+  return TCL_OK;
+}
+
+// ladrunoDR <sub>: as ladrunoArcLength, with the transient integrator of
+// this interpreter
+int
+ladrunoDR(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+  if (Ladruno::drCommand(theTransientIntegrator) < 0)
+    return TCL_ERROR;
+  return TCL_OK;
 }
 
 int 

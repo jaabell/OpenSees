@@ -1120,6 +1120,30 @@ static PyObject *Py_ops_getCTestIter(PyObject *self, PyObject *args)
     return wrapper->getResults();
 }
 
+static PyObject *Py_ops_ladrunoArcLength(PyObject *self, PyObject *args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+
+    if (OPS_LadrunoArcLengthCmd() < 0) {
+	opserr<<(void*)0;
+	return NULL;
+    }
+
+    return wrapper->getResults();
+}
+
+static PyObject *Py_ops_ladrunoDR(PyObject *self, PyObject *args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+
+    if (OPS_LadrunoDRCmd() < 0) {
+	opserr<<(void*)0;
+	return NULL;
+    }
+
+    return wrapper->getResults();
+}
+
 static PyObject *Py_ops_recorder(PyObject *self, PyObject *args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3153,6 +3177,8 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("testNorm", &Py_ops_getCTestNorms);
     addCommand("testNorms", &Py_ops_getCTestNorms);
     addCommand("testIter", &Py_ops_getCTestIter);
+    addCommand("ladrunoArcLength", &Py_ops_ladrunoArcLength);
+    addCommand("ladrunoDR", &Py_ops_ladrunoDR);
     addCommand("recorder", &Py_ops_recorder);
     addCommand("database", &Py_ops_database);
     addCommand("save", &Py_ops_save);

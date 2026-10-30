@@ -106,6 +106,10 @@ int
 getCTestNorms(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 int
 getCTestIter(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
+int
+ladrunoArcLength(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
+int
+ladrunoDR(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
 int 
 specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);

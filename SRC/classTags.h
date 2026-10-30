@@ -80,6 +80,7 @@
 #define CONVERGENCE_TEST_NormDispAndUnbalance               9
 #define CONVERGENCE_TEST_NormDispOrUnbalance               10
 #define CONVERGENCE_TEST_CTestPFEM                         11
+#define CONVERGENCE_TEST_LadrunoStabilizedUnbalance     33000
 
 
 #define GRND_TAG_ElCentroGroundMotion                 1
@@ -1123,6 +1124,9 @@
 #define INTEGRATOR_TAGS_HarmonicSteadyState             60
 #define INTEGRATOR_TAGS_ExplicitBathe                   61
 #define INTEGRATOR_TAGS_ExplicitDifferenceStatic        62
+#define INTEGRATOR_TAGS_LadrunoArcLength                33004
+#define INTEGRATOR_TAGS_LadrunoDynamicRelaxation        33005
+#define INTEGRATOR_TAGS_LadrunoIndirectControl          33006
 
 
 #define LinSOE_TAGS_FullGenLinSOE		1
