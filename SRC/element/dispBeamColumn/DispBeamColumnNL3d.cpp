@@ -1768,13 +1768,22 @@ DispBeamColumnNL3d::getResponse(int responseID, Information &eleInfo)
     return eleInfo.setVector(this->getRayleighDampingForces());
 
   else if (responseID == 2) {
-      P(3) =  q(0);
+      // 12 DOF local force vector: axial, torsion, bending about z and y
+      double oneOverL = 1.0/L;
+      P(6) =  q(0);
       P(0) = -q(0)+p0[0];
-      P(2) = q(1);
-      P(5) = q(2);
-      V = (q(1)+q(2))/L;
+      P(5)  = q(1);
+      P(11) = q(2);
+      V = (q(1)+q(2))*oneOverL;
       P(1) =  V+p0[1];
-      P(4) = -V+p0[2];
+      P(7) = -V+p0[2];
+      P(4)  = q(3);
+      P(10) = q(4);
+      V = (q(3)+q(4))*oneOverL;
+      P(2) = -V+p0[3];
+      P(8) =  V+p0[4];
+      P(9) =  q(5);
+      P(3) = -q(5);
       return eleInfo.setVector(P);
   }
 
