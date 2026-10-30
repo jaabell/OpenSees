@@ -92,9 +92,16 @@ UmfpackGenLinSOE::setSize(Graph &theGraph)
     }
 
     // resize A, B, X
+    // The pattern is rebuilt from scratch: Ap and Ai are cleared so that a
+    // second setSize (after the dof graph changed) does not append the new
+    // pattern behind the old one. Ax is assigned zeros because the symbolic
+    // analysis reads its values, and resize would keep the last assembled
+    // tangent there.
+    Ap.clear();
+    Ai.clear();
     Ap.reserve(size+1);
     Ai.reserve(nnz);
-    Ax.resize(nnz,0.0);
+    Ax.assign(nnz,0.0);
     B.resize(size);
     B.Zero();
     X.resize(size);
