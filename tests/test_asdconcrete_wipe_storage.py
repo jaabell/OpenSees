@@ -87,6 +87,46 @@ print("RESULT " + json.dumps(res))
 '''
 
 
+CHILD_1D = r'''
+import json
+try:
+    import opensees as ops
+except ModuleNotFoundError:
+    import openseespy.opensees as ops
+P, L, E = 7200.0, 2.0, 30.0e6
+ops.wipe()
+ops.model("basic", "-ndm", 2, "-ndf", 2)
+ops.uniaxialMaterial("ASDConcrete1D", 1, 3.0e6, "-fc", 3.0e3, "-ft", 3.0e2)
+ops.wipe()
+ops.model("basic", "-ndm", 2, "-ndf", 2)
+ops.node(1, 0.0, 0.0)
+ops.node(2, L, 0.0)
+ops.fix(1, 1, 1)
+ops.fix(2, 0, 1)
+ops.uniaxialMaterial("ASDConcrete1D", 1, E, "-fc", 30.0e3, "-ft", 3.0e3,
+                     "-autoRegularization", 0.03112529146138255)
+ops.element("truss", 1, 1, 2, 1.0, 1)
+ops.timeSeries("Linear", 1)
+ops.pattern("Plain", 1, 1)
+ops.load(2, -P, 0.0)
+ops.constraints("Plain")
+ops.numberer("RCM")
+ops.system("BandGeneral")
+ops.test("NormDispIncr", 1e-10, 20, 0)
+ops.algorithm("Newton")
+ops.integrator("LoadControl", 1.0)
+ops.analysis("Static")
+ok = ops.analyze(1)
+res = {"ok": ok}
+if ok == 0:
+    res["stress"] = ops.eleResponse(1, "material", "stress")[0]
+    res["ux"] = ops.nodeDisp(2, 1)
+    ops.reactions()
+    res["rx"] = ops.nodeReaction(1, 1)
+print("RESULT " + json.dumps(res))
+'''
+
+
 def _run_child(code):
     proc = subprocess.run(
         [sys.executable, "-c", code], stdin=subprocess.DEVNULL,
@@ -191,3 +231,60 @@ def test_asdconcrete3d_same_tag_after_wipe_tcl(tmp_path):
     out = _run_tcl(tmp_path, "wipe_3d.tcl", TCL_3D)
     assert "WIPE_3D: 0 failure(s)" in out, out
     assert out.count("PASS ") == 10, out
+
+
+def test_asdconcrete1d_same_tag_after_wipe():
+    res, out = _run_child(CHILD_1D)
+    assert res["ok"] == 0, out
+    assert res["stress"] == pytest.approx(-P, rel=1e-5)
+    assert res["ux"] == pytest.approx(-P * L / E2, rel=1e-5)
+    assert res["rx"] == pytest.approx(P, rel=1e-5)
+
+
+TCL_1D = """
+set nFail 0
+proc check {name got want} {
+    global nFail
+    if {abs($got - $want) <= 1e-5 * abs($want)} {
+        puts "PASS $name"
+    } else {
+        puts "FAIL $name got=$got want=$want"
+        incr nFail
+    }
+}
+wipe
+model BasicBuilder -ndm 2 -ndf 2
+uniaxialMaterial ASDConcrete1D 1 3.0e6 -fc 3.0e3 -ft 3.0e2
+wipe
+model BasicBuilder -ndm 2 -ndf 2
+node 1 0.0 0.0
+node 2 2.0 0.0
+fix 1 1 1
+fix 2 0 1
+uniaxialMaterial ASDConcrete1D 1 30.0e6 -fc 30.0e3 -ft 3.0e3 -autoRegularization 0.03112529146138255
+element truss 1 1 2 1.0 1
+timeSeries Linear 1
+pattern Plain 1 1 { load 2 -7200.0 0.0 }
+constraints Plain
+numberer RCM
+system BandGeneral
+test NormDispIncr 1e-10 20 0
+algorithm Newton
+integrator LoadControl 1.0
+analysis Static
+set ok [analyze 1]
+if {$ok == 0} { puts "PASS converge" } else { puts "FAIL converge ok=$ok"; incr nFail }
+if {$ok == 0} {
+    check "stress" [lindex [eleResponse 1 material stress] 0] -7200.0
+    check "ux2" [nodeDisp 2 1] [expr {-7200.0 * 2.0 / 30.0e6}]
+}
+puts "WIPE_1D: $nFail failure(s)"
+"""
+
+
+@pytest.mark.skipif(_tcl_exe() is None,
+                    reason="OPENSEES_EXE is unset or does not name a file")
+def test_asdconcrete1d_same_tag_after_wipe_tcl(tmp_path):
+    out = _run_tcl(tmp_path, "wipe_1d.tcl", TCL_1D)
+    assert "WIPE_1D: 0 failure(s)" in out, out
+    assert out.count("PASS ") == 3, out

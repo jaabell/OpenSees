@@ -160,6 +160,8 @@ public:
 		void store(const HardeningLaw& hl);
 		// recover
 		PointerType recover(int tag, HardeningLawType type);
+		// forget every stored law (called on wipe)
+		void clear();
 
 	private:
 		MapType m_tension;
