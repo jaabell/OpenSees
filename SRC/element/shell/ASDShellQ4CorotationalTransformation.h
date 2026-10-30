@@ -309,13 +309,13 @@ public:
         P.addMatrixProduct(1.0, S, G, -1.0); // P -= S*G
 
         // Compute the projected local forces ( pe = P' * RHS ).
-        // Note: here the RHS is already given as a residual vector -> - internalForces -> (pe = - Ke * U)
-        // so projectedLocalForces = - P' * Ke * U
+        // Note: here the RHS holds the internal forces with positive sign (pe = Ke * U)
+        // so projectedLocalForces = P' * Ke * U
 
         static VectorType projectedLocalForces(24);
         projectedLocalForces.addMatrixTransposeVector(0.0, P, RHS, 1.0);
 
-        // Compute the Right-Hand-Side vector in global coordinate system (- T' * P' * Km * U).
+        // Compute the Right-Hand-Side vector in global coordinate system (T' * P' * Km * U).
         // At this point the computation of the Right-Hand-Side is complete.
 
         RHS.addMatrixTransposeVector(0.0, T, projectedLocalForces, 1.0);
@@ -358,7 +358,9 @@ public:
         FnmT.addMatrixTranspose(0.0, Fnm, 1.0);
 
         temp.addMatrixTransposeProduct(0.0, G, FnmT, 1.0);
-        LHS.addMatrixProduct(1.0, temp, P, 1.0); // note: '+' not '-' because the RHS already has the negative sign
+        // RHS holds the internal forces with positive sign, so the EICR sign of both
+        // geometric terms applies.
+        LHS.addMatrixProduct(1.0, temp, P, -1.0);
 
         // Step 3: ( K.GR: Rotational Geometric Stiffness Matrix )
         // Add the Spins of the nodal moments to 'Fnm'.
@@ -370,7 +372,7 @@ public:
         EICR::Spin_AtRow(projectedLocalForces, Fnm, 15);
         EICR::Spin_AtRow(projectedLocalForces, Fnm, 21);
 
-        LHS.addMatrixProduct(1.0, Fnm, G, 1.0); // note: '+' not '-' because the RHS already has the negative sign
+        LHS.addMatrixProduct(1.0, Fnm, G, -1.0);
 
         // Step 4: (Global Stiffness Matrix)
         // Transform the LHS to the Global coordinate system.
@@ -477,8 +479,7 @@ private:
     * This is the only matrix not included in the EICR, because it depends on how
     * the corotational frame follows the element.
     * This implementation works for the fitting based on polar decomposition.
-    * For the moment the gradient is calculated numerically (perturbation).
-    * TODO: Find a closed form of the derivative.
+    * The gradient is computed in closed form.
     * @return the Spin Fitter Matrix
     */
     inline void RotationGradient(
@@ -490,52 +491,60 @@ private:
 
 #ifdef USE_POLAR_DECOMP_ALLIGN
 
-        /**
-        Note: when attaching the local system using the polar decomposition, it turns out
-        that the G matrix should be exactly 0!
-        */
+        // The polar alignment fixes only the in-plane orientation of the frame:
+        // the normal follows the element diagonals and the in-plane spin moves
+        // with the nodes. G = d(theta_frame)/d(u_local), 3 x 24, in the current
+        // local frame. With G = 0 the geometric terms K_GP = G'*Fn'*P and
+        // K_GR = Fnm*G vanish and the tangent carries no geometric stiffness.
 
-        //// perturbation relative to initial area
-        //double pert = std::sqrt(createReferenceCoordinateSystem().Area()) * 1.0e-8;
+        const auto& P1 = LCS.P1();
+        const auto& P2 = LCS.P2();
+        const auto& P3 = LCS.P3();
+        const auto& P4 = LCS.P4();
 
-        //// un-perturbed coordinate system
-        //auto CS0 = createLocalCoordinateSystem(globalDisplacements);
-        //Vector3Type e30 = CS0.Vz();
-        //Vector3Type e10 = CS0.Vx();
-        //QuaternionType Q0 = QuaternionType::FromRotationMatrix(CS0.Orientation());
+        // rows 0-1: out-of-plane spin of the normal e3 ~ d13 x d24. Only the
+        // local z translations move it. Same as the non-polar frame.
+        {
+            double m = 1.0 / (2.0 * LCS.Area());
+            Vector3Type D24(P4 - P2);
+            Vector3Type D13(P3 - P1);
+            double x42 = D24(0), y42 = D24(1);
+            double x31 = D13(0), y31 = D13(1);
+            G(0, 2) = x42 * m;   G(1, 2) = y42 * m;
+            G(0, 8) = -x31 * m;  G(1, 8) = -y31 * m;
+            G(0, 14) = -x42 * m; G(1, 14) = -y42 * m;
+            G(0, 20) = x31 * m;  G(1, 20) = y31 * m;
+        }
 
-        //// perturbed displacement vector
-        //static Vector UGP(24);
-        //UGP = globalDisplacements;
-
-        //// for each node...
-        //for (int i = 0; i < 4; i++)
-        //{
-        //    int index = i * 6;
-
-        //    // for each component in [x, y, z] ...
-        //    for (int j = 0; j < 3; j++)
-        //    {
-        //        // apply perturbation
-        //        UGP(index + j) += pert;
-
-        //        // current coordinate system (perturbed at node i component j)
-        //        auto CSi = createLocalCoordinateSystem(UGP);
-
-        //        // save the (numerical) rotation gradient
-
-        //        Vector3Type e3 = CSi.Vz();// - e30;
-        //        Vector3Type e1 = CSi.Vx();// - e10;
-        //        Q0.rotateVector(e3);
-        //        Q0.rotateVector(e1);
-
-        //        G(0, index + j) = e3(1) / pert; // - d(e3.y)/dxj , where xj is x,y,z for j=0,1,2
-        //        G(1, index + j) = -e3(0) / pert; // + d(e3.x)/dxj , where xj is x,y,z for j=0,1,2
-        //        G(2, index + j) = -e1(1) / pert; // + d(e1.y)/dxj , where xj is x,y,z for j=0,1,2
-
-        //        UGP(index + j) = globalDisplacements(index + j); // restore the current coordinate
-        //    }
-        //}
+        // row 2: in-plane spin of the polar frame. The frame is the R of the
+        // centre deformation gradient F = R*U; in it F is symmetric, and a
+        // variation dF of the local in-plane translations rotates it by
+        //     dtheta = (dF21 - dF12) / (F11 + F22),   dF = sum_i du_i (x) grad0 N_i
+        // with grad0 N_i the reference-configuration centre gradients.
+        {
+            ASDShellQ4LocalCoordinateSystem ref = createReferenceCoordinateSystem();
+            static const double dNxi[4] = { -0.25, 0.25, 0.25, -0.25 };
+            static const double dNeta[4] = { -0.25, -0.25, 0.25, 0.25 };
+            double J11 = 0.0, J12 = 0.0, J21 = 0.0, J22 = 0.0;
+            for (int i = 0; i < 4; i++) {
+                J11 += dNxi[i] * ref.X(i);  J12 += dNxi[i] * ref.Y(i);
+                J21 += dNeta[i] * ref.X(i); J22 += dNeta[i] * ref.Y(i);
+            }
+            double detJ = J11 * J22 - J12 * J21;
+            double dNdX[4], dNdY[4];
+            double F11 = 0.0, F22 = 0.0;
+            for (int i = 0; i < 4; i++) {
+                dNdX[i] = (J22 * dNxi[i] - J12 * dNeta[i]) / detJ;
+                dNdY[i] = (-J21 * dNxi[i] + J11 * dNeta[i]) / detJ;
+                F11 += LCS.X(i) * dNdX[i];
+                F22 += LCS.Y(i) * dNdY[i];
+            }
+            double trU = F11 + F22;
+            for (int i = 0; i < 4; i++) {
+                G(2, i * 6) = -dNdY[i] / trU;
+                G(2, i * 6 + 1) = dNdX[i] / trU;
+            }
+        }
 
 #else // !USE_POLAR_DECOMP_ALLIGN
 
