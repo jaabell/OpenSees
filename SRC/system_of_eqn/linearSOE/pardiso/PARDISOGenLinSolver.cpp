@@ -43,15 +43,29 @@ static const struct { const char *name; int code; } pardiso_cbwr_table[] = {
 	{"AUTO",          MKL_CBWR_AUTO},
 	{"COMPATIBLE",    MKL_CBWR_COMPATIBLE},
 	{"SSE2",          MKL_CBWR_SSE2},
+	// oneMKL 2026.1 removed SSE3, SSSE3, SSE4_1, AVX, AVX512_MIC and AVX512_MIC_E1
+	// from mkl_types.h. With that MKL these names report an unknown branch.
+#ifdef MKL_CBWR_SSE3
 	{"SSE3",          MKL_CBWR_SSE3},
+#endif
+#ifdef MKL_CBWR_SSSE3
 	{"SSSE3",         MKL_CBWR_SSSE3},
+#endif
+#ifdef MKL_CBWR_SSE4_1
 	{"SSE4_1",        MKL_CBWR_SSE4_1},
+#endif
 	{"SSE4_2",        MKL_CBWR_SSE4_2},
+#ifdef MKL_CBWR_AVX
 	{"AVX",           MKL_CBWR_AVX},
+#endif
 	{"AVX2",          MKL_CBWR_AVX2},
+#ifdef MKL_CBWR_AVX512_MIC
 	{"AVX512_MIC",    MKL_CBWR_AVX512_MIC},
+#endif
 	{"AVX512",        MKL_CBWR_AVX512},
+#ifdef MKL_CBWR_AVX512_MIC_E1
 	{"AVX512_MIC_E1", MKL_CBWR_AVX512_MIC_E1},
+#endif
 	{"AVX512_E1",     MKL_CBWR_AVX512_E1},
 #ifdef MKL_CBWR_AVX10
 	{"AVX10",         MKL_CBWR_AVX10},   // oneMKL 2025.0 and later
