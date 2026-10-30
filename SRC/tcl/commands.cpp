@@ -227,6 +227,8 @@ extern void *OPS_CollocationHSIncrLimit(void);
 extern void *OPS_CollocationHSIncrReduct(void);
 extern void *OPS_GeneralizedAlpha(void);
 extern void *OPS_HHT(void);
+extern void *OPS_LadrunoHHT(void);
+extern void *OPS_LadrunoGeneralizedAlpha(void);
 extern void *OPS_HHT_TP(void);
 extern void *OPS_HHTExplicit(void);
 extern void *OPS_HHTExplicit_TP(void);
@@ -5097,6 +5099,20 @@ specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
   else if (strcmp(argv[1],"HHT") == 0) {
     theTransientIntegrator = (TransientIntegrator *)OPS_HHT();
     
+    if (theTransientAnalysis != 0)
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
+  }
+
+  else if (strcmp(argv[1],"LadrunoHHT") == 0) {
+    theTransientIntegrator = (TransientIntegrator *)OPS_LadrunoHHT();
+
+    if (theTransientAnalysis != 0)
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
+  }
+
+  else if (strcmp(argv[1],"LadrunoGeneralizedAlpha") == 0) {
+    theTransientIntegrator = (TransientIntegrator *)OPS_LadrunoGeneralizedAlpha();
+
     if (theTransientAnalysis != 0)
       setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }
