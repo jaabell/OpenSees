@@ -126,6 +126,18 @@ class Node : public DomainComponent
     virtual int setNumEigenvectors(int numVectorsToStore);
     virtual int setEigenvector(int mode, const Vector &eigenVector);
     virtual const Matrix &getEigenvectors(void);
+    // number of stored eigenvectors, 0 when none was set (a node outside
+    // the eigen analysis); unlike getEigenvectors() it never exits
+    virtual int getNumEigenvectors(void) const;
+    // complex (phased) mode shapes psi = Phi z of complexEigen, stored per
+    // node as a Re/Im pair of numberDOF x numModes matrices. The getters
+    // return 0 when none is stored. Not sent by sendSelf (serial only).
+    virtual int setNumComplexEigenvectors(int numVectorsToStore);
+    virtual int setComplexEigenvector(int mode, const Vector &re,
+				      const Vector &im);
+    virtual int getNumComplexEigenvectors(void) const;
+    virtual const Matrix *getComplexEigenvectorsRe(void) const;
+    virtual const Matrix *getComplexEigenvectorsIm(void) const;
     
     // public methods for output
     virtual int sendSelf(int commitTag, Channel &theChannel);
@@ -204,6 +216,11 @@ class Node : public DomainComponent
     double alphaM;                    // rayleigh damping factor
     
     Matrix *theEigenvectors;
+
+    // complex mode shapes (Re/Im); in-class initialized, so the
+    // constructors are unchanged
+    Matrix *theComplexEigenRe = 0;
+    Matrix *theComplexEigenIm = 0;
 
     // AddingSensitivity:BEGIN /////////////////////////////////////////
     Matrix *dispSensitivity;

@@ -54,6 +54,17 @@ public:
 	int analyze();
 	int analyze(int mode_id);
 
+	// optional modal combination: commit ONE field combining the per-mode
+	// peak nodal displacements instead of the per-mode states.
+	// rule = LadrunoModalCombination::Rule; xi = per-mode damping ratios
+	// (used by CQC; a single value is broadcast to all modes).
+	void setCombination(int rule, const std::vector<double>& xi);
+	int analyzeCombined();
+
+	// responseSpectrumPerMode applies the same modalProperties consistency
+	// check and the same spectral ordinate (check(), getSa()) per mode
+	friend int OPS_LadrunoResponseSpectrumPerMode(void);
+
 private:
 	int check();
 	int beginMode();
@@ -74,6 +85,10 @@ private:
 	double m_scale;
 	// current mode
 	int m_current_mode;
+	// combination rule (-1 = none: per-mode behaviour) and per-mode damping
+	// ratios for CQC
+	int m_combine = -1;
+	std::vector<double> m_xi;
 };
 
 #endif

@@ -38,6 +38,7 @@
 #include <elementAPI.h>
 #include <Node.h>
 #include <NodeIter.h>
+#include <LadrunoModalCombination.h>
 #include <vector>
 #include <algorithm>
 #include <cmath>
@@ -123,6 +124,9 @@ OPS_ResponseSpectrumAnalysis(void)
 	std::vector<double> Sa;
 	int mode_id = 0;
 	bool single_mode = false;
+	// optional modal combination (-combine) and its damping ratios
+	int combine_rule = LadrunoModalCombination::RULE_NONE;
+	std::vector<double> xi_list;
 
 	// make sure eigenvalue and modal properties have been called before
 	DomainModalProperties modal_props;
@@ -138,6 +142,7 @@ OPS_ResponseSpectrumAnalysis(void)
 		opserr << "ResponseSpectrumAnalysis $tsTag $dir <-scale $scale> <-damp $damp>\n"
 			<< "or\n"
 			<< "ResponseSpectrumAnalysis $dir -Tn $TnValues -fn $fnValues -Sa $SaValues <-scale $scale> <-damp $damp>\n"
+			<< "with <-combine SRSS|CQC|ABS|TenPercent <-damp $xi | -modalDamp $xi1 $xi2 ..>> to commit one combined displacement field.\n"
 			"Error: at least 2 arguments should be provided.\n";
 		return -1;
 	}
@@ -217,6 +222,46 @@ OPS_ResponseSpectrumAnalysis(void)
 			}
 			else {
 				opserr << "ResponseSpectrumAnalysis Error: mode_id requested but not provided.\n";
+				return -1;
+			}
+		}
+		// optional modal combination stage
+		else if (strcmp(value, "-combine") == 0) {
+			if (OPS_GetNumRemainingInputArgs() < 1) {
+				opserr << "ResponseSpectrumAnalysis Error: -combine requires a rule "
+				          "(SRSS | CQC | ABS | TenPercent).\n";
+				return -1;
+			}
+			const char* rname = OPS_GetString();
+			combine_rule = LadrunoModalCombination::parseRule(rname);
+			if (combine_rule == LadrunoModalCombination::RULE_NONE) {
+				opserr << "ResponseSpectrumAnalysis Error: unknown -combine rule '"
+				       << rname << "' (use SRSS | CQC | ABS | TenPercent).\n";
+				return -1;
+			}
+		}
+		else if (strcmp(value, "-damp") == 0) {
+			double xi_one;
+			if (OPS_GetNumRemainingInputArgs() < 1 || OPS_GetDouble(&numData, &xi_one) < 0) {
+				opserr << "ResponseSpectrumAnalysis Error: -damp requires a value.\n";
+				return -1;
+			}
+			xi_list.assign(1, xi_one); // single value broadcast to all modes
+		}
+		else if (strcmp(value, "-modalDamp") == 0 || strcmp(value, "-modalDamping") == 0) {
+			xi_list.clear();
+			while (OPS_GetNumRemainingInputArgs() > 0) {
+				double item; int one = 1;
+				int rem_before = OPS_GetNumRemainingInputArgs();
+				if (OPS_GetDoubleInput(&one, &item) < 0) {
+					if (OPS_GetNumRemainingInputArgs() < rem_before)
+						OPS_ResetCurrentInputArg(-1);
+					break;
+				}
+				xi_list.push_back(item);
+			}
+			if (xi_list.empty()) {
+				opserr << "ResponseSpectrumAnalysis Error: -modalDamp requires >=1 ratio.\n";
 				return -1;
 			}
 		}
@@ -306,7 +351,18 @@ OPS_ResponseSpectrumAnalysis(void)
 	// no need to store it
 	ResponseSpectrumAnalysis rsa(theAnalysisModel, ts, Tn, Sa, dir, scale);
 	int result;
-	if (single_mode)
+	// with -combine, run the combination stage (one committed field);
+	// otherwise the per-mode behaviour is unchanged
+	if (combine_rule != LadrunoModalCombination::RULE_NONE) {
+		if (single_mode) {
+			opserr << "ResponseSpectrumAnalysis Error: -combine and -mode are "
+			          "mutually exclusive (combination needs all modes).\n";
+			return -1;
+		}
+		rsa.setCombination(combine_rule, xi_list);
+		result = rsa.analyzeCombined();
+	}
+	else if (single_mode)
 		result = rsa.analyze(mode_id);
 	else
 		result = rsa.analyze();
@@ -605,3 +661,104 @@ double ResponseSpectrumAnalysis::getSa(double T) const
 	return m_Sa.back();
 }
 
+
+void ResponseSpectrumAnalysis::setCombination(int rule, const std::vector<double>& xi)
+{
+	m_combine = rule;
+	m_xi = xi;
+}
+
+// -combine: combine the per-mode peak nodal DISPLACEMENTS into one design
+// field (SRSS, CQC, ABS or TenPercent; see LadrunoModalCombination.h) and
+// commit a single state, instead of the per-mode states of analyze().
+// Combination is per quantity and nonlinear: forces recovered from the
+// combined displacements are not the combination of the per-mode forces.
+int ResponseSpectrumAnalysis::analyzeCombined()
+{
+	Domain* domain = m_model->getDomainPtr();
+
+	DomainModalProperties mp;
+	if (domain->getModalProperties(mp) < 0) {
+		opserr << "ResponseSpectrumAnalysis::analyzeCombined() - failed to get modal properties\n";
+		return -1;
+	}
+	int error_code = check();
+	if (error_code < 0) return error_code;
+
+	opserr << "ResponseSpectrumAnalysis WARNING: -combine combines nodal displacements only; "
+	          "forces, reactions and drifts recovered from them are not modally combined "
+	          "(ASCE 7-22 12.9.1.3). Use -mode k per mode and combine each quantity.\n";
+
+	const int num_eigen = domain->getEigenvalues().Size();
+	const int ndf = mp.totalMass().Size();
+	const int exdof = m_direction - 1;
+
+	// per-mode scalars over all extracted modes
+	std::vector<double> w(num_eigen), T(num_eigen), MPF(num_eigen),
+	                    Vscale(num_eigen), Sa(num_eigen), lambda(num_eigen),
+	                    xi(num_eigen);
+	for (int a = 0; a < num_eigen; ++a) {
+		lambda[a] = mp.eigenvalues()(a);
+		const double omega = (lambda[a] > 0.0) ? std::sqrt(lambda[a]) : 0.0;
+		w[a] = omega;
+		T[a] = (omega > 0.0) ? (2.0 * M_PI / omega) : 0.0;
+		Sa[a] = getSa(T[a]);
+		Vscale[a] = mp.eigenVectorScaleFactors()(a);
+		MPF[a] = mp.modalParticipationFactors()(a, exdof);
+		if (m_xi.size() == 1) xi[a] = m_xi[0];               // broadcast
+		else if (a < static_cast<int>(m_xi.size())) xi[a] = m_xi[a];
+		else xi[a] = 0.0;
+	}
+
+	// non-oscillatory modes (lambda <= 0: rigid, or spurious negative from a
+	// near-singular solve) do not contribute to a response-spectrum
+	// combination and would divide by ~0: excluded (R_a = 0, w_a = 0)
+	for (int a = 0; a < num_eigen; ++a)
+		if (lambda[a] <= 0.0) {
+			opserr << "ResponseSpectrumAnalysis - mode " << (a + 1)
+			       << " has a non-positive eigenvalue (" << lambda[a]
+			       << "); excluded from the -combine field.\n";
+		}
+	if (m_combine == LadrunoModalCombination::RULE_CQC) {
+		// CQC needs modal damping (with zero damping every rho_ij is 0 and
+		// CQC reduces to SRSS). An undamped subset is still well defined:
+		// those modes get rho = 0 (the coincident undamped pair is handled in
+		// rhoCQC).
+		bool any_damp = false;
+		for (int a = 0; a < num_eigen; ++a)
+			if (w[a] > 0.0 && xi[a] > 0.0) { any_damp = true; break; }
+		if (!any_damp) {
+			opserr << "ResponseSpectrumAnalysis - CQC combination requires modal "
+			          "damping (-damp or -modalDamp); none was given.\n";
+			return -1;
+		}
+	}
+
+	error_code = beginMode();
+	if (error_code < 0) return error_code;
+
+	Node* node;
+	NodeIter& theNodes = domain->getNodes();
+	std::vector<double> R(num_eigen);
+	while ((node = theNodes()) != 0) {
+		const Matrix& node_evec = node->getEigenvectors();
+		const int node_ndf = node_evec.noRows();
+		if (node_ndf < 1) continue;
+		const int nd = std::min(node_ndf, ndf);
+		for (int i = 0; i < nd; ++i) {
+			if (ndf == 6 && node_ndf == 4 && i == 3) // 3D U-P pressure DOF
+				continue;
+			for (int a = 0; a < num_eigen; ++a) {
+				const double V = node_evec(i, a) * Vscale[a];
+				// same expression as solveMode(), u = V MPF Sa / lambda
+				R[a] = (lambda[a] > 0.0) ? V * MPF[a] * Sa[a] / lambda[a] : 0.0;
+			}
+			const double u_comb = LadrunoModalCombination::combine(
+				static_cast<LadrunoModalCombination::Rule>(m_combine),
+				R, w, xi, T);
+			node->setTrialDisp(u_comb, i);
+		}
+	}
+
+	return endMode();
+}
