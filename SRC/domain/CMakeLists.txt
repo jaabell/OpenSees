@@ -16,4 +16,5 @@ add_subdirectory(groundMotion)
 add_subdirectory(region)
 add_subdirectory(partitioner)
 add_subdirectory(IGA)
+add_subdirectory(contact)
 

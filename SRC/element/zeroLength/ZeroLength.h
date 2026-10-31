@@ -173,12 +173,28 @@ class ZeroLength : public Element
     void   checkDirection (  ID& dir ) const;
     
     void   setTran1d ( Etype e, int n );
+    const Matrix &scatterPassenger(const Matrix &core);   // passenger mode, see below
+    const Vector &scatterPassenger(const Vector &core);
+    void   disable(void);                                 // leave a refused element inert
     double computeCurrentStrain1d ( int mat, const Vector& diff ) const;    
 
     // private attributes - a copy for each object of the class
     ID  connectedExternalNodes;         // contains the tags of the end nodes
     int dimension;                      // = 1, 2, or 3 dimensions
     int numDOF;	                        // number of dof for ZeroLength
+    // Passenger DOFs: in 3D, when both nodes have ndf >= 3 and the pair is not
+    // (3,3) or (6,6), the element keeps the 6-slot translational core
+    // (numDOF = 6, D3N6) and scatters it into dofNd1 + dofNd2 slots; the first
+    // three DOFs of each node are the translations and the others are neither
+    // read nor written. 0: not in passenger mode.
+    int     numDOFPassenger;
+    int     passengerOffset2;           // = dofNd1, first slot of node 2
+    Matrix *passengerMatrix;            // scatter targets, sized in setDomain()
+    Vector *passengerVector;
+    // set by setDomain() when it refuses the element (differing dofs that are
+    // not a passenger pair, or a rotational direction on a passenger pair);
+    // update() is then a no-op and every accessor returns zeros
+    bool    disabled;
     Matrix transformation;		// transformation matrix for orientation
     int useRayleighDamping;
 	
