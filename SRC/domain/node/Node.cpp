@@ -1444,6 +1444,12 @@ Node::getEigenvectors(void)
   return *theEigenvectors;
 }
 
+int
+Node::getNumEigenvectors(void) const
+{
+  return (theEigenvectors == 0) ? 0 : theEigenvectors->noCols();
+}
+
 
 int 
 Node::sendSelf(int cTag, Channel &theChannel)
