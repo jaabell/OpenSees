@@ -1123,6 +1123,8 @@
 #define INTEGRATOR_TAGS_HarmonicSteadyState             60
 #define INTEGRATOR_TAGS_ExplicitBathe                   61
 #define INTEGRATOR_TAGS_ExplicitDifferenceStatic        62
+// explicit leap-frog central difference
+#define INTEGRATOR_TAGS_CentralDifferenceLadruno        33003
 
 
 #define LinSOE_TAGS_FullGenLinSOE		1
