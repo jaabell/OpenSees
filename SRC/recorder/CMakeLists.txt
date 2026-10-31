@@ -50,6 +50,7 @@ target_sources(OPS_Recorder
       RemoveRecorder.h
       VTK_Recorder.h
       EnergyBalanceRecorder.h
+      EnergyBalanceKernel.h
 )
 
 
@@ -62,6 +63,29 @@ if(HDF5_FOUND)
         PUBLIC
          MPCORecorder.h
          VTKHDF_Recorder.h
+      )
+      # recorder ladruno (HDF5 .ladruno files)
+      target_sources(OPS_Recorder
+        PRIVATE
+          LadrunoRecorder.cpp
+          Ladruno_NodeResults.cpp
+          Ladruno_ElementResults.cpp
+          Ladruno_DomainResults.cpp
+          Ladruno_Sinks.cpp
+          LadrunoMonitorRecorder.cpp
+          LadrunoMonitorSink.cpp
+        PUBLIC
+          LadrunoRecorder.h
+          Ladruno_Types.h
+          Ladruno_Hdf5.h
+          Ladruno_ResultIO.h
+          Ladruno_LaunchEnv.h
+          Ladruno_NodeResults.h
+          Ladruno_ElementResults.h
+          Ladruno_DomainResults.h
+          Ladruno_Sinks.h
+          LadrunoMonitorRecorder.h
+          LadrunoMonitorSink.h
       )
    endif()
 endif()

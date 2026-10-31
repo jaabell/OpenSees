@@ -78,6 +78,7 @@
 #include <Graph.h>
 #include <Recorder.h>
 #include <MeshRegion.h>
+#include <LadrunoEnergyChannels.h>
 #include <Analysis.h>
 #include <FE_Datastore.h>
 #include <FEM_ObjectBroker.h>
@@ -1056,6 +1057,10 @@ Domain::clearAll(void) {
   theParameters->clearAll();
   numParameters = 0;
 
+  // reset the energy channels read by EnergyBalanceRecorder: wipe() destroys
+  // every producer and consumer, so the next model starts from zero
+  Ladruno::EnergyChannelRegistry::instance().resetOnWipe();
+
   // remove the recorders
   int i;
   for (i=0; i<numRecorders; i++)
@@ -1083,6 +1088,15 @@ Domain::clearAll(void) {
   dT = 0.0;
 
   this->setModalDampingFactors(0);
+
+  // the spectrum belongs to the model being wiped: without this reset a
+  // command reading getEigenvalues() after wipe sees the previous model's
+  // eigenvalues
+  if (theEigenvalues != 0) {
+    delete theEigenvalues;
+    theEigenvalues = 0;
+  }
+  theEigenvalueSetTime = 0.0;
 
   // set the bounds around the origin
   initBounds = true;
@@ -2367,6 +2381,12 @@ Domain::getEigenvalues(void)
 
   return *theEigenvalues;
 }  
+
+int
+Domain::getNumEigenvalues(void) const
+{
+  return (theEigenvalues == 0) ? 0 : theEigenvalues->Size();
+}
 
 double 
 Domain::getTimeEigenvaluesSet(void) 
