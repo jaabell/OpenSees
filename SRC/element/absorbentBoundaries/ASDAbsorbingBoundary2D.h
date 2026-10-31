@@ -77,6 +77,7 @@ public:
     int getNumDOF();
 
     // methods dealing with committed state and update
+    int commitState();
     int revertToLastCommit();
 
     // methods to return the current linearized stiffness,
@@ -194,6 +195,12 @@ private:
     // time series for base actions
     TimeSeries* m_tsx = nullptr;
     TimeSeries* m_tsy = nullptr;
+
+    // Injection-work publisher state (EnergyBalance -v2), see commitState().
+    // Per-process diagnostic state, not sent in sendSelf/recvSelf.
+    double m_lkPrevRate = 0.0;
+    double m_lkLastTime = 0.0;
+    bool   m_lkSeeded = false;
 
 };
 

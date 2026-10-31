@@ -40,6 +40,7 @@
 #include <DOF_GrpIter.h>
 #include <EigenSOE.h>
 #include <cmath>
+#include <LadrunoEnergyChannels.h>
 
 IncrementalIntegrator::IncrementalIntegrator(int clasTag)
 :Integrator(clasTag),
@@ -204,6 +205,34 @@ IncrementalIntegrator::commit(void)
 	opserr << "no AnalysisModel object associated with this object\n";	
 	return -1;
     }    
+
+    // Publish the modal-damping dissipation of the step being committed to
+    // the MODAL_WORK energy channel (EnergyBalance -v2). mdRate is the rate
+    // v^T C_modal v at the last (converged) addModalDampingForce() call; it is
+    // integrated with the trapezoidal rule over the domain-time increment.
+    // The publication precedes commitDomain() so a recorder reading the
+    // channel inside it sees the total of this step. The first commit only
+    // stores the rate and the time (the start time of that step is not known
+    // here) and declares the channel, before the recorder fixes its columns
+    // at its first record inside the same commitDomain(). Integrators that
+    // override commit() without calling this one do not publish.
+    if (mdRateValid) {
+	Ladruno::EnergyChannelRegistry::instance().declare(
+	    Ladruno::EnergyChannelRegistry::MODAL_WORK);
+	const double tNow = theAnalysisModel->getCurrentDomainTime();
+	if (mdSeeded) {
+	    const double dt = tNow - mdLastTime;
+	    if (dt > 0.0) {
+		Ladruno::EnergyChannelRegistry::instance().addEnergy(
+		    Ladruno::EnergyChannelRegistry::MODAL_WORK,
+		    0.5 * (mdPrevRate + mdRate) * dt);
+	    }
+	}
+	mdSeeded = true;
+	mdPrevRate = mdRate;
+	mdLastTime = tNow;
+	mdRateValid = false;
+    }
 
     return theAnalysisModel->commitDomain();
 }   
@@ -526,6 +555,8 @@ IncrementalIntegrator::addModalDampingForce(const Vector *modalDampingValues)
 
   dampingForces->Zero();
 
+  bool anyModeActive = false;
+
   for (int i=0; i<numModes; i++) {
 
     double eigenvalue = (*eigenValues)(i);
@@ -550,10 +581,24 @@ IncrementalIntegrator::addModalDampingForce(const Vector *modalDampingValues)
 	if (eij != 0)
 	  (*dampingForces)(j) += beta * eij;
       }
+
+      anyModeActive = true;
     }
   }
 
   theSOE->setB(*dampingForces);
+
+  // Modal dissipation rate at this iterate, for commit(). dampingForces is
+  // -C_modal v, so the dissipated power is -(F . v) = v^T C_modal v >= 0.
+  // Overwritten on every call: only the last (converged) iterate of the step
+  // is used.
+  if (anyModeActive) {
+    double p = 0.0;
+    for (int j=0; j<numDOF; j++)
+      p -= (*dampingForces)(j) * vel(j);
+    mdRate = p;
+    mdRateValid = true;
+  }
   
   return res;
 }

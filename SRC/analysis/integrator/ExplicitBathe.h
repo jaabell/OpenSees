@@ -94,7 +94,8 @@ protected:
 
 private:
     // Applies local non-viscous damping (alpha_lnvd > 0) to a solved acceleration
-    void applyLocalDamping(Vector &accel, const Vector &vel);
+    // and accumulates its dissipated work over a sub-step of length dtSub
+    void applyLocalDamping(Vector &accel, const Vector &vel, double dtSub);
 
     // Time step
     double deltaT;
@@ -145,6 +146,7 @@ private:
     int undamped_critical_element_tag;          // Element with minimum undamped dt
 
     double alpha_lnvd;  // Local non-viscous damping coefficient (0 = off)
+    double lnvdStepEnergy;  // Local damping work of the current step, published on commit
 };
 
 #endif

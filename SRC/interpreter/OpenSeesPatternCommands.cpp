@@ -50,6 +50,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <Beam3dPointLoad.h>
 #include <BrickSelfWeight.h>
 #include <SurfaceLoader.h>
+#include <LysmerVelocityLoader.h>
 #include <SelfWeight.h>
 #include <Beam2dThermalAction.h>
 #include <Beam3dThermalAction.h>
@@ -526,6 +527,40 @@ int OPS_ElementalLoad()
 	    int loadPatternTag = theActiveLoadPattern->getTag();
 
 	    // add the load to the domain
+	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
+		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
+		opserr << theLoad;
+		delete theLoad;
+		return -1;
+	    }
+	    eleLoadTag++;
+	}
+	return 0;
+    }
+    // incident velocity for a LysmerTriangle compliant base:
+    //   eleLoad('-ele', *tags, '-type', '-lysmerVelocityLoader', dir)
+    // dir = 1|2|3 (global x|y|z); the pattern time-series value is the
+    // incident velocity, and the element applies R_inj = C v_gnd
+    else if ((strcmp(type,"-lysmerVelocityLoader") == 0) ||
+             (strcmp(type,"-LysmerVelocityLoader") == 0)) {
+	int lvDir = 0;
+	int numdata = 1;
+	if (OPS_GetNumRemainingInputArgs() < 1 ||
+	    OPS_GetIntInput(&numdata, &lvDir) < 0 || lvDir < 1 || lvDir > 3) {
+	    opserr << "WARNING eleLoad - -lysmerVelocityLoader requires a "
+	              "direction 1|2|3 (global x|y|z)\n";
+	    return -1;
+	}
+	for (int i=0; i<theEleTags.Size(); i++) {
+	    theLoad = new LysmerVelocityLoader(eleLoadTag, theEleTags(i), lvDir);
+
+	    if (theLoad == 0) {
+		opserr << "WARNING eleLoad - out of memory creating load of type " << type;
+		return -1;
+	    }
+
+	    int loadPatternTag = theActiveLoadPattern->getTag();
+
 	    if (theDomain->addElementalLoad(theLoad, loadPatternTag) == false) {
 		opserr << "WARNING eleLoad - could not add following load to domain:\n ";
 		opserr << theLoad;

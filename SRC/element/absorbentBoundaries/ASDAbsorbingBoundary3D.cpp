@@ -40,6 +40,8 @@
 #include <stdlib.h>
 #include <limits>
 
+#include <LadrunoEnergyChannels.h>
+
 #include <algorithm>
 #include <string>
 #include <array>
@@ -717,6 +719,15 @@ void ASDAbsorbingBoundary3D::setDomain(Domain* theDomain)
         return;
     }
 
+    // declare the injection energy channel so the EnergyBalance -v2 layout
+    // writes an E_inject column whenever this element is present (even if
+    // the base-action time series is zero), and restart the injection-work
+    // clock
+    Ladruno::EnergyChannelRegistry::instance().declare(
+        Ladruno::EnergyChannelRegistry::ABSORB_LEAK);
+    m_lkLastTime = theDomain->getCurrentTime();
+    m_lkSeeded = false;
+
     // check nodes and sort them in the in-coming order.
     for (std::size_t i = 0; i < m_nodes.size(); ++i) {
 
@@ -924,6 +935,51 @@ int ASDAbsorbingBoundary3D::getNumDOF()
 int ASDAbsorbingBoundary3D::revertToLastCommit()
 {
     return 0;
+}
+
+// Publish the injection work of the absorbing boundary to the ABSORB_LEAK
+// energy channel (EnergyBalance -v2). Bottom instances (BND_BOTTOM):
+// addBaseActions() computes the compliant-base incident forcing from the
+// time series at the current domain time, the same value used for the last
+// residual of the step being committed. Lateral instances: addRffToSoil()
+// transfers the free-field column response to the soil-side DOFs; it depends
+// only on the trial displacement, which is also unchanged since the last
+// residual. The two mechanisms are mutually exclusive per instance. Both
+// forces are inside getResistingForce(), so their power, R_inj^T v with
+// resisting-force sign, is contained in the internal-work integral of the
+// recorder; publishing it lets the -v2 layout report IE without it and the
+// injected energy as E_inject. Trapezoidal in domain time, rectangle rule on
+// the first commit; a commit with dt <= 0 only resets the clock.
+int ASDAbsorbingBoundary3D::commitState()
+{
+    if (m_stage != Stage_StaticConstraint) {
+        Domain* dom = getDomain();
+        if (dom != 0) {
+            static Vector Rinj;
+            Rinj.resize(m_num_dofs);
+            Rinj.Zero();
+            if (m_boundary & BND_BOTTOM)
+                addBaseActions(Rinj);
+            else
+                addRffToSoil(Rinj);
+            const double rate = Rinj ^ getVelocity();
+
+            const double tNow = dom->getCurrentTime();
+            const double dt = tNow - m_lkLastTime;
+            if (dt > 0.0) {
+                const double dE = m_lkSeeded
+                    ? 0.5 * (m_lkPrevRate + rate) * dt
+                    : rate * dt;
+                Ladruno::EnergyChannelRegistry::instance().addEnergy(
+                    Ladruno::EnergyChannelRegistry::ABSORB_LEAK, dE);
+                m_lkSeeded = true;
+            }
+            m_lkPrevRate = rate;
+            m_lkLastTime = tNow;
+        }
+    }
+
+    return Element::commitState();
 }
 
 const Matrix& ASDAbsorbingBoundary3D::getTangentStiff(void)

@@ -128,6 +128,14 @@ class LysmerTriangle : public Element
 
     Vector gnd_velocity;      //Velocity from ground motions
 
+    // Injection-work publisher state (EnergyBalance -v2). commitState()
+    // integrates the rate R_inj^T v trapezoidally and adds it to the
+    // ABSORB_LEAK energy channel. Per-process diagnostic state, not sent in
+    // sendSelf/recvSelf.
+    double lkPrevRate;        // injection-work rate at the last commit
+    double lkLastTime;        // domain time at the last commit
+    bool   lkSeeded;          // false until the first commit with dt > 0
+
     int MyTag;                // what is my name?
 
     static Matrix tangentStiffness;  // Tangent Stiffness matrix
