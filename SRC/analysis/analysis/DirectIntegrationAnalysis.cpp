@@ -406,15 +406,22 @@ DirectIntegrationAnalysis::domainChanged(void)
     
     // now we invoke handle() on the constraint handler which
     // causes the creation of FE_Element and DOF_Group objects
-    // and their addition to the AnalysisModel.
-    theConstraintHandler->handle();
+    // and their addition to the AnalysisModel. A negative return is an
+    // error (as checked by BasicAnalysisBuilder::domainChanged()).
+    if (theConstraintHandler->handle() < 0) {
+	opserr << "DirectIntegrationAnalysis::domainChanged() - ConstraintHandler::handle() failed\n";
+	return -1;
+    }
 
     // we now invoke number() on the numberer which causes
     // equation numbers to be assigned to all the DOFs in the
     // AnalysisModel.
     theDOF_Numberer->numberDOF();
 
-    theConstraintHandler->doneNumberingDOF();
+    if (theConstraintHandler->doneNumberingDOF() < 0) {
+	opserr << "DirectIntegrationAnalysis::domainChanged() - ConstraintHandler::doneNumberingDOF() failed\n";
+	return -1;
+    }
 
     // we invoke setGraph() on the LinearSOE which
     // causes that object to determine its size
@@ -439,7 +446,10 @@ DirectIntegrationAnalysis::domainChanged(void)
     theAnalysisModel->clearDOFGraph();
 
     // we invoke domainChange() on the integrator and algorithm
-    theIntegrator->domainChanged();
+    if (theIntegrator->domainChanged() < 0) {
+	opserr << "DirectIntegrationAnalysis::domainChanged() - Integrator::domainChanged() failed\n";
+	return -1;
+    }
     theAlgorithm->domainChanged();
 
     return 0;

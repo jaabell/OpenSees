@@ -1651,6 +1651,10 @@ int OPS_ConstraintHandler()
     } else if (strcmp(type,"Auto") == 0) {
     	theHandler = (ConstraintHandler*)OPS_AutoConstraintHandler();
 
+    } else if (strcmp(type,"LadrunoProjection") == 0) {
+    	extern void *OPS_LadrunoProjectionHandler(void);
+    	theHandler = (ConstraintHandler*)OPS_LadrunoProjectionHandler();
+
     } else {
     	opserr<<"WARNING unknown ConstraintHandler type "<<type<<"\n";
     	return -1;
@@ -1888,6 +1892,12 @@ int OPS_Integrator()
 
     } else if (strcmp(type,"CentralDifference") == 0) {
 	ti = (TransientIntegrator*)OPS_CentralDifference();
+
+    } else if (strcmp(type,"CentralDifferenceLadruno") == 0) {
+	ti = (TransientIntegrator*)OPS_CentralDifferenceLadruno();
+
+    } else if (strcmp(type,"ExplicitBathe") == 0) {
+	ti = (TransientIntegrator*)OPS_ExplicitBathe();
 
     } else if (strcmp(type,"CentralDifferenceAlternative") == 0) {
 	ti = (TransientIntegrator*)OPS_CentralDifferenceAlternative();
@@ -2724,6 +2734,26 @@ int OPS_printModel()
     // close the output file
     outputFile.close();
     return res;
+}
+
+// criticalTimeStep: the critical time step reported by the current
+// transient integrator; <= 0 when the integrator does not provide one or it
+// has not been computed yet
+int OPS_criticalTimeStep()
+{
+    if (cmds == 0) return 0;
+    TransientIntegrator* ti = cmds->getTransientIntegrator();
+    if (ti == 0) {
+	opserr << "WARNING criticalTimeStep - no transient integrator is set\n";
+	return -1;
+    }
+    double value = ti->getCriticalTimeStep();
+    int numdata = 1;
+    if (OPS_SetDoubleOutput(&numdata, &value, true) < 0) {
+	opserr << "WARNING criticalTimeStep - failed to set output\n";
+	return -1;
+    }
+    return 0;
 }
 
 int OPS_getCTestNorms()

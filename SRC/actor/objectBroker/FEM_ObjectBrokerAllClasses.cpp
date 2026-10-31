@@ -624,6 +624,7 @@
 #include "LagrangeConstraintHandler.h"
 #include "TransformationConstraintHandler.h"
 #include "AutoConstraintHandler.h"
+#include "LadrunoProjectionHandler.h"
 
 // dof numberer header files
 #include "DOF_Numberer.h"   
@@ -671,6 +672,8 @@
 #include "CentralDifference.h"
 #include "CentralDifferenceAlternative.h"
 #include "CentralDifferenceNoDamping.h"
+#include "CentralDifferenceLadruno.h"
+#include "ExplicitBathe.h"
 #include "Collocation.h"
 #include "CollocationHSFixedNumIter.h"
 #include "CollocationHSIncrLimit.h"
@@ -2858,6 +2861,9 @@ FEM_ObjectBrokerAllClasses::getNewConstraintHandler(int classTag)
 	case HANDLER_TAG_AutoConstraintHandler:  
 	     return new AutoConstraintHandler();
 
+	case HANDLER_TAG_LadrunoProjectionHandler:
+	     return new LadrunoProjectionHandler();
+
 	default:
 	     opserr << "FEM_ObjectBrokerAllClasses::getNewConstraintHandler - ";
 	     opserr << " - no ConstraintHandler type exists for class tag ";
@@ -3061,6 +3067,12 @@ FEM_ObjectBrokerAllClasses::getNewTransientIntegrator(int classTag)
 
     case INTEGRATOR_TAGS_CentralDifferenceNoDamping:  
 	     return new CentralDifferenceNoDamping();      // must recvSelf
+
+	case INTEGRATOR_TAGS_CentralDifferenceLadruno:
+	     return new CentralDifferenceLadruno();      // must recvSelf
+
+	case INTEGRATOR_TAGS_ExplicitBathe:
+	     return new ExplicitBathe();      // must recvSelf
 
 	case INTEGRATOR_TAGS_Collocation:  
 	     return new Collocation();

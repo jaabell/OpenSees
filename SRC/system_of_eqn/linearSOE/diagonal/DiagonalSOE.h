@@ -64,6 +64,9 @@ class DiagonalSOE : public LinearSOE
     const Vector &getX(void);
     const Vector &getB(void);
   const Matrix *getA(void);
+    // assembled diagonal A[], indexed by equation number; valid before the
+    // solver factors it in place (DiagonalDirectSolver stores 1/A[i])
+    const double *getDiagonalA(void) const { return A; }
     double normRHS(void);
 
     int saveSparseA(OPS_Stream &output, int baseIndex = 0);
