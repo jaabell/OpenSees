@@ -34,6 +34,7 @@
 #include <LadrunoFrictionKernel.h>
 #include <LadrunoMortarKernel.h>
 #include <LadrunoEdgeKernel.h>
+#include <LadrunoContact2DKernel.h>
 
 // penalty normal traction tn = kn <-gap>+ (Macaulay bracket): zero for gap >= 0,
 // so the contact never pulls.
@@ -42,6 +43,10 @@ ladrunoContactTraction(double kn, double gap)
 {
     return (gap < 0.0) ? kn * (-gap) : 0.0;
 }
+
+// tributary length below which a 2D mortar slave node carries nothing,
+// relative to Lref
+static const double MORT2D_TAU_TRIB = 1e-12;
 
 LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, int ndm_,
                                    const double p0[3], const double n[3], double kn_,
@@ -174,6 +179,86 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *sNodeA, Node *sNodeB, Node *mN
     for (int i = 0; i < 4; i++) { segNode[i] = 0; mortarSlave[i] = 0; mortarMaster[i] = 0; }
     for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
     for (int d = 0; d < 3; d++) { orientDir[d] = odir[d]; planeP0[d] = 0.0; planeN[d] = 0.0; }
+}
+
+LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes, int nps_,
+                                   int ndm2, double kn_, double sigma, double LrefIn,
+                                   Node *prevFar, Node *nextFar, double kt_, double mu_,
+                                   bool consistentTan_, double muc_, Domain *dom,
+                                   int contactTag_, int segIndex_, double cohesion_,
+                                   double tauMax_)
+  : FE_Element(tag, /*numDOF_Group=*/1 + nps_, /*ndof=*/ndm2 * (1 + nps_)),
+    resid(ndm2 * (1 + nps_)), tang(ndm2 * (1 + nps_), ndm2 * (1 + nps_)),
+    mode(SEGMENT), theSlave(slaveNode), ndm(ndm2), kn(kn_), nps(nps_),
+    theDomain(dom), contactTag(contactTag_), segIndex(segIndex_), consistentNormal(false),
+    kt(kt_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
+    muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
+    isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
+    gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
+    smoothBand(0.0), smoothSlip(0.0), edgeAlm(false)
+{
+    // Connectivity = slave DOF_Group + the segment (or vertex) DOF_Groups;
+    // setID() fills myID with the first two equations of each node
+    if (slaveNode != 0) {
+        DOF_Group *dg = slaveNode->getDOF_GroupPtr();
+        if (dg != 0) myDOF_Groups(0) = dg->getTag();
+    }
+    for (int i = 0; i < nps; i++) {
+        segNode[i] = segNodes[i];
+        if (segNodes[i] != 0) {
+            DOF_Group *dg = segNodes[i]->getDOF_GroupPtr();
+            if (dg != 0) myDOF_Groups(1 + i) = dg->getTag();
+        }
+    }
+    for (int i = nps; i < 4; i++) segNode[i] = 0;
+    for (int i = 0; i < 4; i++) { mortarSlave[i] = 0; mortarMaster[i] = 0; edgeNode[i] = 0; }
+    for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
+    for (int d = 0; d < 3; d++) { planeP0[d] = 0.0; planeN[d] = 0.0; orientDir[d] = 0.0; }
+    nts2dSigma = sigma;
+    nts2dLref  = LrefIn;
+    nts2dHasPrevFar = (prevFar != 0);
+    nts2dPrevFarTag = (prevFar != 0) ? prevFar->getTag() : 0;
+    nts2dHasNextFar = (nextFar != 0);
+    nts2dNextFarTag = (nextFar != 0) ? nextFar->getTag() : 0;
+}
+
+LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s, Node **masterNodes,
+                                   int nps_m, int ndm2, double epsN, double sigma,
+                                   double LrefIn, int contactTag_, int slaveFacetIndex_,
+                                   Domain *dom, bool isTie_, double mu_, double epsT_,
+                                   double cohesion_, double tauMax_, bool consistentTan_,
+                                   int masterFacetIndex_, bool ntsCoDeclared_)
+  : FE_Element(tag, /*numDOF_Group=*/nps_s + nps_m, /*ndof=*/ndm2 * (nps_s + nps_m)),
+    resid(ndm2 * (nps_s + nps_m)), tang(ndm2 * (nps_s + nps_m), ndm2 * (nps_s + nps_m)),
+    mode(MORTAR), theSlave(0), ndm(ndm2), kn(epsN), nps(0),
+    theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
+    kt(epsT_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
+    muc(0.0), npsS(nps_s), npsM(nps_m), slaveFacetIndex(slaveFacetIndex_), mortarOrder(2),
+    isTie(isTie_), masterFacetIndex(masterFacetIndex_), hasGapShift(false),
+    gapShiftOffset(0.0), gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
+    smoothBand(0.0), smoothSlip(0.0), edgeAlm(false)
+{
+    for (int i = 0; i < nps_s; i++) {
+        mortarSlave[i] = slaveNodes[i];
+        if (slaveNodes[i] != 0) {
+            DOF_Group *dg = slaveNodes[i]->getDOF_GroupPtr();
+            if (dg != 0) myDOF_Groups(i) = dg->getTag();
+        }
+    }
+    for (int i = 0; i < nps_m; i++) {
+        mortarMaster[i] = masterNodes[i];
+        if (masterNodes[i] != 0) {
+            DOF_Group *dg = masterNodes[i]->getDOF_GroupPtr();
+            if (dg != 0) myDOF_Groups(nps_s + i) = dg->getTag();
+        }
+    }
+    for (int i = nps_s; i < 4; i++) mortarSlave[i] = 0;
+    for (int i = nps_m; i < 4; i++) mortarMaster[i] = 0;
+    for (int i = 0; i < 4; i++) { segNode[i] = 0; edgeNode[i] = 0; gapShiftRef[i] = 0.0; }
+    for (int d = 0; d < 3; d++) { orientDir[d] = 0.0; planeP0[d] = 0.0; planeN[d] = 0.0; }
+    mortar2dSigma = sigma;
+    mortar2dLref  = LrefIn;
+    mortar2dNtsCoDeclared = ntsCoDeclared_;
 }
 
 LadrunoContactFE::~LadrunoContactFE()
@@ -627,6 +712,61 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                 for (int d = 0; d < ndm; d++) resid(d) += -muc * gdot * planeN[d];
             }
         }
+    } else if (mode == SEGMENT && ndm == 2) {
+        // 2D node-to-segment: penalty tn = kn <-gap>+ on the pair this adapter
+        // owns (segment, concave vertex or end cap), with the vertex side sign
+        // committed at the first evaluation that decides it
+        double gap, n[3], N2[2], B[6], liveSide = 0.0, gTnow = 0.0;
+        const double committedSide = vtx2DCommittedSide();
+        bool act2d = segment2DActive(gap, n, N2, B, committedSide, &liveSide, &gTnow);
+        LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+        if (!act2d && cd != 0 && theSlave != 0)
+            cd->setNtsForce(contactTag, theSlave->getTag(), segIndex, 0.0);
+        // a committed sign that disagrees with the live one means the corner
+        // changed type under deformation; the committed sign is kept
+        if (nps == 1 && committedSide != 0.0 && liveSide != 0.0 && liveSide != committedSide &&
+            cd != 0 && cd->warnOnce(contactTag, LadrunoContactDomain::WARN_VTX2D_SIDE_FLIP))
+            opserr << "WARNING LadrunoContactFE - contact " << contactTag << ": the committed "
+                      "side sign of a 2D vertex pair differs from the current corner geometry "
+                      "(the corner changed type under deformation); the committed sign is kept\n";
+        if (act2d) {
+            if (nps == 1 && committedSide == 0.0 && liveSide != 0.0 && cd != 0)
+                cd->setVtx2DSide(contactTag, theSlave->getTag(), segNode[0]->getTag(), liveSide);
+            double tn = ladrunoContactTraction(kn, gap);
+            int ndof = 2 * (1 + nps);
+            for (int k = 0; k < ndof; k++)
+                resid(k) = B[k] * tn;
+            if (cd != 0)
+                cd->setNtsForce(contactTag, theSlave->getTag(), segIndex, tn);
+            if (viscousActive(theIntegrator)) {
+                double gdot = 0.0;
+                const Vector &vs = theSlave->getTrialVel();
+                for (int d = 0; d < 2; d++) gdot += B[d] * vs(d);
+                for (int i = 0; i < nps; i++) {
+                    const Vector &vm = segNode[i]->getTrialVel();
+                    for (int d = 0; d < 2; d++) gdot += B[2 * (1 + i) + d] * vm(d);
+                }
+                for (int k = 0; k < ndof; k++) resid(k) += -muc * gdot * B[k];
+            }
+            // scalar friction along t = perp(n) (slot 0 of the friction state)
+            if (hasFriction() && cd != 0) {
+                LadrunoContactDomain::FrictionState &st =
+                    cd->getOrCreateFrictionState(contactTag, theSlave->getTag(), segIndex);
+                if (!st.engaged) { st.gT0[0] = gTnow; st.engaged = true; }
+                double gTeff = gTnow - st.gT0[0];
+                double tFricScalar, gpTtrial0;
+                LadrunoFrictionKernel::returnMap1D(gTeff, st.gpT[0], tn, kt, mu, tFricScalar,
+                                                   gpTtrial0, cohesion, tauMax);
+                st.gpTtrial[0] = gpTtrial0;
+                const double th[2] = { -n[1], n[0] };
+                resid(0) += tFricScalar * th[0];
+                resid(1) += tFricScalar * th[1];
+                for (int i = 0; i < nps; i++) {
+                    resid(2 * (1 + i) + 0) += -N2[i] * tFricScalar * th[0];
+                    resid(2 * (1 + i) + 1) += -N2[i] * tFricScalar * th[1];
+                }
+            }
+        }
     } else if (mode == SEGMENT) {
         double gap, n[3], N[4], B[15], gTvec[3];   // ndof <= 3 (1 + 4) = 15
         LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
@@ -687,6 +827,77 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                         resid(3 * (1 + i) + d) += -N[i] * tFric[d];
             }
         }
+    } else if (mode == MORTAR && ndm == 2) {
+        // 2D mortar: the 3D lane on 2-node segments, p_I = min(0, lambda_I +
+        // epsN gbar_I) along the master normal, or the tie traction
+        double D[2][2], M[2][2], g[2], n[2];
+        int refusal = LadrunoContact2DKernel::MORT2D_REF_NONE; double cosT = 0.0;
+        LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+        if (!mortarActive2D(D, M, g, n, refusal, cosT)) {
+            // A nearly perpendicular pair is not integrated (the Jacobian
+            // 1/|cos| is ill-conditioned). It is reported once, unless a
+            // node-to-segment contact on the same surfaces covers it (never
+            // for a tie, which a unilateral contact cannot replace).
+            if (refusal == LadrunoContact2DKernel::MORT2D_REF_ALIGN && !mortar2dPerpWarned &&
+                (isTie || !mortar2dNtsCoDeclared) && cd != 0) {
+                mortar2dPerpWarned = true;
+                if (cd->warnOnce(contactTag, LadrunoContactDomain::WARN_2D_PERP_NO_NTS)) {
+                    opserr << "WARNING LadrunoContactFE - contact " << contactTag
+                           << ": 2D mortar slave segment " << slaveFacetIndex
+                           << " is nearly perpendicular to its master (|cos| = " << cosT
+                           << ") and is not integrated; ";
+                    if (isTie)
+                        opserr << "a tie there needs a finer mesh or a split surface\n";
+                    else
+                        opserr << "declare a node-to-segment contact on the same surfaces "
+                                  "to cover it\n";
+                }
+            }
+            // withdraw this pair's part of the summed gap / relative displacement
+            if (cd != 0) {
+                double z[3] = { 0.0, 0.0, 0.0 };
+                for (int I = 0; I < 2; I++) {
+                    if (isTie)
+                        cd->accumulateMortarTie(contactTag, mortarSlave[I]->getTag(),
+                                                this->getTag(), z, 0.0, kn);
+                    else
+                        cd->accumulateMortarGap(contactTag, mortarSlave[I]->getTag(),
+                                                this->getTag(), 0.0, 0.0, kn);
+                }
+            }
+            return resid;
+        }
+        if (isTie) {
+            addMortarTie2D(D, M, cd);
+            return resid;
+        }
+        double p[2] = { 0.0, 0.0 };
+        for (int I = 0; I < 2; I++) {
+            double aFacet = D[I][0] + D[I][1];
+            int nodeTag = mortarSlave[I]->getTag();
+            if (aFacet <= MORT2D_TAU_TRIB * mortar2dLref) {
+                if (cd != 0)
+                    cd->accumulateMortarGap(contactTag, nodeTag, this->getTag(), 0.0, 0.0, kn);
+                continue;
+            }
+            double lambdaI = 0.0;
+            if (cd != 0) {
+                cd->accumulateMortarGap(contactTag, nodeTag, this->getTag(), g[I], aFacet, kn);
+                lambdaI = cd->getOrCreateMortarNormalState(contactTag, nodeTag).lambdaN;
+            }
+            double pr = lambdaI + kn * (g[I] / aFacet);
+            p[I] = (pr < 0.0) ? pr : 0.0;
+        }
+        for (int K = 0; K < 2; K++) {
+            double Dp = D[K][0]*p[0] + D[K][1]*p[1];
+            resid(2*K + 0) = -Dp * n[0]; resid(2*K + 1) = -Dp * n[1];
+        }
+        for (int L = 0; L < 2; L++) {
+            double Mp = M[0][L]*p[0] + M[1][L]*p[1];
+            resid(2*(2 + L) + 0) = Mp * n[0]; resid(2*(2 + L) + 1) = Mp * n[1];
+        }
+        if (hasFriction() && cd != 0)
+            addMortarFriction2D(D, M, n, p, cd);
     } else if (mode == MORTAR) {
         // Augmented Lagrangian normal contact. The nodal pressure of this facet
         // pair is p_I = min(0, lambda_I + epsN gbar_I), gbar_I = gt_I / a_I the
@@ -1056,6 +1267,470 @@ LadrunoContactFE::addEdgeTang(double fact, bool initialStiff)
         }
 }
 
+Node *
+LadrunoContactFE::nts2dPrevFarNode(void) const
+{
+    if (!nts2dHasPrevFar || theDomain == 0) return 0;
+    return theDomain->getNode(nts2dPrevFarTag);
+}
+
+Node *
+LadrunoContactFE::nts2dNextFarNode(void) const
+{
+    if (!nts2dHasNextFar || theDomain == 0) return 0;
+    return theDomain->getNode(nts2dNextFarTag);
+}
+
+bool
+LadrunoContactFE::segment2DActive(double &gap, double n[3], double N[2], double B[6],
+                                  double committedSide, double *liveSideOut,
+                                  double *gTout) const
+{
+    using namespace LadrunoContact2DKernel;
+    gap = 0.0; n[0] = n[1] = n[2] = 0.0; N[0] = N[1] = 0.0;
+    for (int k = 0; k < 6; k++) B[k] = 0.0;
+    if (liveSideOut != 0) *liveSideOut = 0.0;
+    if (gTout != 0) *gTout = 0.0;
+    if (mode != SEGMENT || ndm != 2 || theSlave == 0) return false;
+
+    Node *prevFarNode = nts2dPrevFarNode();
+    Node *nextFarNode = nts2dNextFarNode();
+
+    const Vector &Xs = theSlave->getCrds();
+    const Vector &us = theSlave->getTrialDisp();
+    const double xs[2] = { Xs(0) + us(0), Xs(1) + us(1) };
+
+    if (nps == 2) {
+        if (segNode[0] == 0 || segNode[1] == 0) return false;
+        double X0[2], X1[2];
+        {
+            const Vector &Xa = segNode[0]->getCrds(); const Vector &ua = segNode[0]->getTrialDisp();
+            const Vector &Xb = segNode[1]->getCrds(); const Vector &ub = segNode[1]->getTrialDisp();
+            X0[0] = Xa(0) + ua(0); X0[1] = Xa(1) + ua(1);
+            X1[0] = Xb(0) + ub(0); X1[1] = Xb(1) + ub(1);
+        }
+        double xi, g2, n2[2];
+        int st = projectSegment2D(X0, X1, xs, nts2dSigma, nts2dLref, xi, g2, n2);
+        // past an end: the neighbour, a vertex pair or an end cap owns the slave
+        if (st != SEG2D_IN_BOUNDS)
+            return false;
+        // ordered ownership: the previous segment owns a slave both project on
+        if (prevFarNode != 0) {
+            const Vector &Xp = prevFarNode->getCrds();
+            const Vector &up = prevFarNode->getTrialDisp();
+            const double XP[2] = { Xp(0) + up(0), Xp(1) + up(1) };
+            double xiP, gP, nP[2];
+            if (projectSegment2D(XP, X0, xs, nts2dSigma, nts2dLref, xiP, gP, nP)
+                    == SEG2D_IN_BOUNDS)
+                return false;
+        }
+        if (g2 >= 0.0) return false;
+        gap = g2; n[0] = n2[0]; n[1] = n2[1];
+        shape2D(xi, N);
+        bOperatorSegment2D(N[0], N[1], n2, B);
+        // scalar slip: (u_s - sum N_i u_i).t, t = perp(n), at the projection
+        // of the gap
+        if (gTout != 0) {
+            const Vector &u0 = segNode[0]->getTrialDisp();
+            const Vector &u1 = segNode[1]->getTrialDisp();
+            const double ubar[2] = { N[0]*u0(0) + N[1]*u1(0), N[0]*u0(1) + N[1]*u1(1) };
+            const double drel[2] = { us(0) - ubar[0], us(1) - ubar[1] };
+            const double th[2] = { -n2[1], n2[0] };
+            *gTout = drel[0]*th[0] + drel[1]*th[1];
+        }
+        return true;
+    }
+
+    // vertex pair (nps == 1): a concave corner (both neighbours) or an end cap
+    // (one neighbour)
+    if (nps != 1 || segNode[0] == 0) return false;
+    if (prevFarNode == 0 && nextFarNode == 0) return false;
+
+    double XV[2];
+    {
+        const Vector &Xv = segNode[0]->getCrds();
+        const Vector &uv = segNode[0]->getTrialDisp();
+        XV[0] = Xv(0) + uv(0); XV[1] = Xv(1) + uv(1);
+    }
+    double side = 0.0;
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+
+    if (prevFarNode != 0 && nextFarNode != 0) {
+        double XP[2], XN[2];
+        {
+            const Vector &Xp = prevFarNode->getCrds(); const Vector &up = prevFarNode->getTrialDisp();
+            const Vector &Xn = nextFarNode->getCrds(); const Vector &un = nextFarNode->getTrialDisp();
+            XP[0] = Xp(0) + up(0); XP[1] = Xp(1) + up(1);
+            XN[0] = Xn(0) + un(0); XN[1] = Xn(1) + un(1);
+        }
+        // the adjacent segments come first
+        {
+            double xiT, gT, nT[2];
+            if (projectSegment2D(XP, XV, xs, nts2dSigma, nts2dLref, xiT, gT, nT) == SEG2D_IN_BOUNDS)
+                return false;
+            if (projectSegment2D(XV, XN, xs, nts2dSigma, nts2dLref, xiT, gT, nT) == SEG2D_IN_BOUNDS)
+                return false;
+        }
+        const double tPrev[2] = { XV[0] - XP[0], XV[1] - XP[1] };
+        const double tNext[2] = { XN[0] - XV[0], XN[1] - XV[1] };
+        WedgeResult w = vertexWedge2D(tPrev, tNext, nts2dSigma, xs, XV, nts2dLref);
+        // the wedge claim without slack closes the band between the two
+        // in-bounds tests
+        if (!(w.aPrev > 0.0 && w.aNext < 0.0))
+            return false;
+        if (liveSideOut != 0) *liveSideOut = w.sideSign;
+        side = (committedSide != 0.0) ? committedSide : w.sideSign;
+        if (side == 0.0) {
+            if (cd != 0 && cd->warnOnce(contactTag, LadrunoContactDomain::WARN_VTX2D_DEFER))
+                opserr << "WARNING LadrunoContactFE - contact " << contactTag << ": the side "
+                          "sign of a 2D vertex pair is not decided yet (a fold-back corner, or "
+                          "a slave on the boundary of the corner wedge); the pair carries no "
+                          "force until the geometry decides it\n";
+            return false;
+        }
+    } else {
+        // End cap at an open end of the master chain: the radial pair of the
+        // terminal vertex, active past the end along the terminal segment and
+        // within a reach of 5 percent of Lref, so it does not claim slaves far
+        // along the extended line. The side is the side of the extended line,
+        // continuous with the segment at the end.
+        bool isX0Cap = (prevFarNode == 0);
+        Node *far = isX0Cap ? nextFarNode : prevFarNode;
+        const Vector &Xf = far->getCrds();
+        const Vector &uf = far->getTrialDisp();
+        const double XF[2] = { Xf(0) + uf(0), Xf(1) + uf(1) };
+        double X0[2], X1[2];
+        if (isX0Cap) { X0[0] = XV[0]; X0[1] = XV[1]; X1[0] = XF[0]; X1[1] = XF[1]; }
+        else         { X0[0] = XF[0]; X0[1] = XF[1]; X1[0] = XV[0]; X1[1] = XV[1]; }
+        double xiChk, gChk, nEnd[2];
+        int stChk = projectSegment2D(X0, X1, xs, nts2dSigma, nts2dLref, xiChk, gChk, nEnd);
+        if (stChk == SEG2D_DEGENERATE) return false;
+        bool onOpenSide = isX0Cap ? (stChk == SEG2D_OUT_LOW) : (stChk == SEG2D_OUT_HIGH);
+        if (!onOpenSide) return false;
+        static const double ENDCAP_REACH = 5.0e-2;
+        const double tSeg[2] = { X1[0] - X0[0], X1[1] - X0[1] };
+        const double Lseg = std::sqrt(tSeg[0]*tSeg[0] + tSeg[1]*tSeg[1]);
+        double xiPast = isX0Cap ? -xiChk : (xiChk - 1.0);
+        if (xiPast * Lseg > ENDCAP_REACH * nts2dLref) return false;
+        double liveSide;
+        if (std::fabs(gChk) < TAU_PERP_DEFAULT * nts2dLref) liveSide = 0.0;
+        else liveSide = (gChk > 0.0) ? 1.0 : -1.0;
+        if (liveSideOut != 0) *liveSideOut = liveSide;
+        side = (committedSide != 0.0) ? committedSide : liveSide;
+        if (side == 0.0) {
+            if (cd != 0 && cd->warnOnce(contactTag, LadrunoContactDomain::WARN_VTX2D_DEFER))
+                opserr << "WARNING LadrunoContactFE - contact " << contactTag << ": the side "
+                          "sign of a 2D end-cap pair is not decided yet (the slave is on the "
+                          "extended line of the terminal segment); the pair carries no force "
+                          "until the geometry decides it\n";
+            return false;
+        }
+    }
+
+    // the slave on the vertex has no direction; the floor is the conditioning
+    // gauge tauPerp Lref
+    double g2, n2[2];
+    if (vertexEval2D(XV, xs, side, g2, n2, TAU_PERP_DEFAULT * nts2dLref) != VTX2D_OK)
+        return false;
+    if (g2 >= 0.0) return false;
+    gap = g2; n[0] = n2[0]; n[1] = n2[1];
+    N[0] = 1.0; N[1] = 0.0;
+    bOperatorVertex2D(n2, B);
+    if (gTout != 0) {
+        const Vector &uv = segNode[0]->getTrialDisp();
+        const double drel[2] = { us(0) - uv(0), us(1) - uv(1) };
+        const double th[2] = { -n2[1], n2[0] };
+        *gTout = drel[0]*th[0] + drel[1]*th[1];
+    }
+    return true;
+}
+
+double
+LadrunoContactFE::vtx2DCommittedSide(void) const
+{
+    if (mode != SEGMENT || ndm != 2 || nps != 1) return 0.0;
+    if (theDomain == 0 || theSlave == 0 || segNode[0] == 0) return 0.0;
+    LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
+    if (cd == 0) return 0.0;
+    return cd->getVtx2DSide(contactTag, theSlave->getTag(), segNode[0]->getTag());
+}
+
+void
+LadrunoContactFE::addFrictionTang2D(double fact, const double n[3], const double N2[2],
+                                    double tn, double gTeff, double gpT, bool consistent)
+{
+    // the 2 x 2 block from the two scalars of the kernel by the chain rule:
+    // d(gTeff)/du_rel = t and d(tn)/du_rel = kn n; dTN already carries kn
+    const double th[2] = { -n[1], n[0] };
+    double Kss_s = 0.0, dTN_s = 0.0;
+    LadrunoFrictionKernel::tangentBlock1D(gTeff, gpT, tn, kn, kt, mu, consistent, Kss_s, dTN_s,
+                                          cohesion, tauMax);
+    double Kss2[2][2];
+    for (int i = 0; i < 2; i++)
+        for (int j = 0; j < 2; j++)
+            Kss2[i][j] = Kss_s * th[i] * th[j] + dTN_s * th[i] * n[j];
+    double w[3];
+    w[0] = 1.0;
+    for (int i = 0; i < nps; i++) w[1 + i] = -N2[i];
+    int nn = 1 + nps;
+    for (int a = 0; a < nn; a++)
+        for (int b = 0; b < nn; b++) {
+            double wab = fact * w[a] * w[b];
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                    tang(2 * a + i, 2 * b + j) += wab * Kss2[i][j];
+        }
+}
+
+bool
+LadrunoContactFE::mortarActive2D(double D[2][2], double M[2][2], double g[2], double n[2],
+                                 int &refusalOut, double &cosOut) const
+{
+    using namespace LadrunoContact2DKernel;
+    double Xs[2][2], Xm[2][2];
+    for (int i = 0; i < 2; i++) {
+        const Vector &X = mortarSlave[i]->getCrds();
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        Xs[i][0] = X(0) + u(0); Xs[i][1] = X(1) + u(1);
+    }
+    for (int i = 0; i < 2; i++) {
+        const Vector &X = mortarMaster[i]->getCrds();
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        Xm[i][0] = X(0) + u(0); Xm[i][1] = X(1) + u(1);
+    }
+    PairResult2D pr;
+    mortarSegmentPair2D(Xs, Xm, mortar2dSigma, mortar2dLref, pr);
+    refusalOut = pr.refusal;
+    cosOut = pr.cos_t;
+    if (pr.status != MORT2D_OK)
+        return false;
+    for (int i = 0; i < 2; i++) {
+        g[i] = pr.g[i];
+        for (int j = 0; j < 2; j++) { D[i][j] = pr.D[i][j]; M[i][j] = pr.M[i][j]; }
+    }
+    // the current master normal, the one the weighted gap was measured along
+    const double tm[2] = { Xm[1][0] - Xm[0][0], Xm[1][1] - Xm[0][1] };
+    const double Lm = std::sqrt(tm[0]*tm[0] + tm[1]*tm[1]);
+    n[0] = -mortar2dSigma * tm[1] / Lm;
+    n[1] =  mortar2dSigma * tm[0] / Lm;
+    return true;
+}
+
+void
+LadrunoContactFE::addMortarFriction2D(const double D[2][2], const double M[2][2],
+                                      const double n[2], const double p_normal[2],
+                                      LadrunoContactDomain *cd)
+{
+    double us[2][2], um[2][2];
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        us[i][0] = u(0); us[i][1] = u(1);
+    }
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        um[i][0] = u(0); um[i][1] = u(1);
+    }
+    const double th[2] = { -n[1], n[0] };
+    double tFric[2] = { 0.0, 0.0 };
+    double invEpsT = (kt > 0.0) ? 1.0 / kt : 0.0;
+    for (int I = 0; I < 2; I++) {
+        if (p_normal[I] >= 0.0) continue;
+        double aFacet = D[I][0] + D[I][1];
+        if (aFacet <= MORT2D_TAU_TRIB * mortar2dLref) continue;
+        double N_I = -p_normal[I];
+        // scalar slip: the tangential part of the weighted relative
+        // displacement over a_I, from the engagement origin, offset by the
+        // tangential multiplier (slot 0 of the friction state)
+        double r[2] = { 0.0, 0.0 };
+        for (int J = 0; J < 2; J++) { r[0] += D[I][J]*us[J][0]; r[1] += D[I][J]*us[J][1]; }
+        for (int K = 0; K < 2; K++) { r[0] -= M[I][K]*um[K][0]; r[1] -= M[I][K]*um[K][1]; }
+        double gT = (r[0]*th[0] + r[1]*th[1]) / aFacet;
+        LadrunoContactDomain::MortarFrictionState &st = cd->getOrCreateMortarFrictionState(
+            contactTag, mortarSlave[I]->getTag(), slaveFacetIndex, masterFacetIndex);
+        if (!st.engaged) { st.gT0[0] = gT; st.engaged = true; }
+        double gTeff = (gT - st.gT0[0]) + st.lambdaT[0] * invEpsT;
+        double tF_s, spTrial;
+        LadrunoFrictionKernel::returnMap1D(gTeff, st.gpT[0], N_I, kt, mu, tF_s, spTrial,
+                                           cohesion, tauMax);
+        st.gpTtrial[0] = spTrial;
+        st.lambdaTtrial[0] = -tF_s;
+        tFric[I] = tF_s;
+    }
+    for (int K = 0; K < 2; K++) {
+        double s0 = 0.0, s1 = 0.0;
+        for (int I = 0; I < 2; I++) { s0 += D[K][I]*tFric[I]*th[0]; s1 += D[K][I]*tFric[I]*th[1]; }
+        resid(2*K + 0) += s0; resid(2*K + 1) += s1;
+    }
+    for (int L = 0; L < 2; L++) {
+        double s0 = 0.0, s1 = 0.0;
+        for (int I = 0; I < 2; I++) { s0 += M[I][L]*tFric[I]*th[0]; s1 += M[I][L]*tFric[I]*th[1]; }
+        resid(2*(2 + L) + 0) += -s0; resid(2*(2 + L) + 1) += -s1;
+    }
+}
+
+void
+LadrunoContactFE::addMortarTie2D(const double D[2][2], const double M[2][2],
+                                 LadrunoContactDomain *cd)
+{
+    double us[2][2], um[2][2];
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        us[i][0] = u(0); us[i][1] = u(1);
+    }
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        um[i][0] = u(0); um[i][1] = u(1);
+    }
+    double t[2][2] = { {0.0, 0.0}, {0.0, 0.0} };
+    for (int I = 0; I < 2; I++) {
+        double aFacet = D[I][0] + D[I][1];
+        if (aFacet <= MORT2D_TAU_TRIB * mortar2dLref) {
+            if (cd != 0) {
+                double z[3] = { 0.0, 0.0, 0.0 };
+                cd->accumulateMortarTie(contactTag, mortarSlave[I]->getTag(),
+                                        this->getTag(), z, 0.0, kn);
+            }
+            continue;
+        }
+        double r[2] = { 0.0, 0.0 };
+        for (int J = 0; J < 2; J++) { r[0] += D[I][J]*us[J][0]; r[1] += D[I][J]*us[J][1]; }
+        for (int K = 0; K < 2; K++) { r[0] -= M[I][K]*um[K][0]; r[1] -= M[I][K]*um[K][1]; }
+        double lamTie[2] = { 0.0, 0.0 };
+        if (cd != 0) {
+            // the three-component accumulators of the 3D tie, third component 0
+            int nodeTag = mortarSlave[I]->getTag();
+            double rFacet[3] = { r[0], r[1], 0.0 };
+            cd->accumulateMortarTie(contactTag, nodeTag, this->getTag(), rFacet, aFacet, kn);
+            const LadrunoContactDomain::MortarNormalState &st =
+                cd->getOrCreateMortarNormalState(contactTag, nodeTag);
+            lamTie[0] = st.lambdaTie[0]; lamTie[1] = st.lambdaTie[1];
+        }
+        t[I][0] = lamTie[0] + kn * (r[0] / aFacet);
+        t[I][1] = lamTie[1] + kn * (r[1] / aFacet);
+    }
+    for (int K = 0; K < 2; K++) {
+        double s0 = 0.0, s1 = 0.0;
+        for (int I = 0; I < 2; I++) { s0 += D[K][I]*t[I][0]; s1 += D[K][I]*t[I][1]; }
+        resid(2*K + 0) = -s0; resid(2*K + 1) = -s1;
+    }
+    for (int L = 0; L < 2; L++) {
+        double s0 = 0.0, s1 = 0.0;
+        for (int I = 0; I < 2; I++) { s0 += M[I][L]*t[I][0]; s1 += M[I][L]*t[I][1]; }
+        resid(2*(2 + L) + 0) = s0; resid(2*(2 + L) + 1) = s1;
+    }
+}
+
+void
+LadrunoContactFE::addMortarTang2D(double fact, bool initialStiff)
+{
+    double D[2][2], M[2][2], g[2], n[2];
+    int refusal; double cosT;
+    if (!mortarActive2D(D, M, g, n, refusal, cosT)) return;
+    const int nN = 4;
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    if (isTie) {
+        // epsTie Bt^T diag(1/a) Bt (x) I2
+        double W[2] = { 0.0, 0.0 };
+        for (int I = 0; I < 2; I++) {
+            double aFacet = D[I][0] + D[I][1];
+            if (aFacet > MORT2D_TAU_TRIB * mortar2dLref) W[I] = 1.0 / aFacet;
+        }
+        for (int A = 0; A < nN; A++)
+            for (int B = 0; B < nN; B++) {
+                double Ks = 0.0;
+                for (int I = 0; I < 2; I++) {
+                    double bIA = (A < 2) ? D[I][A] : -M[I][A - 2];
+                    double bIB = (B < 2) ? D[I][B] : -M[I][B - 2];
+                    Ks += bIA * W[I] * bIB;
+                }
+                Ks *= kn;
+                if (Ks == 0.0) continue;
+                tang(2*A + 0, 2*B + 0) += fact * Ks;
+                tang(2*A + 1, 2*B + 1) += fact * Ks;
+            }
+        return;
+    }
+    // epsN Bt^T diag(act/a) Bt (x) (n (x) n) on the active set of the residual
+    double W[2] = { 0.0, 0.0 };
+    for (int I = 0; I < 2; I++) {
+        double aFacet = D[I][0] + D[I][1];
+        if (aFacet <= MORT2D_TAU_TRIB * mortar2dLref) continue;
+        double lambdaI = (cd != 0)
+            ? cd->getOrCreateMortarNormalState(contactTag, mortarSlave[I]->getTag()).lambdaN
+            : 0.0;
+        double pr = lambdaI + kn * (g[I] / aFacet);
+        if (pr < 0.0) W[I] = 1.0 / aFacet;
+    }
+    for (int A = 0; A < nN; A++) {
+        for (int B = 0; B < nN; B++) {
+            double Ks = 0.0;
+            for (int I = 0; I < 2; I++) {
+                double bIA = (A < 2) ? D[I][A] : -M[I][A - 2];
+                double bIB = (B < 2) ? D[I][B] : -M[I][B - 2];
+                Ks += bIA * W[I] * bIB;
+            }
+            Ks *= kn;
+            if (Ks == 0.0) continue;
+            for (int dA = 0; dA < 2; dA++)
+                for (int dB = 0; dB < 2; dB++)
+                    tang(2*A + dA, 2*B + dB) += fact * Ks * n[dA] * n[dB];
+        }
+    }
+    // friction: sum_I (b_IA b_IB / a_I) K2_I, K2 = Kss t (x) t + dTN t (x) n
+    // from the scalar kernel at the slip of the residual (stick block on the
+    // initial-stiffness path)
+    if (!hasFriction() || cd == 0)
+        return;
+    double us[2][2], um[2][2];
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        us[i][0] = u(0); us[i][1] = u(1);
+    }
+    for (int i = 0; i < 2; i++) {
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        um[i][0] = u(0); um[i][1] = u(1);
+    }
+    const double th[2] = { -n[1], n[0] };
+    double invEpsT = (kt > 0.0) ? 1.0 / kt : 0.0;
+    for (int I = 0; I < 2; I++) {
+        double aFacet = D[I][0] + D[I][1];
+        if (aFacet <= MORT2D_TAU_TRIB * mortar2dLref) continue;
+        const LadrunoContactDomain::MortarNormalState &nst =
+            cd->getOrCreateMortarNormalState(contactTag, mortarSlave[I]->getTag());
+        double pr = nst.lambdaN + kn * (g[I] / aFacet);
+        if (pr >= 0.0) continue;
+        double N_I = -pr;
+        LadrunoContactDomain::MortarFrictionState &st = cd->getOrCreateMortarFrictionState(
+            contactTag, mortarSlave[I]->getTag(), slaveFacetIndex, masterFacetIndex);
+        double r[2] = { 0.0, 0.0 };
+        for (int J = 0; J < 2; J++) { r[0] += D[I][J]*us[J][0]; r[1] += D[I][J]*us[J][1]; }
+        for (int K = 0; K < 2; K++) { r[0] -= M[I][K]*um[K][0]; r[1] -= M[I][K]*um[K][1]; }
+        double gT = (r[0]*th[0] + r[1]*th[1]) / aFacet;
+        double gTeff = (gT - st.gT0[0]) + st.lambdaT[0] * invEpsT;
+        double gtForKss = initialStiff ? st.gpT[0] : gTeff;
+        bool useConsistent = consistentTan && !initialStiff;
+        double Kss_s = 0.0, dTN_s = 0.0;
+        LadrunoFrictionKernel::tangentBlock1D(gtForKss, st.gpT[0], N_I, kn, kt, mu,
+                                              useConsistent, Kss_s, dTN_s, cohesion, tauMax);
+        double K2[2][2];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                K2[i][j] = Kss_s * th[i] * th[j] + dTN_s * th[i] * n[j];
+        for (int A = 0; A < nN; A++) {
+            double bIA = (A < 2) ? D[I][A] : -M[I][A - 2];
+            if (bIA == 0.0) continue;
+            for (int B = 0; B < nN; B++) {
+                double bIB = (B < 2) ? D[I][B] : -M[I][B - 2];
+                double w = fact * bIA * bIB / aFacet;
+                if (w == 0.0) continue;
+                for (int i = 0; i < 2; i++)
+                    for (int j = 0; j < 2; j++)
+                        tang(2*A + i, 2*B + j) += w * K2[i][j];
+            }
+        }
+    }
+}
+
 const Matrix &
 LadrunoContactFE::getTangent(Integrator *theIntegrator)
 {
@@ -1082,6 +1757,26 @@ LadrunoContactFE::addKtToTang(double fact)
         for (int i = 0; i < ndm; i++)
             for (int j = 0; j < ndm; j++)
                 tang(i, j) += fact * kn * planeN[i] * planeN[j];
+    } else if (mode == SEGMENT && ndm == 2) {
+        // kn B^T B on the pair this adapter owns (the side sign committed by the
+        // residual); the curvature term of -geomtan is not used in 2D
+        double gap, n[3], N2[2], B[6], gTnow = 0.0;
+        if (segment2DActive(gap, n, N2, B, vtx2DCommittedSide(), 0, &gTnow)) {
+            int ndof = 2 * (1 + nps);
+            for (int i = 0; i < ndof; i++)
+                for (int j = 0; j < ndof; j++)
+                    tang(i, j) += fact * kn * B[i] * B[j];
+            if (hasFriction() && theDomain != 0) {
+                LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
+                if (cd != 0) {
+                    LadrunoContactDomain::FrictionState &st =
+                        cd->getOrCreateFrictionState(contactTag, theSlave->getTag(), segIndex);
+                    double gTeff = st.engaged ? (gTnow - st.gT0[0]) : 0.0;
+                    double tn = ladrunoContactTraction(kn, gap);
+                    addFrictionTang2D(fact, n, N2, tn, gTeff, st.gpT[0], consistentTan);
+                }
+            }
+        }
     } else if (mode == SEGMENT) {
         // K_c = kn B^T B, exact for a flat fixed master where n is constant;
         // with consistentNormal the geometric block kn gN d^2gN/du^2 is added
@@ -1109,6 +1804,8 @@ LadrunoContactFE::addKtToTang(double fact)
                 }
             }
         }
+    } else if (mode == MORTAR && ndm == 2) {
+        addMortarTang2D(fact);
     } else if (mode == MORTAR) {
         addMortarTang(fact);
     } else if (mode == EDGE_EDGE) {
@@ -1126,6 +1823,18 @@ LadrunoContactFE::addKiToTang(double fact)
         for (int i = 0; i < ndm; i++)
             for (int j = 0; j < ndm; j++)
                 tang(i, j) += fact * kn * planeN[i] * planeN[j];
+    } else if (mode == SEGMENT && ndm == 2) {
+        double gap, n[3], N2[2], B[6];
+        if (segment2DActive(gap, n, N2, B, vtx2DCommittedSide(), 0)) {
+            int ndof = 2 * (1 + nps);
+            for (int i = 0; i < ndof; i++)
+                for (int j = 0; j < ndof; j++)
+                    tang(i, j) += fact * kn * B[i] * B[j];
+            if (hasFriction()) {           // the stick block
+                double tn = ladrunoContactTraction(kn, gap);
+                addFrictionTang2D(fact, n, N2, tn, 0.0, 0.0, false);
+            }
+        }
     } else if (mode == SEGMENT) {
         double gap, n[3], N[4], B[15];
         if (segmentActive(gap, n, N, B)) {
@@ -1142,6 +1851,8 @@ LadrunoContactFE::addKiToTang(double fact)
                 addFrictionTang(fact, n, N, tn, zero, zero, false);
             }
         }
+    } else if (mode == MORTAR && ndm == 2) {
+        addMortarTang2D(fact, /*initialStiff=*/true);
     } else if (mode == MORTAR) {
         // the penalty part equals the current tangent (variation of D, M and n
         // not included)
@@ -1165,6 +1876,14 @@ LadrunoContactFE::addCtoTang(double fact)
         for (int i = 0; i < ndm; i++)
             for (int j = 0; j < ndm; j++)
                 tang(i, j) += fact * muc * planeN[i] * planeN[j];
+    } else if (mode == SEGMENT && ndm == 2) {
+        double gap, n[3], N2[2], B[6];
+        if (segment2DActive(gap, n, N2, B, vtx2DCommittedSide(), 0)) {
+            int ndof = 2 * (1 + nps);
+            for (int i = 0; i < ndof; i++)
+                for (int j = 0; j < ndof; j++)
+                    tang(i, j) += fact * muc * B[i] * B[j];
+        }
     } else if (mode == SEGMENT) {
         double gap, n[3], N[4], B[15];
         if (segmentActive(gap, n, N, B)) {

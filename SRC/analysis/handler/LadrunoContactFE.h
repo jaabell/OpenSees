@@ -66,6 +66,13 @@
 //            (LadrunoEdgeKernel). Connectivity {slave edge nodes, master edge
 //            nodes}, ndof = 12.
 //
+// 2D (ndm == 2) is a parameterization of the SEGMENT and MORTAR modes, with
+// the geometry of LadrunoContact2DKernel and two DOFs per node:
+//   SEGMENT  a slave node against a 2-node master line (nps = 2), or against
+//            one master vertex (nps = 1, a degenerate segment) at a concave
+//            corner or at an open end of the master chain;
+//   MORTAR   a 2-node slave segment against a 2-node master segment.
+//
 // With myEle == 0 the FE_Element getResidual()/getTangent() and the force
 // helpers have no element to call, so this class owns its buffers and
 // overrides them.
@@ -150,6 +157,37 @@ class LadrunoContactFE : public FE_Element
                      Domain *theDomain, double mu = 0.0, double kt = 0.0,
                      double cohesion = 0.0, double tauMax = 0.0, bool consistentTan = false,
                      bool edgeAlm = false);
+    // 2D node-to-segment contact (SEGMENT mode, ndm2 == 2). nps == 2: the slave
+    // against the master line segNodes[0] -> segNodes[1]; nps == 1: the slave
+    // against the vertex segNodes[0] (connectivity {slave, vertex}).
+    //   sigma: the orientation of the master surface (+1/-1), decided once per
+    //     interface by the handler; Lref: the minimum initial segment length of
+    //     the master surface (the relative gauge of the kernel).
+    //   prevFar, nextFar: the far nodes of the neighbouring segments in surface
+    //     order (null at an open end). On a segment pair a previous neighbour
+    //     makes the previous segment own a slave that both project in bounds;
+    //     on a vertex pair both give the corner (or, with one of them null,
+    //     the end cap). They steer the active set only and are not part of the
+    //     connectivity; they are stored by tag and looked up at every
+    //     evaluation, so a removed node reads as an open end.
+    //   kt, mu, cohesion, tauMax, consistentTan: scalar friction along the
+    //     tangent perp(n); muc: viscous normal stabilization.
+    LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes, int nps, int ndm2,
+                     double kn, double sigma, double Lref, Node *prevFar, Node *nextFar,
+                     double kt, double mu, bool consistentTan, double muc,
+                     Domain *theDomain, int contactTag, int segIndex,
+                     double cohesion = 0.0, double tauMax = 0.0);
+    // 2D mortar contact (MORTAR mode, ndm2 == 2) of a 2-node slave segment
+    // against a 2-node master segment. sigma and Lref as above (Lref over both
+    // surfaces); epsN, epsT, cohesion and tauMax already multiplied by the
+    // thickness. ntsCoDeclared: a node-to-segment contact covers both slave
+    // nodes on the same master, so a pair too nearly perpendicular to be
+    // integrated is left to it silently (else it is reported once).
+    LadrunoContactFE(int tag, Node **slaveNodes, int npsS, Node **masterNodes, int npsM,
+                     int ndm2, double epsN, double sigma, double Lref, int contactTag,
+                     int slaveFacetIndex, Domain *theDomain, bool isTie, double mu,
+                     double epsT, double cohesion, double tauMax, bool consistentTan,
+                     int masterFacetIndex, bool ntsCoDeclared);
     ~LadrunoContactFE();
 
     // Mortar normal-gap shift: gbar_I -> gbar_I + gapOffset, and with adjust
@@ -289,6 +327,45 @@ class LadrunoContactFE : public FE_Element
     // the friction block; initialStiff uses the stick block.
     void addEdgeTang(double fact, bool initialStiff);
 
+    // 2D node-to-segment narrow phase (SEGMENT, ndm == 2). nps == 2: the
+    // projection on the segment, refused when the previous segment in surface
+    // order also projects in bounds (it owns the slave). nps == 1 with both
+    // neighbours: the concave vertex, active when both adjacent segments
+    // refuse and the slave is in the wedge (aPrev > 0, aNext < 0); with one
+    // neighbour: the end cap, active past the open end within 5 percent of
+    // Lref. The side sign of a vertex pair is committedSide when non-zero,
+    // else the live one, returned in *liveSideOut for the caller to commit.
+    // Fills gap (< 0), n (n[2] = 0), the weights N (segment: shape functions,
+    // vertex: {1, 0}), B over [slave xy | node xy ...] and, if gTout != 0, the
+    // scalar tangential relative displacement along perp(n). Returns true only
+    // when this adapter owns the slave and it penetrates.
+    bool segment2DActive(double &gap, double n[3], double N[2], double B[6],
+                         double committedSide, double *liveSideOut,
+                         double *gTout = 0) const;
+    // the committed side sign of a 2D vertex pair (0: none or not captured)
+    double vtx2DCommittedSide(void) const;
+    Node *nts2dPrevFarNode(void) const;   // null: no neighbour or removed
+    Node *nts2dNextFarNode(void) const;
+
+    // 2D friction tangent G^T K G, G = [I2 | -N_i I2], with the 2 x 2 block
+    // Kss t (x) t + dTN t (x) n from the scalar kernel (t = perp(n)).
+    void addFrictionTang2D(double fact, const double n[3], const double N2[2], double tn,
+                           double gTeff, double gpT, bool consistent);
+
+    // 2D mortar pair at the current trial configuration
+    // (LadrunoContact2DKernel::mortarSegmentPair2D): D, M, g and the master
+    // normal; refusalOut and cosOut are always written.
+    bool mortarActive2D(double D[2][2], double M[2][2], double g[2], double n[2],
+                        int &refusalOut, double &cosOut) const;
+    // 2D mortar friction force (scalar per slave node along perp(n)), tie
+    // force and tangent, the 2D forms of addMortarFriction, addMortarTieForce
+    // and addMortarTang
+    void addMortarFriction2D(const double D[2][2], const double M[2][2], const double n[2],
+                             const double p_normal[2], class LadrunoContactDomain *cd);
+    void addMortarTie2D(const double D[2][2], const double M[2][2],
+                        class LadrunoContactDomain *cd);
+    void addMortarTang2D(double fact, bool initialStiff = false);
+
     Vector resid;
     Matrix tang;
 
@@ -347,6 +424,18 @@ class LadrunoContactFE : public FE_Element
     // EDGE_EDGE binding (kn holds epsN)
     Node *edgeNode[4];      // slave edge nodes A, B, master edge nodes A, B
     bool  edgeAlm;          // use the committed multiplier of the pair
+
+    // 2D bindings (set only by the 2D constructors)
+    double nts2dSigma      = 0.0;   // orientation of the master surface
+    double nts2dLref       = 0.0;   // minimum initial master segment length
+    bool   nts2dHasPrevFar = false; // a previous neighbour was given ...
+    int    nts2dPrevFarTag = 0;     // ... with this node tag
+    bool   nts2dHasNextFar = false;
+    int    nts2dNextFarTag = 0;
+    double mortar2dSigma   = 0.0;
+    double mortar2dLref    = 0.0;   // minimum initial segment length of both surfaces
+    bool   mortar2dNtsCoDeclared = false;
+    bool   mortar2dPerpWarned    = false;   // the perpendicular-pair report was made
 };
 
 #endif

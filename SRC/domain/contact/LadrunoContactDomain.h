@@ -120,9 +120,15 @@ class LadrunoContactDomain
         bool consistentNormal;  // assemble the geometric normal tangent
         bool consistentTan;     // non-symmetric consistent friction tangent
         double muc;             // viscous normal stabilization coefficient (0: none)
+        // 2D only (-outward winding): the slave lies to the left of the
+        // traversal of the master chain (sigma = +1) instead of the orientation
+        // vote; the master must then form one connected chain
+        bool outwardWinding = false;
         bool hasFriction(void) const { return mu > 0.0 || cohesion > 0.0 || tauMax > 0.0; }
     };
     const Contact &getContact(int i) const { return theContacts[i]; }
+    // set -outward winding on an existing node-to-segment contact
+    int setContactOutwardWinding(int tag);
 
     // --- rigid analytical plane (point p0, outward unit normal n) against a
     //     slave node set; one adapter per slave node. ---
@@ -228,6 +234,12 @@ class LadrunoContactDomain
         bool hasEdgeFriction(void) const {
             return edgeMu > 0.0 || edgeCohesion > 0.0 || edgeTauMax > 0.0;
         }
+        // 2D only (-thickness h): the mortar integrals of a 2D pair are per
+        // unit thickness, so a given epsN, epsT, cohesion and tauMax (per unit
+        // area) are multiplied by h; mu is dimensionless and is not, and an
+        // automatic penalty (sized from the element stiffness, which carries
+        // the thickness) is not either
+        double hThickness = 1.0;
     };
     enum { AUG_COMMIT = 0, AUG_REQUEST = 1, AUG_NEVER = 2 };
     // set the controls of an existing mortar contact; < 0 if the tag is not a
@@ -238,6 +250,8 @@ class LadrunoContactDomain
     // options); < 0 with a message on a tie, an augmenting contact, -smoothT
     // without friction, or a value out of range
     int setMortarSmoothing(int tag, double smoothN, double smoothT);
+    // set -thickness on an existing mortar contact (h > 0)
+    int setMortarThickness(int tag, double h);
     // enable edge-to-edge contact on an existing mortar contact; < 0 with a
     // message on a tie or a value out of range
     int setMortarEdgeEdge(int tag, double edgeKn, bool edgeKnAuto, double edgeBand,
@@ -372,6 +386,16 @@ class LadrunoContactDomain
     void edgeGCMark(int contactTag, int sNodeA, int sNodeB, int mNodeA, int mNodeB);
     void edgeGCEnd(void);
 
+    // --- 2D vertex pairs: the committed side sign of a (contact, slave node,
+    //     vertex node) pair, captured at the first evaluation that decides it
+    //     and then applied as given (|xs - Xv| is a distance, so the sign of the
+    //     gap must not be derived again while the slave penetrates). Cleared at
+    //     every handle(), where the orientation of the surface it depends on is
+    //     decided again. 0: not captured. ---
+    double getVtx2DSide(int contactTag, int slaveTag, int vtxNodeTag) const;
+    void   setVtx2DSide(int contactTag, int slaveTag, int vtxNodeTag, double side);
+    void   clearVtx2DSide(void);
+
     // --- node-to-segment normal force readout (ladrunoContactForce) ---
     // Each segment adapter writes its normal penalty force tn = kn <-gap>+ into a
     // (contactTag, slaveTag, segIndex) slot at every residual evaluation, and
@@ -438,7 +462,12 @@ class LadrunoContactDomain
         WARN_EPST,                  // mortar friction without -epsT: the normal penalty is used
         WARN_CSL,                   // mortar -consistanttan needs a non-symmetric solver
         WARN_EDGEKT,                // edge friction without -edgeKt: the edge penalty is used
-        WARN_EDGE_SIGN_DEFER        // edge sign capture deferred (reference perpendicular to n)
+        WARN_EDGE_SIGN_DEFER,       // edge sign capture deferred (reference perpendicular to n)
+        WARN_VTX2D_DEFER,           // 2D vertex side sign capture deferred
+        WARN_VTX2D_SIDE_FLIP,       // 2D committed side sign differs from the live one
+        WARN_2D_GEOMTAN_NOOP,       // -geomtan has no effect on a 2D contact
+        WARN_2D_PERP_NO_NTS,        // 2D mortar pair nearly perpendicular, not integrated
+        WARN_2D_NGP_NOOP            // -ngp has no effect on a 2D mortar contact
     };
     bool warnOnce(int contactTag, int topic);
 
@@ -463,6 +492,7 @@ class LadrunoContactDomain
         }
     };
     std::map<PairKey, double> theNtsForce;              // per-pair normal force readout
+    std::map<PairKey, double> theVtx2DSide;             // 2D vertex side signs (per handle())
     std::map<PairKey, FrictionState> theFrictionStates;
     std::set<PairKey> liveKeys;                         // collection scratch (per handle())
     std::set<std::pair<int, int> > theWarnOnce;         // (contactTag, WarnTopic) latches

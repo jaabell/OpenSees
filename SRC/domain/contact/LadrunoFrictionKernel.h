@@ -250,6 +250,68 @@ inline void frictionTangentBlockSmooth(const double gTeff[3], const double gpT[3
     }
 }
 
+// --- scalar forms for 2D contact. The tangent space of a 2D contact is one
+//     dimensional, t = perp(n), so the slip, the plastic slip and the traction
+//     are scalars along t. They are kept as scalars (not as 2-vectors
+//     differenced componentwise), so that a rotation of the contact normal
+//     does not turn a normal displacement into a spurious slip.
+
+inline double sgn1D(double x) { return (x < 0.0) ? -1.0 : 1.0; }
+
+// Scalar return map: tT* = kt (s - sp); stick |tT*| <= cap: tFric = -tT*;
+// slip: tFric = -cap sign(tT*), sp += (|tT*| - cap)/kt sign(tT*). A zero cap
+// (separated, no cohesion) gives free slip. Returns true when slipping.
+inline bool returnMap1D(double s, double sp, double N, double kt, double mu,
+                        double &tFric, double &spTrial,
+                        double cohesion = 0.0, double tauMax = 0.0)
+{
+    const double tTtr = kt * (s - sp);
+    const double cap  = frictionCap(N, mu, cohesion, tauMax);
+    const double atr  = std::fabs(tTtr);
+    if (cap <= 0.0) {
+        tFric = 0.0; spTrial = s;
+        return true;
+    }
+    if (atr <= cap) {
+        tFric = -tTtr; spTrial = sp;
+        return false;
+    }
+    const double sg   = sgn1D(tTtr);
+    const double dlam = (atr - cap) / kt;
+    tFric   = -cap * sg;
+    spTrial = sp + dlam * sg;
+    return true;
+}
+
+// Scalar tangent of returnMap1D: Kss = d(-tFric)/ds (kt in stick, 0 in slip)
+// and, with consistent, dTN = d(-tFric)/d(normal gap) = -(dcap/dN) kn sign(tT*)
+// in slip (the pressure coupling); kn is already included in dTN.
+inline void tangentBlock1D(double s, double sp, double N, double kn, double kt, double mu,
+                           bool consistent, double &Kss, double &dTN,
+                           double cohesion = 0.0, double tauMax = 0.0)
+{
+    const double tTtr   = kt * (s - sp);
+    const double capC   = (N > 0.0) ? (mu * N + cohesion) : 0.0;
+    const bool   capped = (tauMax > 0.0 && tauMax < capC);
+    const double cap    = capped ? tauMax : capC;
+    const double atr    = std::fabs(tTtr);
+    dTN = 0.0;
+    if (cap <= 0.0) {
+        Kss = 0.0;
+        return;
+    }
+    if (atr <= cap) {
+        Kss = kt;
+        return;
+    }
+    Kss = 0.0;
+    if (consistent) {
+        const double dCap_dN = (capped || N <= 0.0) ? 0.0 : mu;
+        const double sg = sgn1D(tTtr);
+        dTN = -dCap_dN * kn * sg;
+    }
+}
+
 } // namespace LadrunoFrictionKernel
 
 #endif
