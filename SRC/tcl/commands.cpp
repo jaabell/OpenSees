@@ -221,6 +221,7 @@ extern void *OPS_ExplicitBathe(void);
 extern void *OPS_ExplicitDifferenceStatic(void);
 extern void *OPS_CentralDifferenceAlternative(void);
 extern void *OPS_CentralDifferenceNoDamping(void);
+extern void *OPS_CentralDifferenceLadruno(void);
 extern void *OPS_Collocation(void);
 extern void *OPS_CollocationHSFixedNumIter(void);
 extern void *OPS_CollocationHSIncrLimit(void);
@@ -866,6 +867,8 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
     Tcl_CreateCommand(interp, "setTime", &setTime,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);     
     Tcl_CreateCommand(interp, "getTime", &getTime,
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
+    Tcl_CreateCommand(interp, "criticalTimeStep", &criticalTimeStep,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
     Tcl_CreateCommand(interp, "getLoadFactor", &getLoadFactor,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
@@ -1684,6 +1687,23 @@ setTime(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       theDomain.setCurrentTime(newTime);
       theDomain.setCommittedTime(newTime);
   }
+  return TCL_OK;
+}
+
+// criticalTimeStep: the critical time step reported by the current
+// transient integrator; <= 0 when the integrator does not provide one or it
+// has not been computed yet
+int
+criticalTimeStep(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  if (theTransientIntegrator == 0) {
+    opserr << "WARNING criticalTimeStep - no transient integrator is set\n";
+    return TCL_ERROR;
+  }
+  double value = theTransientIntegrator->getCriticalTimeStep();
+  char buffer[40];
+  sprintf(buffer, "%.17g", value);
+  Tcl_SetResult(interp, buffer, TCL_VOLATILE);
   return TCL_OK;
 }
 
@@ -5334,6 +5354,13 @@ specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
     if (theTransientAnalysis != 0)
       setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
   }  
+
+  else if (strcmp(argv[1],"CentralDifferenceLadruno") == 0) {
+    theTransientIntegrator = (TransientIntegrator *)OPS_CentralDifferenceLadruno();
+
+    if (theTransientIntegrator != 0 && theTransientAnalysis != 0)
+      setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);
+  }
   
   else if (strcmp(argv[1], "Explicitdifference") == 0) {
   theTransientIntegrator = new ExplicitDifference();

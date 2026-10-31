@@ -298,6 +298,8 @@ int OPS_getNDFF();
 int OPS_eleType();
 int OPS_classType();
 int OPS_nodeDOFs();
+// critical time step of the current explicit integrator
+int OPS_criticalTimeStep();
 int OPS_nodeMass();
 int OPS_nodePressure();
 int OPS_setNodePressure();
@@ -577,6 +579,8 @@ void* OPS_CollocationHSIncrLimit();
 void* OPS_CollocationHSFixedNumIter();
 void* OPS_Newmark1();
 void* OPS_WilsonTheta();
+void* OPS_CentralDifferenceLadruno();
+void* OPS_ExplicitBathe();
 void* OPS_CentralDifference();
 void* OPS_CentralDifferenceAlternative();
 void* OPS_CentralDifferenceNoDamping();
