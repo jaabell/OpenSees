@@ -78,6 +78,7 @@
 #include <Graph.h>
 #include <Recorder.h>
 #include <MeshRegion.h>
+#include <LadrunoContactDomain.h>
 #include <Analysis.h>
 #include <FE_Datastore.h>
 #include <FEM_ObjectBroker.h>
@@ -429,6 +430,11 @@ Domain::~Domain()
   if (theRegions != 0) {
     delete [] theRegions;
     theRegions = 0;
+  }
+
+  if (theContactDomain != 0) {
+    delete theContactDomain;
+    theContactDomain = 0;
   }
   
   theRecorders = 0;
@@ -1076,6 +1082,14 @@ Domain::clearAll(void) {
     delete [] theRegions;
     theRegions = 0;
   }
+
+  // the contact engine belongs to the model; domainChanged() does not reach
+  // here, so the engine survives a new analysis of the same model
+  if (theContactDomain != 0) {
+    delete theContactDomain;
+    theContactDomain = 0;
+  }
+  contactAugmenting = false;
 
   // set the time back to 0.0
   currentTime = 0.0;
@@ -2169,6 +2183,11 @@ Domain::commit(void)
       elePtr->commitState();
     }
 
+    // commit the path-dependent contact pair state with the model, whatever
+    // the integrator (the constraint handler is not called at commit)
+    if (theContactDomain != 0)
+      theContactDomain->commit(contactAugmenting);
+
     // set the new committed time in the domain
     committedTime = currentTime;
     dT = 0.0;
@@ -2201,6 +2220,10 @@ Domain::revertToLastCommit(void)
 	elePtr->revertToLastCommit();
     }
 
+    // a failed step must not leave its trial contact state behind
+    if (theContactDomain != 0)
+      theContactDomain->revertToLastCommit();
+
     // set the current time and load factor in the domain to last committed
     currentTime = committedTime;
     dT = 0.0;
@@ -2229,6 +2252,10 @@ Domain::revertToStart(void)
     while ((elePtr = theElements()) != 0) {
 	elePtr->revertToStart();
     }
+
+    // return the contact pair state to that of a fresh run
+    if (theContactDomain != 0)
+      theContactDomain->revertToStart();
 
     // ADDED BY TERJE //////////////////////////////////
     // invoke 'restart' on all recorders
@@ -2715,6 +2742,14 @@ Domain::getRegionTags(ID& rtags) const
         rtags(i) = theRegions[i]->getTag();
     }
 
+}
+
+void
+Domain::setLadrunoContactDomain(LadrunoContactDomain *cd)
+{
+    if (theContactDomain != 0 && theContactDomain != cd)
+        delete theContactDomain;
+    theContactDomain = cd;
 }
 
 typedef map<int, int> MAP_INT;
