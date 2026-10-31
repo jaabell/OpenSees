@@ -28,6 +28,7 @@
 #include <DOF_Group.h>
 #include <Integrator.h>
 #include <StaticIntegrator.h>
+#include <TransientIntegrator.h>
 #include <Domain.h>
 #include <LadrunoContactDomain.h>
 #include <LadrunoContactProjection.h>
@@ -295,12 +296,6 @@ LadrunoContactFE::mortarSmoothLaw(double pr, double &P, double &dP, double &chi,
     dP = t;
     chi = t * t * (3.0 - 2.0 * t);
     dchi = 6.0 * t * (1.0 - t) / (2.0 * S);
-}
-
-double
-LadrunoContactFE::explicitTimeStep(Integrator *)
-{
-    return 0.0;   // no integrator in this build reports its explicit time step
 }
 
 int
@@ -700,7 +695,7 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
     if (mode == RIGID_PLANE) {
         double g = rigidPlaneGap();
         if (g < 0.0) {                       // penetration: restoring force along +n
-            double tn = ladrunoContactTraction(kn, g);
+            double tn = ladrunoContactTraction(softKn(theIntegrator, planeN, 0), g);
             for (int d = 0; d < ndm; d++)
                 resid(d) = tn * planeN[d];   // drives the slave toward g = 0 (as PenaltySP_FE)
             // viscous normal stabilization f = -muc (n.v_slave) n, opposing the
@@ -732,7 +727,8 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
         if (act2d) {
             if (nps == 1 && committedSide == 0.0 && liveSide != 0.0 && cd != 0)
                 cd->setVtx2DSide(contactTag, theSlave->getTag(), segNode[0]->getTag(), liveSide);
-            double tn = ladrunoContactTraction(kn, gap);
+            const double N4[4] = { N2[0], N2[1], 0.0, 0.0 };
+            double tn = ladrunoContactTraction(softKn(theIntegrator, n, N4), gap);
             int ndof = 2 * (1 + nps);
             for (int k = 0; k < ndof; k++)
                 resid(k) = B[k] * tn;
@@ -755,7 +751,8 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                 if (!st.engaged) { st.gT0[0] = gTnow; st.engaged = true; }
                 double gTeff = gTnow - st.gT0[0];
                 double tFricScalar, gpTtrial0;
-                LadrunoFrictionKernel::returnMap1D(gTeff, st.gpT[0], tn, kt, mu, tFricScalar,
+                double ktEff = softKt(theIntegrator, n, N4);
+                LadrunoFrictionKernel::returnMap1D(gTeff, st.gpT[0], tn, ktEff, mu, tFricScalar,
                                                    gpTtrial0, cohesion, tauMax);
                 st.gpTtrial[0] = gpTtrial0;
                 const double th[2] = { -n[1], n[0] };
@@ -776,7 +773,7 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
             if (cd != 0 && theSlave != 0)
                 cd->setNtsForce(contactTag, theSlave->getTag(), segIndex, 0.0);
         } else {
-            double tn = ladrunoContactTraction(kn, gap);   // kn <-gap>+ > 0
+            double tn = ladrunoContactTraction(softKn(theIntegrator, n, N), gap);   // kn <-gap>+
             int ndof = 3 * (1 + nps);
             for (int k = 0; k < ndof; k++)
                 resid(k) = B[k] * tn;        // r = B^T tn (slave +tn n, master -N_i tn n)
@@ -815,7 +812,8 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                 for (int d = 0; d < 3; d++) gTeff[d] = gTvec[d] - st.gT0[d];
                 double tFric[3], gpTtrial[3];
                 // the cone pressure is the current normal force tn
-                LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, tn, kt, mu,
+                double ktEff = softKt(theIntegrator, n, N);
+                LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, tn, ktEff, mu,
                                                          tFric, gpTtrial, cohesion, tauMax);
                 // the trial is a function of the committed state only; commit() promotes it
                 for (int d = 0; d < 3; d++) st.gpTtrial[d] = gpTtrial[d];
@@ -898,6 +896,10 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
         }
         if (hasFriction() && cd != 0)
             addMortarFriction2D(D, M, n, p, cd);
+    } else if (mode == MORTAR && softScale > 0.0 && !isTie &&
+               explicitTimeStep(theIntegrator) >= 0.0) {
+        // explicit analysis with -soft: the segment-based soft penalty
+        addSoft2Penalty(explicitTimeStep(theIntegrator));
     } else if (mode == MORTAR) {
         // Augmented Lagrangian normal contact. The nodal pressure of this facet
         // pair is p_I = min(0, lambda_I + epsN gbar_I), gbar_I = gt_I / a_I the
@@ -992,8 +994,9 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
             // the sign is captured once, at the first engagement, and then kept
             if (st != 0 && st->signN == 0) st->signN = usedSign;
             double lambdaN = (edgeAlm && st != 0) ? st->lambdaN : 0.0;
-            double pAug = lambdaN + kn * gN;
-            if (edgeAlm && st != 0) { st->gN = gN; st->epsN = kn; }
+            double knEff = softKnEdge(theIntegrator, n, s, t);
+            double pAug = lambdaN + knEff * gN;
+            if (edgeAlm && st != 0) { st->gN = gN; st->epsN = knEff; }
             if (pAug < 0.0) {
                 double tN = -pAug;
                 for (int i = 0; i < 4; i++)
@@ -1013,7 +1016,8 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                     double gTeff[3];
                     for (int d = 0; d < 3; d++) gTeff[d] = gTvec[d] - st->gT0[d];
                     double tFric[3], gpTtrial[3];
-                    LadrunoFrictionKernel::frictionReturnMap(gTeff, st->gpT, tN, kt, mu, tFric,
+                    double ktEff = softKtEdge(theIntegrator, n, s, t);
+                    LadrunoFrictionKernel::frictionReturnMap(gTeff, st->gpT, tN, ktEff, mu, tFric,
                                                              gpTtrial, cohesion, tauMax);
                     for (int d = 0; d < 3; d++) st->gpTtrial[d] = gpTtrial[d];
                     // scattered with the weights of the normal force
@@ -1731,6 +1735,311 @@ LadrunoContactFE::addMortarTang2D(double fact, bool initialStiff)
     }
 }
 
+// Assembled translational mass of a node: the engine's cache (nodal mass plus
+// the diagonal of the element mass matrices, built at handle() when a soft
+// contact exists) if present, else the nodal mass alone.
+static void
+ladrunoNodeMass(Domain *dom, Node *nd, double m[3])
+{
+    m[0] = m[1] = m[2] = 0.0;
+    if (nd == 0) return;
+    if (dom != 0) {
+        LadrunoContactDomain *cd = dom->getLadrunoContactDomain();
+        if (cd != 0 && cd->getNodalMass(nd->getTag(), m)) return;
+    }
+    const Matrix &M = nd->getMass();
+    int nr = M.noRows();
+    for (int d = 0; d < 3 && d < nr; d++) m[d] = M(d, d);
+}
+
+// inverse mass projected on the unit direction n, sum n_d^2 / m_d; a DOF
+// without mass (a fixed node) counts as infinite mass
+static double
+ladrunoInvMassProj(const double m[3], const double n[3])
+{
+    double s = 0.0;
+    for (int d = 0; d < 3; d++)
+        if (m[d] > 0.0) s += n[d] * n[d] / m[d];
+    return s;
+}
+
+double
+LadrunoContactFE::explicitTimeStep(Integrator *theIntegrator)
+{
+    // The soft penalty is meant for integrators whose system matrix does not
+    // contain the contact stiffness (explicit ones), where the contact mode
+    // limits the stable step. That is decided by asking the integrator to
+    // form this adapter's tangent with the add*ToTang calls recording,
+    // instead of assembling, whether a stiffness was requested: stock
+    // CentralDifference, NewmarkExplicit, ExplicitDifference and ExplicitBathe
+    // form only C and M, while static and implicit transient integrators add
+    // K. Returns < 0 when the integrator assembles stiffness (the configured
+    // penalty is used), else the step size (0 when not known yet).
+    if (theIntegrator == 0 || dynamic_cast<TransientIntegrator *>(theIntegrator) == 0)
+        return -1.0;
+    stiffnessProbe = true;
+    probeSawStiffness = false;
+    theIntegrator->formEleTangent(this);
+    stiffnessProbe = false;
+    tang.Zero();
+    if (probeSawStiffness)
+        return -1.0;
+    // Domain::getDT() is the step being taken by an integrator that evaluates
+    // the residual at the new time (NewmarkExplicit, ExplicitDifference, a
+    // substep of ExplicitBathe); one that evaluates it at the committed time
+    // (CentralDifference) leaves it 0, and the last committed step is used
+    double dt = (theDomain != 0) ? theDomain->getDT() : 0.0;
+    if (dt > 0.0) return dt;
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    return (cd != 0) ? cd->getLastStepSize() : 0.0;
+}
+
+void
+LadrunoContactFE::softWarning(void)
+{
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    if (cd == 0 || cd->warnOnce(contactTag, LadrunoContactDomain::WARN_SOFT_NOMASS))
+        opserr << "WARNING LadrunoContactFE - contact " << contactTag << ": the soft penalty "
+                  "could not be sized (no step size yet, or a contact node without mass: "
+                  "neither a nodal mass nor an element mass); the configured penalty is used "
+                  "for that evaluation\n";
+}
+
+double
+LadrunoContactFE::gapModeInvMass(const double dir[3], const double N[4]) const
+{
+    // B M^-1 B^T for B = [dir | -N_i dir] over [slave | segment nodes] with a
+    // lumped mass; N == 0: the slave only (rigid plane)
+    double ms[3]; ladrunoNodeMass(theDomain, theSlave, ms);
+    double invSum = ladrunoInvMassProj(ms, dir);
+    if (invSum > 0.0 && N != 0)
+        for (int i = 0; i < nps; i++) {
+            double mi[3]; ladrunoNodeMass(theDomain, segNode[i], mi);
+            invSum += N[i] * N[i] * ladrunoInvMassProj(mi, dir);
+        }
+    return invSum;
+}
+
+// two unit tangents of the unit normal n: t1 from the coordinate axis least
+// aligned with n, t2 = n x t1; false for a degenerate n
+static bool
+ladrunoTangentBasis(const double n[3], double t1[3], double t2[3])
+{
+    int k = 0; double amin = std::fabs(n[0]);
+    if (std::fabs(n[1]) < amin) { amin = std::fabs(n[1]); k = 1; }
+    if (std::fabs(n[2]) < amin) { k = 2; }
+    double e[3] = {0.0, 0.0, 0.0}; e[k] = 1.0;
+    double en = e[0]*n[0] + e[1]*n[1] + e[2]*n[2];
+    double nrm = 0.0;
+    for (int d = 0; d < 3; d++) { t1[d] = e[d] - en * n[d]; nrm += t1[d]*t1[d]; }
+    nrm = std::sqrt(nrm);
+    if (nrm < 1e-300) return false;
+    for (int d = 0; d < 3; d++) t1[d] /= nrm;
+    t2[0] = n[1]*t1[2] - n[2]*t1[1];
+    t2[1] = n[2]*t1[0] - n[0]*t1[2];
+    t2[2] = n[0]*t1[1] - n[1]*t1[0];
+    return true;
+}
+
+double
+LadrunoContactFE::softKn(Integrator *theIntegrator, const double n[3], const double N[4])
+{
+    // k = s 4 m_eff / dt^2, m_eff = 1 / (B M^-1 B^T): the central-difference
+    // bound omega dt <= 2 of the contact mode alone gives 4 m_eff / dt^2, and
+    // s < 1 is the margin (Hallquist 2006, Section 26, SOFT = 1)
+    if (softScale <= 0.0) return kn;
+    double dt = explicitTimeStep(theIntegrator);
+    if (dt < 0.0) return kn;
+    double invSum = gapModeInvMass(n, N);
+    if (dt == 0.0 || invSum <= 0.0) { softWarning(); return kn; }
+    return softScale * 4.0 * (1.0 / invSum) / (dt * dt);
+}
+
+double
+LadrunoContactFE::softKt(Integrator *theIntegrator, const double n[3], const double N[4])
+{
+    // the stick penalty sized the same way on the tangential gap mode, with
+    // the smallest effective mass of the two tangents (exact for an isotropic
+    // lumped mass); in 2D the tangent space is t = perp(n)
+    if (softScale <= 0.0) return kt;
+    double dt = explicitTimeStep(theIntegrator);
+    if (dt <= 0.0) return kt;
+    double invMax;
+    if (ndm == 2) {
+        double t1[3] = { -n[1], n[0], 0.0 };
+        invMax = gapModeInvMass(t1, N);
+    } else {
+        double t1[3], t2[3];
+        if (!ladrunoTangentBasis(n, t1, t2)) return kt;
+        double inv1 = gapModeInvMass(t1, N), inv2 = gapModeInvMass(t2, N);
+        invMax = (inv1 > inv2) ? inv1 : inv2;
+    }
+    if (invMax <= 0.0) return kt;
+    return softScale * 4.0 * (1.0 / invMax) / (dt * dt);
+}
+
+double
+LadrunoContactFE::edgeGapModeInvMass(const double dir[3], double s, double t) const
+{
+    // B M^-1 B^T for the edge operator B = [(1-s) dir, s dir, -(1-t) dir, -t dir]
+    double w[4] = { 1.0 - s, s, 1.0 - t, t };
+    double invSum = 0.0;
+    for (int i = 0; i < 4; i++) {
+        double mi[3]; ladrunoNodeMass(theDomain, edgeNode[i], mi);
+        invSum += w[i] * w[i] * ladrunoInvMassProj(mi, dir);
+    }
+    return invSum;
+}
+
+double
+LadrunoContactFE::softKnEdge(Integrator *theIntegrator, const double n[3], double s, double t)
+{
+    if (softScale <= 0.0) return kn;
+    double dt = explicitTimeStep(theIntegrator);
+    if (dt < 0.0) return kn;
+    double invSum = edgeGapModeInvMass(n, s, t);
+    if (dt == 0.0 || invSum <= 0.0) { softWarning(); return kn; }
+    return softScale * 4.0 * (1.0 / invSum) / (dt * dt);
+}
+
+double
+LadrunoContactFE::softKtEdge(Integrator *theIntegrator, const double n[3], double s, double t)
+{
+    if (softScale <= 0.0) return kt;
+    double dt = explicitTimeStep(theIntegrator);
+    if (dt <= 0.0) return kt;
+    double t1[3], t2[3];
+    if (!ladrunoTangentBasis(n, t1, t2)) return kt;
+    double inv1 = edgeGapModeInvMass(t1, s, t), inv2 = edgeGapModeInvMass(t2, s, t);
+    double invMax = (inv1 > inv2) ? inv1 : inv2;
+    if (invMax <= 0.0) return kt;
+    return softScale * 4.0 * (1.0 / invMax) / (dt * dt);
+}
+
+void
+LadrunoContactFE::addSoft2Penalty(double dt)
+{
+    // Segment-based soft penalty (the SOFT = 2 option of Hallquist 2006,
+    // Section 26) on the clipped facet overlap: at every slave node
+    // p_I = min(0, k_I gbar_I), k_I = s 4 m_eff,I / dt^2 with
+    // m_eff,I = 1 / (B_I M^-1 B_I^T), B_I = [D_I., -M_I.] / a_I, scattered as
+    // the normal force of the mortar lane. A single-pass penalty: no
+    // multiplier and no contribution to the augmentation sums. Friction, when
+    // given, uses the stick penalty sized on the tangential gap mode.
+    double D[4][4], M[4][4], g[4], n[3];
+    if (!mortarActive(D, M, g, n))
+        return;
+    double msF[4][3] = {{0.0}}, mmF[4][3] = {{0.0}};
+    double invMs[4] = {0.0, 0.0, 0.0, 0.0}, invMm[4] = {0.0, 0.0, 0.0, 0.0};
+    for (int I = 0; I < npsS; I++) {
+        ladrunoNodeMass(theDomain, mortarSlave[I], msF[I]);
+        invMs[I] = ladrunoInvMassProj(msF[I], n);
+    }
+    for (int K = 0; K < npsM; K++) {
+        ladrunoNodeMass(theDomain, mortarMaster[K], mmF[K]);
+        invMm[K] = ladrunoInvMassProj(mmF[K], n);
+    }
+    double p[4] = {0.0, 0.0, 0.0, 0.0};
+    for (int I = 0; I < npsS; I++) {
+        double aFacet = 0.0;
+        for (int J = 0; J < npsS; J++) aFacet += D[I][J];
+        if (aFacet <= 1e-300) continue;
+        double gbar = g[I] / aFacet;
+        if (gbar >= 0.0) continue;
+        double invMeff = 0.0;
+        for (int J = 0; J < npsS; J++) { double c = D[I][J] / aFacet; invMeff += c * c * invMs[J]; }
+        for (int K = 0; K < npsM; K++) { double c = M[I][K] / aFacet; invMeff += c * c * invMm[K]; }
+        double knEff = kn;
+        if (dt > 0.0 && invMeff > 0.0)
+            knEff = softScale * 4.0 * (1.0 / invMeff) / (dt * dt);
+        else
+            softWarning();
+        p[I] = knEff * gbar;
+    }
+    for (int K = 0; K < npsS; K++) {
+        double Dp = 0.0;
+        for (int I = 0; I < npsS; I++) Dp += D[K][I] * p[I];
+        for (int d = 0; d < 3; d++) resid(3 * K + d) = -Dp * n[d];
+    }
+    for (int L = 0; L < npsM; L++) {
+        double Mp = 0.0;
+        for (int I = 0; I < npsS; I++) Mp += M[I][L] * p[I];
+        for (int d = 0; d < 3; d++) resid(3 * (npsS + L) + d) = Mp * n[d];
+    }
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    if (!hasFriction() || cd == 0)
+        return;
+    double t1[3], t2[3];
+    bool haveT = ladrunoTangentBasis(n, t1, t2);
+    double us[4][3], um[4][3];
+    for (int i = 0; i < npsS; i++) {
+        const Vector &u = mortarSlave[i]->getTrialDisp();
+        for (int d = 0; d < 3; d++) us[i][d] = u(d);
+    }
+    for (int i = 0; i < npsM; i++) {
+        const Vector &u = mortarMaster[i]->getTrialDisp();
+        for (int d = 0; d < 3; d++) um[i][d] = u(d);
+    }
+    double tFric[4][3] = {{0.0}};
+    for (int I = 0; I < npsS; I++) {
+        if (p[I] >= 0.0) continue;
+        double aFacet = 0.0;
+        for (int J = 0; J < npsS; J++) aFacet += D[I][J];
+        if (aFacet <= 1e-300) continue;
+        double N_I = -p[I];
+        double ktEff = kt;
+        if (haveT && dt > 0.0) {
+            double inv1 = 0.0, inv2 = 0.0;
+            for (int J = 0; J < npsS; J++) {
+                double c = D[I][J] / aFacet;
+                inv1 += c*c*ladrunoInvMassProj(msF[J], t1); inv2 += c*c*ladrunoInvMassProj(msF[J], t2);
+            }
+            for (int K = 0; K < npsM; K++) {
+                double c = M[I][K] / aFacet;
+                inv1 += c*c*ladrunoInvMassProj(mmF[K], t1); inv2 += c*c*ladrunoInvMassProj(mmF[K], t2);
+            }
+            double invMax = (inv1 > inv2) ? inv1 : inv2;
+            if (invMax > 0.0) ktEff = softScale * 4.0 * (1.0 / invMax) / (dt * dt);
+        }
+        double r[3] = {0.0, 0.0, 0.0};
+        for (int J = 0; J < npsS; J++)
+            for (int d = 0; d < 3; d++) r[d] += D[I][J] * us[J][d];
+        for (int K = 0; K < npsM; K++)
+            for (int d = 0; d < 3; d++) r[d] -= M[I][K] * um[K][d];
+        double rn = r[0]*n[0] + r[1]*n[1] + r[2]*n[2];
+        double gbarT[3];
+        for (int d = 0; d < 3; d++) gbarT[d] = (r[d] - rn * n[d]) / aFacet;
+        LadrunoContactDomain::MortarFrictionState &st = cd->getOrCreateMortarFrictionState(
+            contactTag, mortarSlave[I]->getTag(), slaveFacetIndex, masterFacetIndex);
+        if (!st.engaged) {
+            for (int d = 0; d < 3; d++) st.gT0[d] = gbarT[d];
+            st.engaged = true;
+        }
+        double gTeff[3];
+        for (int d = 0; d < 3; d++) gTeff[d] = gbarT[d] - st.gT0[d];
+        double tF[3], gpTtrial[3];
+        LadrunoFrictionKernel::frictionReturnMap(gTeff, st.gpT, N_I, ktEff, mu, tF, gpTtrial,
+                                                 cohesion, tauMax);
+        for (int d = 0; d < 3; d++) {
+            st.gpTtrial[d] = gpTtrial[d];
+            st.lambdaTtrial[d] = 0.0;     // no tangential multiplier on the soft path
+            tFric[I][d] = tF[d];
+        }
+    }
+    for (int K = 0; K < npsS; K++)
+        for (int d = 0; d < 3; d++) {
+            double s = 0.0;
+            for (int I = 0; I < npsS; I++) s += D[K][I] * tFric[I][d];
+            resid(3 * K + d) += s;
+        }
+    for (int L = 0; L < npsM; L++)
+        for (int d = 0; d < 3; d++) {
+            double s = 0.0;
+            for (int I = 0; I < npsS; I++) s += M[I][L] * tFric[I][d];
+            resid(3 * (npsS + L) + d) += -s;
+        }
+}
+
 const Matrix &
 LadrunoContactFE::getTangent(Integrator *theIntegrator)
 {
@@ -1752,6 +2061,10 @@ LadrunoContactFE::zeroTangent(void)
 void
 LadrunoContactFE::addKtToTang(double fact)
 {
+    if (stiffnessProbe) {             // explicitTimeStep(): record only
+        if (fact != 0.0) probeSawStiffness = true;
+        return;
+    }
     // rigid plane: K_c = kn (n (x) n) over the slave DOFs while penetrating
     if (mode == RIGID_PLANE && rigidPlaneGap() < 0.0) {
         for (int i = 0; i < ndm; i++)
@@ -1816,6 +2129,10 @@ LadrunoContactFE::addKtToTang(double fact)
 void
 LadrunoContactFE::addKiToTang(double fact)
 {
+    if (stiffnessProbe) {
+        if (fact != 0.0) probeSawStiffness = true;
+        return;
+    }
     // Initial-stiffness algorithms (Newton -initial, ModifiedNewton -initial)
     // form the matrix from K_initial; the penalty K_c is used so the contact
     // stiffness is not dropped.
@@ -1866,6 +2183,8 @@ LadrunoContactFE::addKiToTang(double fact)
 void
 LadrunoContactFE::addCtoTang(double fact)
 {
+    if (stiffnessProbe)
+        return;
     // The only contact damping: C = muc B^T B (the normal penalty operator with
     // kn replaced by muc) on the active set of the residual dashpot. Transient
     // integrators call addCtoTang(c2), so implicit Newton gets the consistent

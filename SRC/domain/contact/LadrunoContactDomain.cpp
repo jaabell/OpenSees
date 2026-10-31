@@ -32,8 +32,69 @@
 #include <ID.h>
 
 LadrunoContactDomain::LadrunoContactDomain()
-  : numCommits(0), numReverts(0)
+  : numCommits(0), numReverts(0), lastStepSize(0.0)
 {
+}
+
+int
+LadrunoContactDomain::setSoftScale(int tag, double s, bool edge)
+{
+    if (!(s > 0.0)) {
+        opserr << "WARNING LadrunoContactDomain::setSoftScale() - contact " << tag
+               << ": the soft scale must be > 0 (got " << s << ")\n";
+        return -1;
+    }
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) {
+            if (edge) theMortarContacts[i].edgeSoftScale = s;
+            else      theMortarContacts[i].softScale = s;
+            return 0;
+        }
+    if (!edge) {
+        for (size_t i = 0; i < theContacts.size(); i++)
+            if (theContacts[i].tag == tag) { theContacts[i].softScale = s; return 0; }
+        for (size_t i = 0; i < theRigidPlanes.size(); i++)
+            if (theRigidPlanes[i].tag == tag) { theRigidPlanes[i].softScale = s; return 0; }
+    }
+    opserr << "WARNING LadrunoContactDomain::setSoftScale() - contact " << tag
+           << (edge ? " is not a -mortar contact\n" : " is not defined\n");
+    return -1;
+}
+
+bool
+LadrunoContactDomain::hasSoftContact(void) const
+{
+    for (size_t i = 0; i < theContacts.size(); i++)
+        if (!theContacts[i].retired && theContacts[i].softScale > 0.0) return true;
+    for (size_t i = 0; i < theRigidPlanes.size(); i++)
+        if (!theRigidPlanes[i].retired && theRigidPlanes[i].softScale > 0.0) return true;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (!theMortarContacts[i].retired && (theMortarContacts[i].softScale > 0.0 ||
+            (theMortarContacts[i].edgeEdge && theMortarContacts[i].edgeSoftScale > 0.0)))
+            return true;
+    return false;
+}
+
+void
+LadrunoContactDomain::clearNodalMass(void)
+{
+    theNodalMass.clear();
+}
+
+void
+LadrunoContactDomain::setNodalMass(int nodeTag, const double m[3])
+{
+    NodeMass &nm = theNodalMass[nodeTag];
+    for (int d = 0; d < 3; d++) nm.m[d] = m[d];
+}
+
+bool
+LadrunoContactDomain::getNodalMass(int nodeTag, double m[3]) const
+{
+    std::map<int, NodeMass>::const_iterator it = theNodalMass.find(nodeTag);
+    if (it == theNodalMass.end()) return false;
+    for (int d = 0; d < 3; d++) m[d] = it->second.m[d];
+    return true;
 }
 
 LadrunoContactDomain::~LadrunoContactDomain()
@@ -733,8 +794,10 @@ LadrunoContactDomain::frictionGCEnd(void)
 }
 
 int
-LadrunoContactDomain::commit(bool augmenting)
+LadrunoContactDomain::commit(bool augmenting, double stepSize)
 {
+    if (stepSize > 0.0)
+        lastStepSize = stepSize;
     // promote the trial plastic slip and the engagement origin of every slot;
     // the counter lets a test check that the Domain::commit() hook fires
     numCommits++;
@@ -868,6 +931,7 @@ LadrunoContactDomain::revertToStart(void)
     theMortarFrictionStates.clear();
     theEdgeEdgeStates.clear();
     theVtx2DSide.clear();
+    lastStepSize = 0.0;
     return 0;
 }
 

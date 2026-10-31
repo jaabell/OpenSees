@@ -155,6 +155,42 @@ ladrunoMinSegLength2D(Domain *dom, int ctag, const LadrunoContactSurface *s)
     return Lref;
 }
 
+// Assembled translational nodal masses for the soft penalty: the nodal mass
+// plus the diagonal of every element mass matrix, the masses a lumped
+// explicit integrator inverts.
+static void
+ladrunoBuildNodalMass(Domain *theDomain, LadrunoContactDomain *cd)
+{
+    cd->clearNodalMass();
+    NodeIter &theNod = theDomain->getNodes();
+    Node *nodPtr;
+    while ((nodPtr = theNod()) != 0) {
+        const Matrix &M = nodPtr->getMass();
+        int nr = M.noRows();
+        double m[3] = {0.0, 0.0, 0.0};
+        for (int d = 0; d < 3 && d < nr; d++) m[d] = M(d, d);
+        cd->setNodalMass(nodPtr->getTag(), m);
+    }
+    ElementIter &theEle = theDomain->getElements();
+    Element *e;
+    while ((e = theEle()) != 0) {
+        const ID &en = e->getExternalNodes();
+        int nn = en.Size();
+        if (nn <= 0) continue;
+        int ndof = e->getNumDOF();
+        if (ndof <= 0 || ndof % nn != 0) continue;
+        int dpn = ndof / nn;
+        const Matrix &Me = e->getMass();
+        if (Me.noRows() != ndof || Me.noCols() != ndof) continue;
+        for (int k = 0; k < nn; k++) {
+            double m[3];
+            if (!cd->getNodalMass(en(k), m)) { m[0] = m[1] = m[2] = 0.0; }
+            for (int d = 0; d < 3 && d < dpn; d++) m[d] += Me(k * dpn + d, k * dpn + d);
+            cd->setNodalMass(en(k), m);
+        }
+    }
+}
+
 // Automatic penalty of a 2D master segment: the 2D form of
 // ladrunoResolveAutoKn, kn = 0.10 mean over the two nodes of n^T K_node n
 // from the initial stiffness of the first 2-DOF-per-node element that holds
@@ -611,6 +647,10 @@ LadrunoContactHandler::handle(const ID *nodesLast)
     //     is a PlainHandler) ---
     LadrunoContactDomain *cd = theDomain->getLadrunoContactDomain();
 
+    // the soft penalty reads the assembled nodal masses
+    if (cd != 0 && cd->hasSoftContact())
+        ladrunoBuildNodalMass(theDomain, cd);
+
     // Node-to-segment penalty contact: for each definition (MASTER_SEGMENTS
     // master, SLAVE_NODES slave) one adapter per (slave node, candidate master
     // segment) pair from the bucket-sort broad phase. A pair that does not
@@ -825,6 +865,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                             prevFar, nextFar, ct.kt, ct.mu, ct.consistentTan, ct.muc,
                             theDomain, ct.tag, seg, ct.cohesion, ct.tauMax);
                         if (fe == 0) return -5;
+                        fe->setSoftScale(ct.softScale);
                         theModel->addFE_Element(fe);
                         if (ct.hasFriction())
                             cd->frictionGCMark(ct.tag, sTags(si), seg);
@@ -842,6 +883,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                 ct.kt, ct.mu, ct.consistentTan, ct.muc, theDomain, ct.tag,
                                 capIndex, ct.cohesion, ct.tauMax);
                             if (feCap == 0) return -5;
+                            feCap->setSoftScale(ct.softScale);
                             theModel->addFE_Element(feCap);
                             if (ct.hasFriction())
                                 cd->frictionGCMark(ct.tag, sTags(si), capIndex);
@@ -874,6 +916,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                             v.prevFar, v.nextFar, ct.kt, ct.mu, ct.consistentTan, ct.muc,
                             theDomain, ct.tag, nSeg + v.segPrev, ct.cohesion, ct.tauMax);
                         if (fe == 0) return -5;
+                        fe->setSoftScale(ct.softScale);
                         theModel->addFE_Element(fe);
                         if (ct.hasFriction())
                             cd->frictionGCMark(ct.tag, sTags(si), nSeg + v.segPrev);
@@ -997,6 +1040,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                              ct.consistentTan, ct.consistentNormal,
                                              ct.cohesion, ct.tauMax, ct.muc);
                     if (fe == 0) return -5;
+                    fe->setSoftScale(ct.softScale);
                     theModel->addFE_Element(fe);
                     if (ct.hasFriction())
                         cd->frictionGCMark(ct.tag, sTags(si), seg);  // live this handle()
@@ -1039,6 +1083,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                 LadrunoContactFE *fe = new LadrunoContactFE(numFe++, sn, nd, rp.p0, rp.n, rp.kn,
                                                             theDomain, rp.tag, rp.muc);
                 if (fe == 0) return -5;
+                fe->setSoftScale(rp.softScale);
                 theModel->addFE_Element(fe);
             }
         }
@@ -1101,6 +1146,12 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                            << ": -smoothN, -smoothT, -maxGap, -gapOffset, -adjust and "
                               "-edgeedge are 3D options (a 2D interface has no edge-to-edge "
                               "primitive)\n";
+                    return ladrunoContactFatal();
+                }
+                if (mc.softScale > 0.0) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                           << ": -soft is not available on a 2D mortar contact (use 2D "
+                              "node-to-segment contact with -soft)\n";
                     return ladrunoContactFatal();
                 }
                 if (mc.ngp != 2 && cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_2D_NGP_NOOP))
@@ -1426,6 +1477,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                         fe->setMortarGapShift(mc.gapOffset, mc.adjust, mc.adjustTol);
                     if (mc.smoothN > 0.0 || mc.smoothT > 0.0)
                         fe->setMortarSmoothing(mc.smoothN, mc.smoothT);
+                    fe->setSoftScale(mc.softScale);
                     theModel->addFE_Element(fe);
                     for (int k = 0; k < npsS; k++) {
                         cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));
@@ -1557,6 +1609,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                                                      mc.edgeCohesion, mc.edgeTauMax,
                                                      mc.edgeConsistentTan, mc.edgeAlm);
                             if (fe == 0) return -5;
+                            fe->setSoftScale(mc.edgeSoftScale);
                             theModel->addFE_Element(fe);
                             cd->edgeGCMark(mc.tag, sat, sbt, mat, mbt);
                         }

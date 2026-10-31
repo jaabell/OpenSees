@@ -40,6 +40,8 @@
 //     edge-to-edge (with -mortar): -edgeedge, -edgeKn auto|val, -edgeBand d,
 //              -edgeMu mu, -edgeKt kt, -edgeCohesion c, -edgeTauMax tau,
 //              -edgeConsistentTan, -edgeAlm, -edgeAugTol tol
+//     explicit analysis: -soft <s> (node-to-segment, contactPlane, mortar),
+//              -edgeSoft <s> (the edge pairs of -edgeedge); s defaults to 0.1
 //     -consistentTan is accepted as an alias of -consistanttan.
 //     2D: -outward ox oy | -outward winding (node-to-segment), -thickness h (mortar)
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
@@ -102,6 +104,34 @@ static int ladrunoCountLeadingNumbers(int cap)
     if (consumed > 0)
         OPS_ResetCurrentInputArg(-consumed);      // un-read every peeked token
     return nnum;
+}
+
+// -soft / -edgeSoft <s>: the optional scale s of the soft penalty (default
+// 0.1, the LS-DYNA SLSFAC default); a following flag or the end of the
+// arguments leaves the default. s > 1 makes the contact mode unstable under
+// central differences (omega dt = 2 sqrt(s) > 2) and is reported.
+static int ladrunoReadSoftScale(const char *opt, double &s)
+{
+    s = 0.10;
+    if (OPS_GetNumRemainingInputArgs() > 0) {
+        const char *p = OPS_GetString();
+        bool isFlag = (p != 0 && p[0] == '-' &&
+                       ((p[1] >= 'a' && p[1] <= 'z') || (p[1] >= 'A' && p[1] <= 'Z')));
+        OPS_ResetCurrentInputArg(-1);
+        if (!isFlag) {
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0 || !(v[0] > 0.0)) {
+                opserr << "WARNING " << opt << " - need a scale s > 0 or omit it (default 0.1)\n";
+                return -1;
+            }
+            s = v[0];
+        }
+    }
+    if (s > 1.0)
+        opserr << "WARNING " << opt << " " << s << " > 1: the contact mode has omega dt = "
+                  "2 sqrt(s) > 2 and is unstable under central differences; use s <= 1 "
+                  "(default 0.1)\n";
+    return 0;
 }
 
 // contactSurface tag (-slave | -master nodesPerSeg | -slave-segments nodesPerSeg) nodeTag...
@@ -287,6 +317,7 @@ int OPS_LadrunoContact()
     double maxGap = 0.0, gapOffset = 0.0, adjustTol = 0.0;
     bool   adjust = false;
     double smoothN = 0.0, smoothT = 0.0;   // smoothed law (setMortarSmoothing)
+    double softScale = 0.0, edgeSoftScale = 0.0;   // -soft, -edgeSoft (setSoftScale)
     // edge-to-edge contact (setMortarEdgeEdge)
     bool   edgeEdge = false, edgeKnAuto = false, edgeConsistentTan = false, edgeAlm = false;
     bool   hasEdgeOpt = false;     // an -edge* option other than -edgeedge was given
@@ -364,10 +395,9 @@ int OPS_LadrunoContact()
             edgeAlm = true;
             hasEdgeOpt = true;
         } else if (opt != 0 && strcmp(opt, "-edgeSoft") == 0) {
-            opserr << "WARNING contact -edgeSoft - the soft penalty is sized from the time step "
-                      "of an explicit integrator, and no integrator in this build reports one; "
-                      "use -edgeKn\n";
-            return -1;
+            // soft penalty on the edge pairs (explicit analysis)
+            if (ladrunoReadSoftScale("contact -edgeSoft", edgeSoftScale) < 0) return -1;
+            hasEdgeOpt = true;
         } else if (opt != 0 && strcmp(opt, "-tie") == 0) {
             // a permanent mesh tie (mortar only, checked below)
             isTie = true;
@@ -568,17 +598,16 @@ int OPS_LadrunoContact()
             }
             muc = v[0];
         } else if (opt != 0 && strcmp(opt, "-soft") == 0) {
-            opserr << "WARNING contact -soft - the soft penalty is sized from the time step "
-                      "of an explicit integrator, and no integrator in this build reports "
-                      "one; use kn or auto\n";
-            return -1;
+            // soft penalty (explicit analysis): node-to-segment, or segment
+            // based with -mortar
+            if (ladrunoReadSoftScale("contact -soft", softScale) < 0) return -1;
         } else {
             opserr << "WARNING contact - unexpected token '" << (opt ? opt : "")
                    << "' (expected -outward, -cell, -geomtan, -mu, -cohesion, -tauMax, "
                       "-consistanttan, -visc, -mortar, -tie, -epsN, -epsTie, -epsT, -augTol, "
                       "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust, -smoothN, "
                       "-smoothT, -edgeedge, -edgeKn, -edgeBand, -edgeMu, -edgeKt, "
-                      "-edgeCohesion, -edgeTauMax, -edgeConsistentTan, -edgeAlm, -edgeAugTol, "
+                      "-edgeCohesion, -edgeTauMax, -edgeConsistentTan, -edgeAlm, -edgeAugTol, -edgeSoft, -soft, "
                       "-thickness or end of arguments)\n";
             return -1;
         }
@@ -631,7 +660,7 @@ int OPS_LadrunoContact()
     }
     if (hasEdgeOpt && !edgeEdge) {
         opserr << "WARNING contact -edgeKn/-edgeBand/-edgeMu/-edgeKt/-edgeCohesion/-edgeTauMax/"
-                  "-edgeConsistentTan/-edgeAlm/-edgeAugTol need -edgeedge\n";
+                  "-edgeConsistentTan/-edgeAlm/-edgeAugTol/-edgeSoft need -edgeedge\n";
         return -1;
     }
     if (edgeEdge && isTie) {
@@ -659,6 +688,34 @@ int OPS_LadrunoContact()
         opserr << "WARNING contact -epsN/-epsTie/-epsT/-augTol/-maxAug/-ngp are -mortar "
                   "options; add -mortar or remove them\n";
         return -1;
+    }
+    // the soft penalty modifies a configured penalty, which implicit runs use
+    if (softScale > 0.0 && !isMortar && !knAuto && kn <= 0.0) {
+        opserr << "WARNING contact -soft needs a base penalty (a positional kn or auto): it is "
+                  "the penalty of a non-explicit analysis\n";
+        return -1;
+    }
+    if (softScale > 0.0 && isMortar) {
+        if (isTie) {
+            opserr << "WARNING contact -soft does not apply to -tie (a bond is not a soft "
+                      "contact penalty)\n";
+            return -1;
+        }
+        if (!epsNAuto && !knAuto && epsN <= 0.0 && kn <= 0.0) {
+            opserr << "WARNING contact -mortar -soft needs a base penalty (-epsN auto|value or "
+                      "a positional kn or auto): it is the penalty of a non-explicit analysis\n";
+            return -1;
+        }
+        if (smoothN > 0.0 || smoothT > 0.0) {
+            opserr << "WARNING contact -smoothN/-smoothT are not defined with -soft\n";
+            return -1;
+        }
+        // the per-node bound omega dt = 2 sqrt(s) is necessary, not sufficient:
+        // the assembled segment stiffness couples the nodes of a facet
+        if (softScale > 0.25)
+            opserr << "WARNING contact -mortar -soft " << softScale << ": the nodes of a facet "
+                      "are coupled, which can make the step unstable near s = 0.3; use "
+                      "s <= 0.25\n";
     }
     if (isMortar) {
         // options of the node-to-segment lane that the mortar lane does not use
@@ -714,6 +771,10 @@ int OPS_LadrunoContact()
                                                adjust, adjustTol);
         if (mres == 0 && (smoothN > 0.0 || smoothT > 0.0))
             mres = cd->setMortarSmoothing(idata[0], smoothN, smoothT);
+        if (mres == 0 && softScale > 0.0)
+            mres = cd->setSoftScale(idata[0], softScale);
+        if (mres == 0 && edgeSoftScale > 0.0)
+            mres = cd->setSoftScale(idata[0], edgeSoftScale, true);
         if (mres == 0 && hasThickness)
             mres = cd->setMortarThickness(idata[0], hThickness);
         if (mres == 0 && edgeEdge)
@@ -727,6 +788,8 @@ int OPS_LadrunoContact()
                               consistentNormal, cohesion, tauMax, muc);
     if (cres == 0 && outwardWinding)
         cres = cd->setContactOutwardWinding(idata[0]);
+    if (cres == 0 && softScale > 0.0)
+        cres = cd->setSoftScale(idata[0], softScale);
     return cres;
 }
 
@@ -807,7 +870,7 @@ int OPS_LadrunoContactPlane()
         p0[0] = d[3]; p0[1] = d[4]; p0[2] = d[5];
         kn = d[6];
     }
-    double muc = 0.0;
+    double muc = 0.0, softScale = 0.0;
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-visc") == 0) {
@@ -818,13 +881,10 @@ int OPS_LadrunoContactPlane()
             }
             muc = v[0];
         } else if (opt != 0 && strcmp(opt, "-soft") == 0) {
-            opserr << "WARNING contactPlane -soft - the soft penalty is sized from the time "
-                      "step of an explicit integrator, and no integrator in this build "
-                      "reports one; use kn\n";
-            return -1;
+            if (ladrunoReadSoftScale("contactPlane -soft", softScale) < 0) return -1;
         } else {
             opserr << "WARNING contactPlane - unexpected token '" << (opt ? opt : "")
-                   << "' (expected -visc or end of arguments)\n";
+                   << "' (expected -visc, -soft or end of arguments)\n";
             return -1;
         }
     }
@@ -835,7 +895,10 @@ int OPS_LadrunoContactPlane()
         opserr << "WARNING contactPlane - define the slave contactSurface first\n";
         return -1;
     }
-    return cd->addRigidPlane(idata[0], idata[1], p0, n, kn, muc);
+    int pres = cd->addRigidPlane(idata[0], idata[1], p0, n, kn, muc);
+    if (pres == 0 && softScale > 0.0)
+        pres = cd->setSoftScale(idata[0], softScale);
+    return pres;
 }
 
 // ladrunoContactInfo -> [numContacts, numCommits, numReverts, numMortarContacts]

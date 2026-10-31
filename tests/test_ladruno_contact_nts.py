@@ -41,7 +41,7 @@ relative to the closed form):
   bonded twin (1e-6) and the rotational DOFs follow their own analytic
   torsion.
 - Refusals: duplicate contact tag, partial segment connectivity, missing node,
-  -soft, and a non-trivial equationConstraint is reported as not enforced.
+  and a non-trivial equationConstraint is reported as not enforced.
 """
 import math
 
@@ -86,15 +86,6 @@ def _explicit(system="Diagonal"):
     ops.integrator("NewmarkExplicit", 0.5)
     ops.algorithm("Linear")
     ops.analysis("Transient")
-
-
-def _refused(declare, run):
-    """True if `declare` raises, or if it is accepted and `run` fails."""
-    try:
-        declare()
-    except Exception:
-        return True
-    return run() != 0
 
 
 # ======================================================= handler basics
@@ -935,19 +926,6 @@ def test_missing_node_refused_at_declaration():
     with pytest.raises(ops.OpenSeesError):
         ops.contactSurface(1, "-master", 4, 1, 2, 3, 999)
     ops.contactSurface(1, "-master", 4, 1, 2, 3, 4)
-
-
-def test_soft_option_refused():
-    _two_node_sets()
-
-    def run():
-        _explicit()
-        return ops.analyze(1, 1.0e-4)
-
-    assert _refused(
-        lambda: ops.contact(1, 1, 2, KN, 0.0, 0.0, "-outward", 0.0, 0.0, 1.0,
-                            "-soft", 0.1),
-        run)
 
 
 def _contact_with_equation_constraint():

@@ -226,11 +226,10 @@ class LadrunoContactFE : public FE_Element
     const Vector &getC_Force(const Vector &x, double fact = 1.0);
     const Vector &getM_Force(const Vector &x, double fact = 1.0);
 
-    // Current time step of the explicit integrator driving the analysis, for
-    // a penalty sized from the Courant limit (the -soft option). Returns 0 when
-    // the integrator does not report one; the -soft option is refused at the
-    // command level while no integrator does.
-    static double explicitTimeStep(Integrator *theIntegrator);
+    // Soft-constraint penalty (-soft / -edgeSoft) of this pair, s > 0: under
+    // an integrator that assembles no contact stiffness the penalty is
+    // s 4 m_eff / dt^2 (see LadrunoContactDomain::setSoftScale); 0: off.
+    void setSoftScale(double s) { softScale = (s > 0.0) ? s : 0.0; }
 
   private:
     // gap n.(x_s - p0) at the slave's current trial position; < 0 = penetration
@@ -322,6 +321,24 @@ class LadrunoContactFE : public FE_Element
     // (the closest-point construction makes the relative position purely
     // normal, so positions carry no tangential information).
     void edgeSlip(double s, double t, const double n[3], double gT[3]) const;
+
+    // Step size of the soft penalty: < 0 when the integrator assembles a
+    // stiffness for this adapter (the configured penalty applies), else the
+    // step size (0 when not known yet).
+    double explicitTimeStep(Integrator *theIntegrator);
+    void softWarning(void);   // once per contact: the soft penalty could not be sized
+    // B M^-1 B^T of the gap operator of a segment pair along dir (N == 0: the
+    // slave only, a rigid plane) and of an edge pair
+    double gapModeInvMass(const double dir[3], const double N[4]) const;
+    double edgeGapModeInvMass(const double dir[3], double s, double t) const;
+    // the normal and stick penalties of this evaluation: the soft values under
+    // an explicit integrator, the configured kn and kt otherwise
+    double softKn(Integrator *theIntegrator, const double n[3], const double N[4]);
+    double softKt(Integrator *theIntegrator, const double n[3], const double N[4]);
+    double softKnEdge(Integrator *theIntegrator, const double n[3], double s, double t);
+    double softKtEdge(Integrator *theIntegrator, const double n[3], double s, double t);
+    // the segment-based soft penalty of a 3D mortar pair (residual only)
+    void addSoft2Penalty(double dt);
 
     // Edge-to-edge tangent: epsN B^T B on the active set of the residual plus
     // the friction block; initialStiff uses the stick block.
@@ -436,6 +453,11 @@ class LadrunoContactFE : public FE_Element
     double mortar2dLref    = 0.0;   // minimum initial segment length of both surfaces
     bool   mortar2dNtsCoDeclared = false;
     bool   mortar2dPerpWarned    = false;   // the perpendicular-pair report was made
+
+    // soft penalty (setSoftScale) and the stiffness probe of explicitTimeStep()
+    double softScale         = 0.0;
+    bool   stiffnessProbe    = false;   // add*ToTang record instead of assembling
+    bool   probeSawStiffness = false;
 };
 
 #endif
