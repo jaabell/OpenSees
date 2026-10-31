@@ -805,6 +805,18 @@ int Tcl_InterpOpenSeesObjCmd(ClientData clientData,  Tcl_Interp *interp, int obj
 }
 
 
+// LadrunoTie: surface tie generator (SRC/domain/constraints/LadrunoTie.cpp),
+// the same entry point as the Python and Tcl wrappers
+extern int OPS_LadrunoTie(void);
+static int
+ladrunoTie(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+  if (OPS_LadrunoTie() < 0)
+    return TCL_ERROR;
+  return TCL_OK;
+}
+
 int OpenSeesAppInit(Tcl_Interp *interp) {
 
   ops_TheActiveDomain = &theDomain;
@@ -1014,6 +1026,7 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
 
     Tcl_CreateCommand(interp, "domainChange",  &domainChange,(ClientData)NULL, NULL);
+    Tcl_CreateCommand(interp, "LadrunoTie", &ladrunoTie,(ClientData)NULL, NULL);
 
     Tcl_CreateCommand(interp, "record",  &record,(ClientData)NULL, NULL);
 

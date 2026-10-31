@@ -515,6 +515,14 @@ static int Tcl_ops_equationConstraint(ClientData clientData, Tcl_Interp *interp,
     return TCL_OK;
 }
 
+static int Tcl_ops_LadrunoTie(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoTie() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
 static int Tcl_ops_nodeEigenvector(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
     wrapper->resetCommandLine(argc, 1, argv);
 
@@ -1787,6 +1795,7 @@ TclWrapper::addOpenSeesCommands(Tcl_Interp* interp)
     addCommand(interp,"mass", &Tcl_ops_mass);
     addCommand(interp,"equalDOF", &Tcl_ops_equalDOF);
     addCommand(interp,"equationConstraint", &Tcl_ops_equationConstraint);
+    addCommand(interp,"LadrunoTie", &Tcl_ops_LadrunoTie);
     addCommand(interp,"nodeEigenvector", &Tcl_ops_nodeEigenvector);
     addCommand(interp,"getTime", &Tcl_ops_getTime);
     addCommand(interp,"setCreep", &Tcl_ops_setCreep);
