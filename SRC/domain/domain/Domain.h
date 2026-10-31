@@ -69,6 +69,7 @@ class SingleDomAllSP_Iter;
 class SingleDomParamIter;
 
 class MeshRegion;
+class LadrunoContactDomain;
 class Recorder;
 class Graph;
 class NodeGraph;
@@ -235,6 +236,17 @@ class Domain
     virtual MeshRegion *getRegion(int region);    	
     virtual void getRegionTags(ID& rtags) const;
 
+    // Optional contact engine of this Domain (owned; none by default). It
+    // survives domainChanged() and is deleted by clearAll() and ~Domain.
+    void setLadrunoContactDomain(LadrunoContactDomain *cd);
+    LadrunoContactDomain *getLadrunoContactDomain(void) const { return theContactDomain; }
+
+    // Within-step contact augmentation flag (ladrunoBeginAugment): passed to the
+    // contact engine on commit(), and while on commit() takes no recorder
+    // sample and keeps the commitTag; reset by clearAll().
+    void setContactAugmenting(bool on) { contactAugmenting = on; }
+    bool isContactAugmenting(void) const { return contactAugmenting; }
+
     virtual void Print(OPS_Stream &s, int flag =0);
     virtual void Print(OPS_Stream &s, ID *nodeTags, ID *eleTags, int flag =0);
 
@@ -321,6 +333,9 @@ class Domain
     enum {paramSize_grow = 20};
     int paramSize;
     int numParameters;
+
+    LadrunoContactDomain *theContactDomain = 0;   // owned, may be null
+    bool contactAugmenting = false;
 };
 
 #endif

@@ -772,6 +772,106 @@ static PyObject* Py_ops_responseSpectrumAnalysis(PyObject* self, PyObject* args)
     return wrapper->getResults();
 }
 
+static PyObject* Py_ops_contactSurface(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactSurface() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_contact(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContact() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_contactPlane(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactPlane() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoContactInfo(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactInfo() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoContactForce(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactForce() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoMortarPenetration(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoMortarPenetration() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoMortarTieResidual(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoMortarTieResidual() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoEdgePenetration(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoEdgePenetration() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoBeginAugment(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoBeginAugment() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoEndAugment(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoEndAugment() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
 static PyObject *Py_ops_nDMaterial(PyObject *self, PyObject *args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3123,6 +3223,16 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("eigen", &Py_ops_eigen);
     addCommand("modalProperties", &Py_ops_modalProperties);
     addCommand("responseSpectrumAnalysis", &Py_ops_responseSpectrumAnalysis);
+    addCommand("contactSurface", &Py_ops_contactSurface);
+    addCommand("contact", &Py_ops_contact);
+    addCommand("contactPlane", &Py_ops_contactPlane);
+    addCommand("ladrunoContactInfo", &Py_ops_ladrunoContactInfo);
+    addCommand("ladrunoContactForce", &Py_ops_ladrunoContactForce);
+    addCommand("ladrunoMortarPenetration", &Py_ops_ladrunoMortarPenetration);
+    addCommand("ladrunoMortarTieResidual", &Py_ops_ladrunoMortarTieResidual);
+    addCommand("ladrunoEdgePenetration", &Py_ops_ladrunoEdgePenetration);
+    addCommand("ladrunoBeginAugment", &Py_ops_ladrunoBeginAugment);
+    addCommand("ladrunoEndAugment", &Py_ops_ladrunoEndAugment);
     addCommand("nDMaterial", &Py_ops_nDMaterial);
     addCommand("block2D", &Py_ops_block2d);
     addCommand("block3D", &Py_ops_block3d);

@@ -1015,6 +1015,7 @@
 #define HANDLER_TAG_TransformationConstraintHandler    	4
 #define HANDLER_TAG_PenaltyHandlerNoHomoSPMultipliers   5
 #define HANDLER_TAG_AutoConstraintHandler    6
+#define HANDLER_TAG_LadrunoContactHandler 33002   // contact FE_Element adapters (LadrunoContactHandler)
 
 #define NUMBERER_TAG_DOF_Numberer      	1
 #define NUMBERER_TAG_PlainNumberer 	2
