@@ -89,6 +89,7 @@ extern OPS_Routine OPS_InertiaTrussElement; // Added by Xiaodong Ji, Yuhao Cheng
 extern OPS_Routine OPS_CatenaryCableElement;
 extern OPS_Routine OPS_LysmerTriangle;
 extern OPS_Routine OPS_ASDEmbeddedNodeElement;     // Massimo Petracca (ASDEA)
+extern OPS_Routine OPS_ASDEmbeddedNodeElementTet10;
 extern OPS_Routine OPS_ASDAbsorbingBoundary2D;     // Massimo Petracca (ASDEA)
 extern OPS_Routine OPS_ASDAbsorbingBoundary3D;     // Massimo Petracca (ASDEA)
 extern OPS_Routine OPS_FSIInterfaceElement2D;      // Massimo Petracca (ASDEA)
@@ -330,6 +331,7 @@ element_dispatch = {
   {"VS3D4",                        OPS_VS3D4QuadWithSensitivity},
   {"CatenaryCable",                OPS_CatenaryCableElement},
   {"ASDEmbeddedNodeElement",       OPS_ASDEmbeddedNodeElement},
+  {"ASDEmbeddedNodeElementTet10",  OPS_ASDEmbeddedNodeElementTet10},
   {"LysmerTriangle",               OPS_LysmerTriangle},
   {"ASDAbsorbingBoundary2D",       OPS_ASDAbsorbingBoundary2D},
   {"ASDAbsorbingBoundary3D",       OPS_ASDAbsorbingBoundary3D},
