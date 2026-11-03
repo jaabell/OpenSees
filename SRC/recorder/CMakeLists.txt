@@ -50,6 +50,7 @@ target_sources(OPS_Recorder
       RemoveRecorder.h
       VTK_Recorder.h
       EnergyBalanceRecorder.h
+      EnergyBalanceKernel.h
 )
 
 
