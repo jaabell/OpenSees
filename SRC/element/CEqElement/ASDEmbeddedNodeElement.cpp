@@ -223,7 +223,11 @@ OPS_ASDEmbeddedNodeElement(void)
     double KP = 1.0e18;
     bool KP_set = false;
     for (int i = 5; i < numArgs; i++) {
-        const char* what = OPS_GetString();
+        // OPS_GetStringFromAll, not OPS_GetString: the optional $Rnode4 is an
+        // integer, and in Python OPS_GetString does not return an integer
+        // argument as a string, so the 4th node was dropped.
+        char buffer[32];
+        const char* what = OPS_GetStringFromAll(buffer, 32);
         if (strcmp(what, "-rot") == 0) {
             rot = true;
         }
