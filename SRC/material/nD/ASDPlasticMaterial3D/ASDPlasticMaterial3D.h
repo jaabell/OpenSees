@@ -1079,6 +1079,19 @@ public:
             return new MaterialResponse(this, 3, this->getPstrain());
         else if (strcmp(argv[0], "eqpstrain") == 0 )
             return new MaterialResponse(this, 4, this->getEQPstrain());        
+        else if (strcmp(argv[0], "equivalentPlasticStrain") == 0 || strcmp(argv[0], "EquivalentPlasticStrain") == 0)
+        {
+            // same as eqpstrain, under the name other ASD materials (and STKO's
+            // MPCO key material.equivalentPlasticStrain) use; the tags give MPCO
+            // its component name
+            s.tag("NdMaterialOutput");
+            s.attr("matType", this->getClassType());
+            s.attr("matTag", this->getTag());
+            s.tag("ResponseType", "PLE");
+            Response* resp = new MaterialResponse(this, 4, this->getEQPstrain());
+            s.endTag();
+            return resp;
+        }
         else if (strcmp(argv[0], "PStress") == 0 )
             return new MaterialResponse(this, 5, this->getPStress());        
         else if (strcmp(argv[0], "J2Stress") == 0 )
@@ -1093,6 +1106,10 @@ public:
 
             int iv_size = this->getInternalVariableSizeByName(iv_name);
             int pos = this->getInternalVariableIndexByName(iv_name);
+
+            // unknown name: no response (Vector(-1) used to crash the recorder)
+            if (pos < 0 || iv_size <= 0)
+                return 0;
 
             return new MaterialResponse(this, 1000 + pos, Vector(iv_size));
         }
