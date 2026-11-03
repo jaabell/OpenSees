@@ -490,6 +490,13 @@ int OPS_Pressure_Constraint();
 int OPS_DomainModalProperties();
 int OPS_ResponseSpectrumAnalysis();
 
+// contact commands (SRC/domain/contact/LadrunoContactCommands.cpp)
+int OPS_LadrunoContactSurface();
+int OPS_LadrunoContact();
+int OPS_LadrunoContactPlane();
+int OPS_LadrunoContactInfo();
+int OPS_LadrunoContactForce();
+
 void* OPS_TimeSeriesIntegrator();
 
 void* OPS_BandGenLinLapack();
@@ -519,6 +526,7 @@ void* OPS_PenaltyConstraintHandler();
 void* OPS_LagrangeConstraintHandler();
 void* OPS_TransformationConstraintHandler();
 void* OPS_AutoConstraintHandler();
+void* OPS_LadrunoContactHandler();
 
 void* OPS_CTestNormUnbalance();
 void* OPS_CTestNormDispIncr();
