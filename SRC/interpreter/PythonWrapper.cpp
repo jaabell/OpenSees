@@ -1096,6 +1096,18 @@ static PyObject *Py_ops_printGID(PyObject *self, PyObject *args)
     return wrapper->getResults();
 }
 
+static PyObject *Py_ops_criticalTimeStep(PyObject *self, PyObject *args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+
+    if (OPS_criticalTimeStep() < 0) {
+	opserr<<(void*)0;
+	return NULL;
+    }
+
+    return wrapper->getResults();
+}
+
 static PyObject *Py_ops_getCTestNorms(PyObject *self, PyObject *args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3135,6 +3147,7 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("equationConstraint", &Py_ops_equationConstraint);
     addCommand("nodeEigenvector", &Py_ops_nodeEigenvector);
     addCommand("getTime", &Py_ops_getTime);
+    addCommand("criticalTimeStep", &Py_ops_criticalTimeStep);
     addCommand("setCreep", &Py_ops_setCreep);
     addCommand("eleResponse", &Py_ops_eleResponse);
     addCommand("sp", &Py_ops_SP);

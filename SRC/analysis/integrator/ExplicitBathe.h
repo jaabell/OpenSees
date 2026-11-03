@@ -53,18 +53,22 @@
 #define ExplicitBathe_h
 
 #include <TransientIntegrator.h>
+#include <CriticalTimeStep.h>
+#include <LadrunoProjectionConsumer.h>
 
 class DOF_Group;
 class FE_Element;
 class Vector;
+class LadrunoConstraintProjector;
 
-class ExplicitBathe : public TransientIntegrator
+class ExplicitBathe : public TransientIntegrator, public LadrunoProjectionConsumer
 {
 public:
     // Constructors
     ExplicitBathe();
     
-    ExplicitBathe(double p, int compute_critical_timestep_ = 0, double alpha_lnvd_ = 0.0);
+    ExplicitBathe(double p, int compute_critical_timestep_ = 0, double alpha_lnvd_ = 0.0,
+                  CTSLumping lumping_ = CTSLumping::RowSum);
     
     // Destructor
     ~ExplicitBathe();
@@ -82,6 +86,18 @@ public:
 
     // Method to obtain current velocity
     const Vector &getVel(void);
+
+    // Central-difference critical time step 2/omega_max (damped limit with
+    // Rayleigh damping) from the per-element estimate of CriticalTimeStep.h,
+    // available once a step has run with compute_critical_timestep enabled;
+    // <= 0 otherwise. The stability limit of the scheme is larger than the
+    // central-difference limit (Noh and Bathe 2013), so the value is a
+    // conservative bound.
+    double getCriticalTimeStep(void) const override;
+
+    // LadrunoProjectionConsumer: stores the (non-owning) acceleration
+    // projector of a projection constraint handler.
+    void setConstraintProjector(LadrunoConstraintProjector *theProjector) override;
     
     // Methods for parallel processing
     virtual int sendSelf(int commitTag, Channel &theChannel);
@@ -145,6 +161,12 @@ private:
     int undamped_critical_element_tag;          // Element with minimum undamped dt
 
     double alpha_lnvd;  // Local non-viscous damping coefficient (0 = off)
+
+    CTSLumping lumping; // element mass lumping of the critical-time-step pencil (-lump)
+
+    // constraint projector (not owned; null unless a projection handler
+    // provides one)
+    LadrunoConstraintProjector *theProjector;
 };
 
 #endif

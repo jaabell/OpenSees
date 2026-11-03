@@ -37,19 +37,6 @@
 
 #define OPS_Export
 
-// LAPACK eigenvalue solver declarations
-#ifdef _WIN32
-extern "C" int DGGEV(char *JOBVL, char *JOBVR, int *N, double *A, int *LDA,
-                     double *B, int *LDB, double *ALPHAR, double *ALPHAI,
-                     double *BETA, double *VL, int *LDVL, double *VR,
-                     int *LDVR, double *WORK, int *LWORK, int *INFO);
-#else
-extern "C" int dggev_(char *JOBVL, char *JOBVR, int *N, double *A, int *LDA,
-                      double *B, int *LDB, double *ALPHAR, double *ALPHAI,
-                      double *BETA, double *VL, int *LDVL, double *VR,
-                      int *LDVR, double *WORK, int *LWORK, int *INFO);
-#endif
-
 // OPS interface function for creating ExplicitBathe integrator
 void *OPS_ExplicitBathe(void) {
     TransientIntegrator *theIntegrator = nullptr;
@@ -57,10 +44,11 @@ void *OPS_ExplicitBathe(void) {
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 1) {
         opserr << "WARNING: Insufficient arguments for ExplicitBathe integrator.\n";
-        opserr << "Usage: integrator ExplicitBathe p <compute_critical_timestep> <-lnvd alpha>\n";
+        opserr << "Usage: integrator ExplicitBathe p <compute_critical_timestep> <-lnvd alpha> <-lump rowsum|diagonal|hrz>\n";
         opserr << "  p = damping parameter (0 < p < 1, typically 0.5-0.95)\n";
         opserr << "  compute_critical_timestep = optional flag (0 or 1)\n";
         opserr << "  -lnvd alpha = local non-viscous damping for pseudo-static analysis (0 <= alpha < 1)\n";
+        opserr << "  -lump type = element mass lumping of the critical time step estimate (default rowsum)\n";
         return nullptr;
     }
 
@@ -82,8 +70,15 @@ void *OPS_ExplicitBathe(void) {
     // Read optional critical timestep computation flag and -lnvd option
     int compute_critical_timestep = 0;
     double alpha_lnvd = 0.0;
+    CTSLumping lumping = CTSLumping::RowSum;
     while (OPS_GetNumRemainingInputArgs() > 0) {
-        const char* opt = OPS_GetString();
+        // OPS_GetString() answers a placeholder for a numeric Python
+        // argument; OPS_GetStringFromAll() also returns it as text, so the
+        // integer flag below is read in both interpreters
+        char optBuf[64];
+        const char* opt = OPS_GetStringFromAll(optBuf, sizeof(optBuf));
+        if (opt == optBuf)
+            optBuf[sizeof(optBuf) - 1] = '\0';
         if (opt == 0) {
             // numeric argument from Python: the critical-timestep flag
             OPS_ResetCurrentInputArg(-1);
@@ -114,13 +109,25 @@ void *OPS_ExplicitBathe(void) {
             else
                 alpha_lnvd = value;
         }
+        else if (strcmp(opt, "-lump") == 0) {
+            // lumping of the element mass in the critical time step estimate
+            const char *m = (OPS_GetNumRemainingInputArgs() > 0) ? OPS_GetString() : 0;
+            if (m != 0 && strcmp(m, "rowsum") == 0)
+                lumping = CTSLumping::RowSum;
+            else if (m != 0 && strcmp(m, "diagonal") == 0)
+                lumping = CTSLumping::Diagonal;
+            else if (m != 0 && strcmp(m, "hrz") == 0)
+                lumping = CTSLumping::HRZ;
+            else
+                opserr << "WARNING: ExplicitBathe -lump expects rowsum, diagonal or hrz; keeping rowsum\n";
+        }
         else {
             opserr << "WARNING: ExplicitBathe - unknown option " << opt << " ignored\n";
         }
     }
 
     // Create integrator
-    theIntegrator = new ExplicitBathe(p, compute_critical_timestep, alpha_lnvd);
+    theIntegrator = new ExplicitBathe(p, compute_critical_timestep, alpha_lnvd, lumping);
 
     if (theIntegrator == nullptr) {
         opserr << "WARNING - out of memory creating ExplicitBathe integrator\n";
@@ -143,7 +150,9 @@ ExplicitBathe::ExplicitBathe()
       undamped_minimum_critical_timestep(0.0),
       damped_critical_element_tag(0),
       undamped_critical_element_tag(0),
-      alpha_lnvd(0.0)
+      alpha_lnvd(0.0),
+      lumping(CTSLumping::RowSum),
+      theProjector(0)
 {}
 
 // Main constructor with parameters
@@ -152,7 +161,8 @@ ExplicitBathe::ExplicitBathe()
 // q1 = (1 - 2p) / (2p(1-p))
 // q2 = 0.5 - p*q1
 // q0 = -q1 - q2 + 0.5
-ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double alpha_lnvd_)
+ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double alpha_lnvd_,
+                             CTSLumping lumping_)
     : TransientIntegrator(INTEGRATOR_TAGS_ExplicitBathe),
       deltaT(0.0), p(_p), q0(0.0), q1(0.0), q2(0.0), 
       U_t(0), V_t(0), A_t(0),
@@ -165,7 +175,9 @@ ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double a
       undamped_minimum_critical_timestep(0.0),
       damped_critical_element_tag(0),
       undamped_critical_element_tag(0),
-      alpha_lnvd(alpha_lnvd_)
+      alpha_lnvd(alpha_lnvd_),
+      lumping(lumping_),
+      theProjector(0)
 {
     // Calculate integration coefficients from p parameter
     q1 = (1.0 - 2.0*p) / (2.0*p*(1.0 - p));
@@ -296,143 +308,6 @@ int ExplicitBathe::domainChanged() {
     return 0;
 }
 
-// Compute critical time step for all elements
-// 
-// This method computes the critical time step for each element by solving
-// the generalized eigenvalue problem: K*v = lambda*M*v
-// 
-// The critical time step is then: dt_crit = 2/omega_max
-// For damped systems: dt_crit = 2/(omega_max * (sqrt(1 + xi^2) - xi))
-void computeCriticalTimestep(AnalysisModel *theModel, 
-                             double &damped_min_dt, 
-                             double &undamped_min_dt,
-                             int &damped_elem_tag,
-                             int &undamped_elem_tag)
-{
-    Domain* theDomain = theModel->getDomainPtr();
-    Element *ele;
-    ElementIter &elements = theDomain->getElements();
-    
-    while ((ele = elements()) != 0) {
-        const Matrix &M = ele->getMass();
-        const Matrix &K = ele->getInitialStiff();
-
-        int n = M.noRows();
-        if (n == 0 || K.noRows() != n) {
-            continue;  // Skip elements without proper matrices
-        }
-
-        // Create lumped mass matrix (row-sum lumping)
-        Matrix Mlumped(n, n);
-        Mlumped.Zero();
-        for (int i = 0; i < n; ++i) {
-            double sum = 0.0;
-            for (int j = 0; j < n; ++j) {
-                sum += M(i, j);
-            }
-            Mlumped(i, i) = sum;
-        }
-
-        // Prepare matrices for LAPACK (column-major format)
-        double *K_data = new double[n * n];
-        double *M_data = new double[n * n];
-        
-        for (int i = 0; i < n; ++i) {
-            for (int j = 0; j < n; ++j) {
-                K_data[j * n + i] = K(i, j);
-                M_data[j * n + i] = Mlumped(i, i == j ? i : 0);
-            }
-        }
-
-        // Eigenvalue problem arrays
-        double *alphar = new double[n];
-        double *alphai = new double[n];
-        double *beta = new double[n];
-        double *vl = nullptr;
-        double *vr = nullptr;
-        
-        char jobvl = 'N';  // Don't compute left eigenvectors
-        char jobvr = 'N';  // Don't compute right eigenvectors
-        int lda = n, ldb = n;
-        int info;
-        
-        // Workspace query
-        int lwork = -1;
-        double wkopt;
-        
-#ifdef _WIN32
-        DGGEV(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb,
-              alphar, alphai, beta, vl, &lda, vr, &ldb, &wkopt, &lwork, &info);
-#else
-        dggev_(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb,
-               alphar, alphai, beta, vl, &lda, vr, &ldb, &wkopt, &lwork, &info);
-#endif
-        
-        lwork = (int)wkopt;
-        double *work = new double[lwork];
-        
-        // Actual computation
-#ifdef _WIN32
-        DGGEV(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb,
-              alphar, alphai, beta, vl, &lda, vr, &ldb, work, &lwork, &info);
-#else
-        dggev_(&jobvl, &jobvr, &n, K_data, &lda, M_data, &ldb,
-               alphar, alphai, beta, vl, &lda, vr, &ldb, work, &lwork, &info);
-#endif
-
-        if (info > 0) {
-            opserr << "WARNING: Eigenvalue computation failed for element " 
-                   << ele->getTag() << "\n";
-        }
-
-        // Find maximum eigenvalue
-        double maxEigenvalue = 0.0;
-        for (int i = 0; i < n; ++i) {
-            if (beta[i] != 0.0) {
-                double lambda = alphar[i] / beta[i];
-                if (lambda > maxEigenvalue) {
-                    maxEigenvalue = lambda;
-                }
-            }
-        }
-
-        // Compute critical timesteps
-        if (maxEigenvalue > 0.0) {
-            double w_max = std::sqrt(maxEigenvalue);
-            
-            // Get Rayleigh damping coefficients
-            Vector coefs = ele->getRayleighDampingFactors();
-            double alphaM = coefs(0);
-            double betaK = coefs(1);
-            
-            // Compute damping ratio
-            double xi = 0.5 * (alphaM / w_max + betaK * w_max);
-
-            // Critical timesteps
-            double undamped_dt = 2.0 / w_max;
-            double damped_dt = 2.0 / w_max * (std::sqrt(1.0 + xi*xi) - xi);
-
-            // Update minimums
-            if (damped_dt < damped_min_dt) {
-                damped_min_dt = damped_dt;
-                damped_elem_tag = ele->getTag();
-            }
-            if (undamped_dt < undamped_min_dt) {
-                undamped_min_dt = undamped_dt;
-                undamped_elem_tag = ele->getTag();
-            }
-        }
-
-        // Clean up
-        delete[] K_data;
-        delete[] M_data;
-        delete[] alphar;
-        delete[] alphai;
-        delete[] beta;
-        delete[] work;
-    }
-}
-
 // Advance to a new time step
 //
 // This method implements the first sub-step of the Bathe scheme:
@@ -454,11 +329,13 @@ int ExplicitBathe::newStep(double _deltaT) {
 
     // Compute critical timestep if requested (only once)
     if (compute_critical_timestep == 1) {
-        computeCriticalTimestep(theModel, 
-                                damped_minimum_critical_timestep,
-                                undamped_minimum_critical_timestep,
-                                damped_critical_element_tag,
-                                undamped_critical_element_tag);
+        // per-element estimate (CriticalTimeStep.h): row-sum lumping by
+        // default, mass copied before the stiffness is fetched
+        CTSResult r = computeCriticalTimeStep(theModel, false, lumping);
+        damped_minimum_critical_timestep   = r.damped_dt;
+        undamped_minimum_critical_timestep = r.undamped_dt;
+        damped_critical_element_tag        = r.damped_tag;
+        undamped_critical_element_tag      = r.undamped_tag;
         
         compute_critical_timestep = 2;  // Mark as computed
         
@@ -675,11 +552,26 @@ const Vector &ExplicitBathe::getVel() {
     return *V_t;
 }
 
+// Projector of a projection constraint handler (owned by the handler)
+void ExplicitBathe::setConstraintProjector(LadrunoConstraintProjector *theProjector_) {
+    theProjector = theProjector_;
+}
+
+// Critical time step of the central-difference limit (see ExplicitBathe.h)
+double ExplicitBathe::getCriticalTimeStep(void) const {
+    if (compute_critical_timestep != 2)
+        return -1.0;
+    if (!(damped_minimum_critical_timestep < std::numeric_limits<double>::infinity()))
+        return -1.0;
+    return damped_minimum_critical_timestep;
+}
+
 // Send object state for parallel processing
 int ExplicitBathe::sendSelf(int cTag, Channel &theChannel) {
-    Vector data(2);
+    Vector data(3);
     data(0) = p;
     data(1) = alpha_lnvd;
+    data(2) = (double)(int)lumping;   // CTSLumping code
 
     if (theChannel.sendVector(this->getDbTag(), cTag, data) < 0) {
         opserr << "ExplicitBathe::sendSelf() - could not send data\n";
@@ -691,7 +583,7 @@ int ExplicitBathe::sendSelf(int cTag, Channel &theChannel) {
 
 // Receive object state for parallel processing
 int ExplicitBathe::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &theBroker) {
-    Vector data(2);
+    Vector data(3);
     if (theChannel.recvVector(this->getDbTag(), cTag, data) < 0) {
         opserr << "ExplicitBathe::recvSelf() - could not receive data\n";
         return -1;
@@ -699,6 +591,10 @@ int ExplicitBathe::recvSelf(int cTag, Channel &theChannel, FEM_ObjectBroker &the
 
     p = data(0);
     alpha_lnvd = data(1);
+    int lc = (int)data(2);
+    lumping = (lc == 1) ? CTSLumping::Diagonal
+            : (lc == 2) ? CTSLumping::HRZ
+                        : CTSLumping::RowSum;
 
     // Recalculate integration coefficients from received p
     q1 = (1.0 - 2.0*p) / (2.0*p*(1.0 - p));
