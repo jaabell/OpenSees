@@ -27,12 +27,13 @@ def field(x, y, z):
     return (x * x + 2.0 * y - z, 0.5 * x * y, y * z - 0.3 * x)
 
 
-def build_nodes():
+def build_nodes(n=10):
     ops.wipe()
     ops.model("basic", "-ndm", 3, "-ndf", 3)
     xyz = dict(CORNERS)
-    for k, (a, b) in enumerate(STKO_EDGES):
-        xyz[5 + k] = tuple((CORNERS[a][d] + CORNERS[b][d]) / 2.0 for d in range(3))
+    if n == 10:
+        for k, (a, b) in enumerate(STKO_EDGES):
+            xyz[5 + k] = tuple((CORNERS[a][d] + CORNERS[b][d]) / 2.0 for d in range(3))
     for tag, x in xyz.items():
         ops.node(tag, *x)
     ops.nDMaterial("ElasticIsotropic", 1, 1000.0, 0.25)
@@ -79,7 +80,7 @@ def test_asdtet10_matches_tennodetetrahedron_with_swap():
 def test_asdtet_matches_fournodetetrahedron():
     res = []
     for cmd in ("ASDTet", "FourNodeTetrahedron"):
-        build_nodes()
+        build_nodes(4)
         ops.element(cmd, 1, 1, 2, 3, 4, 1)
         solve_prescribed(CORNERS, range(1, 5))
         res.append([ops.nodeReaction(t) for t in range(1, 5)])
@@ -95,7 +96,7 @@ def test_corotational_rejected(cmd, n):
 
 
 def embedded_disp(retained, *opts):
-    xyz = build_nodes()
+    xyz = build_nodes(len(retained))
     c = (0.2, 0.1, 0.15)
     ops.node(11, *c)
     ops.element("ASDEmbeddedNodeElement", 1, 11, *retained, "-K", 1.0e14, *opts)
