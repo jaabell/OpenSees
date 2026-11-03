@@ -1305,6 +1305,30 @@ Tri31::setResponse(const char **argv, int argc, OPS_Stream &output)
        theResponse =  new ElementResponse(this, 3, Vector(3*numgp));
    }
 
+   // plane-strain stress with the out-of-plane sigma_zz as 4th component
+   // (NaN when the material does not provide it)
+   else if ((strcmp(argv[0],"stressesPlaneStrain") ==0) || (strcmp(argv[0],"stressPlaneStrain") ==0)) {
+       for (int i=0; i<numgp; i++) {
+           output.tag("GaussPoint");
+           output.attr("number",i+1);
+           output.attr("eta",pts[i][0]);
+           output.attr("neta",pts[i][1]);
+
+           output.tag("NdMaterialOutput");
+           output.attr("classType", theMaterial[i]->getClassTag());
+           output.attr("tag", theMaterial[i]->getTag());
+
+           output.tag("ResponseType","sigma11");
+           output.tag("ResponseType","sigma22");
+           output.tag("ResponseType","sigma12");
+           output.tag("ResponseType","sigma33");
+
+           output.endTag(); // NdMaterialOutput
+           output.endTag(); // GaussPoint
+       }
+       theResponse =  new ElementResponse(this, 21, Vector(4*numgp));
+   }
+
   else if ((strcmp(argv[0],"stressesAtNodes") ==0) || (strcmp(argv[0],"stressAtNodes") ==0)) {
     for (int i=0; i<numnodes; i++) {
       output.tag("NodalPoint");
@@ -1372,6 +1396,21 @@ Tri31::getResponse(int responseID, Information &eleInfo)
             cnt += 3;
        }
        return eleInfo.setVector(stresses);
+
+  } else if (responseID == 21) {
+
+    // [sxx, syy, sxy, szz] per integration point
+    static Vector stresses4(4*numgp);
+    int cnt = 0;
+    for (int i = 0; i < numgp; i++) {
+      const Vector &sigma = theMaterial[i]->getStress();
+      stresses4(cnt) = sigma(0);
+      stresses4(cnt+1) = sigma(1);
+      stresses4(cnt+2) = sigma(2);
+      stresses4(cnt+3) = theMaterial[i]->getStressZZ();
+      cnt += 4;
+    }
+    return eleInfo.setVector(stresses4);
 
   } else if (responseID == 11) {
 

@@ -186,6 +186,13 @@ const Vector& J2PlaneStrain :: getStress( )
   return stress_vec ;
 }
 
+// sigma_zz is computed by the 3D return mapping and held in the internal
+// stress tensor; getStress() reports only the in-plane components
+double J2PlaneStrain :: getStressZZ( )
+{
+  return stress(2,2) ;
+}
+
 //send back the tangent 
 const Matrix& J2PlaneStrain :: getTangent( ) 
 {
