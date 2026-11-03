@@ -209,6 +209,9 @@ class Domain
     // methods for eigenvalue analysis
     virtual int setEigenvalues(const Vector &theEigenvalues);
     virtual const Vector &getEigenvalues(void);
+    // number of stored eigenvalues, 0 when none was set; unlike
+    // getEigenvalues() it never exits, so callers can fail gracefully
+    virtual int getNumEigenvalues(void) const;
     virtual double getTimeEigenvaluesSet(void);
     void setModalProperties(const DomainModalProperties& dmp);
     void unsetModalProperties(void);
