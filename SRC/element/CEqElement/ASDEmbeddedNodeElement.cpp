@@ -41,6 +41,8 @@
 #include <cmath>
 #include <string>
 #include <limits>
+#include <vector>
+#include <cstring>
 
 // anonymous namespace for utilities
 namespace
@@ -230,7 +232,9 @@ OPS_ASDEmbeddedNodeElement(void)
         first_done = true;
     }
 
-    const char* descr = "Want: element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 $Rnode2 $Rnode3 <$Rnode4> <-rot> <-p> <-K $K> <-KP $KP>\n";
+    const char* descr = "Want: element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 $Rnode2 $Rnode3 <$Rnode4> <-rot> <-p> <-K $K> <-KP $KP> <-shape $shape>\n"
+        "  or:  element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 ... $Rnode10 <-K $K> <-KP $KP> <-shape tet>\n"
+        "       (10 retained nodes in STKO order: mid-edge nodes 5=(1,2) 6=(2,3) 7=(3,1) 8=(1,4) 9=(2,4) 10=(3,4))\n";
 
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 5) {
@@ -249,8 +253,10 @@ OPS_ASDEmbeddedNodeElement(void)
     // parse optional parameters
     bool rot = false;
     bool pressure = false;
-    int N4 = 0;
-    bool has_N4 = false;
+    // retained nodes after the 3rd: none, $Rnode4, or $Rnode4..$Rnode10
+    std::vector<int> extra_nodes;
+    bool reading_nodes = true;
+    const char* shape = nullptr;
     double K = 1.0e18;
     double KP = 1.0e18;
     bool KP_set = false;
@@ -260,8 +266,30 @@ OPS_ASDEmbeddedNodeElement(void)
         // argument as a string, so the 4th node was dropped.
         char buffer[32];
         const char* what = OPS_GetStringFromAll(buffer, 32);
+        if (reading_nodes) {
+            try {
+                size_t pos = 0;
+                int n = std::stoi(std::string(what), &pos);
+                if (pos == strlen(what)) {
+                    extra_nodes.push_back(n);
+                    continue;
+                }
+            }
+            catch (...) {
+            }
+            reading_nodes = false;
+        }
         if (strcmp(what, "-rot") == 0) {
             rot = true;
+        }
+        else if (strcmp(what, "-shape") == 0) {
+            if (i == numArgs - 1) {
+                opserr << "ASDEmbeddedNodeElement ERROR: The -shape keyword should be followed by a shape name.\n" << descr;
+                return 0;
+            }
+            ++i;
+            static char shape_buffer[32];
+            shape = OPS_GetStringFromAll(shape_buffer, 32);
         }
         else if (strcmp(what, "-p") == 0) {
             pressure = true;
@@ -291,19 +319,6 @@ OPS_ASDEmbeddedNodeElement(void)
             }
             KP_set = true;
         }
-        else {
-            // should be an integer for the only if i == 6
-            if (i == 5) {
-                try {
-                    N4 = std::stoi(std::string(what));
-                    has_N4 = true;
-                }
-                catch (...) {
-                    N4 = -1;
-                    has_N4 = false;
-                }
-            }
-        }
     }
     if (!KP_set)
         KP = K;
@@ -314,9 +329,42 @@ OPS_ASDEmbeddedNodeElement(void)
         return 0;
     }
 
+    // the retained node count fixes the host; -shape only has to agree with it
+    int num_retained = 3 + (int)extra_nodes.size();
+    if (num_retained != 3 && num_retained != 4 && num_retained != 10) {
+        opserr << "ASDEmbeddedNodeElement ERROR: " << num_retained << " retained nodes given, 3, 4 or 10 are supported.\n" << descr;
+        return 0;
+    }
+    if (shape != nullptr) {
+        const char* expected = (num_retained == 3) ? "tri" : "tet";
+        if (strcmp(shape, expected) != 0) {
+            opserr << "ASDEmbeddedNodeElement ERROR: -shape " << shape << " is not supported with " << num_retained
+                << " retained nodes (use -shape " << expected << ").\n" << descr;
+            return 0;
+        }
+    }
+
     // done
-    if (has_N4)
-        return new ASDEmbeddedNodeElement(iData[0], iData[1], iData[2], iData[3], iData[4], N4, rot, pressure, K, KP);
+    if (num_retained == 10) {
+        // 10-node tetrahedron host given in STKO (MpcCore) order, which is the
+        // ASDEmbeddedNodeElementTet10 (gmsh) order with Rnode9 and Rnode10 swapped
+        if (rot || pressure) {
+            opserr << "ASDEmbeddedNodeElement ERROR: -rot and -p are not supported with a 10-node tetrahedron host.\n" << descr;
+            return 0;
+        }
+        ID rNodes(10);
+        rNodes(0) = iData[2];
+        rNodes(1) = iData[3];
+        rNodes(2) = iData[4];
+        for (int i = 0; i < 7; ++i)
+            rNodes(3 + i) = extra_nodes[i];
+        int tmp = rNodes(8);
+        rNodes(8) = rNodes(9);
+        rNodes(9) = tmp;
+        return new ASDEmbeddedNodeElement(iData[0], iData[1], rNodes, false, false, K, KP);
+    }
+    if (num_retained == 4)
+        return new ASDEmbeddedNodeElement(iData[0], iData[1], iData[2], iData[3], iData[4], extra_nodes[0], rot, pressure, K, KP);
     else
         return new ASDEmbeddedNodeElement(iData[0], iData[1], iData[2], iData[3], iData[4], rot, pressure, K, KP);
 }

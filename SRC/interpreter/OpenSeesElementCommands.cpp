@@ -239,6 +239,8 @@ void* OPS_KikuchiBearing();
 void* OPS_YamamotoBiaxialHDR();
 void* OPS_FourNodeTetrahedron();
 void* OPS_TenNodeTetrahedron();
+void* OPS_ASDTet();
+void* OPS_ASDTet10();
 void* OPS_TenNodeTetrahedronStd();
 void* OPS_CatenaryCableElement();
 void *OPS_ASDEmbeddedNodeElement(void);
@@ -818,6 +820,8 @@ namespace {
 	functionMap.insert(std::make_pair("zeroLengthND", &OPS_ZeroLengthND));
 	functionMap.insert(std::make_pair("FourNodeTetrahedron", &OPS_FourNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedron", &OPS_TenNodeTetrahedron));
+	functionMap.insert(std::make_pair("ASDTet", &OPS_ASDTet));
+	functionMap.insert(std::make_pair("ASDTet10", &OPS_ASDTet10));
 	functionMap.insert(std::make_pair("TenNodeTetrahedronStd", &OPS_TenNodeTetrahedronStd));
 	functionMap.insert(std::make_pair("CatenaryCable", &OPS_CatenaryCableElement));
 	functionMap.insert(std::make_pair("ASDEmbeddedNodeElement", &OPS_ASDEmbeddedNodeElement));
