@@ -30,6 +30,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <limits>
+#include <LadrunoEnergyChannels.h>
 
 #include <Domain.h>
 #include <Element.h>
@@ -143,7 +144,8 @@ ExplicitBathe::ExplicitBathe()
       undamped_minimum_critical_timestep(0.0),
       damped_critical_element_tag(0),
       undamped_critical_element_tag(0),
-      alpha_lnvd(0.0)
+      alpha_lnvd(0.0),
+      lnvdStepEnergy(0.0)
 {}
 
 // Main constructor with parameters
@@ -165,7 +167,8 @@ ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double a
       undamped_minimum_critical_timestep(0.0),
       damped_critical_element_tag(0),
       undamped_critical_element_tag(0),
-      alpha_lnvd(alpha_lnvd_)
+      alpha_lnvd(alpha_lnvd_),
+      lnvdStepEnergy(0.0)
 {
     // Calculate integration coefficients from p parameter
     q1 = (1.0 - 2.0*p) / (2.0*p*(1.0 - p));
@@ -177,6 +180,12 @@ ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double a
     if (alpha_lnvd > 0.0)
         opserr << ", local non-viscous damping alpha = " << alpha_lnvd;
     opserr << endln;
+
+    // Make the local damping column visible to an EnergyBalance -v2 recorder
+    // created later (its columns are fixed at the first record).
+    if (alpha_lnvd > 0.0)
+        Ladruno::EnergyChannelRegistry::instance().declare(
+            Ladruno::EnergyChannelRegistry::LNVD_WORK);
 }
 
 // Destructor - clean up allocated memory
@@ -444,6 +453,7 @@ void computeCriticalTimestep(AnalysisModel *theModel,
 // Then solve: M*a_{t+p*dt} = R_{t+p*dt} - C*v_{t+p*dt} - K*u_{t+p*dt}
 int ExplicitBathe::newStep(double _deltaT) {
     deltaT = _deltaT;
+    lnvdStepEnergy = 0.0;   // discard the work of a step that was not committed
 
     if (!U_t || !V_t || !A_t) {
         opserr << "ExplicitBathe::newStep() - state variables not initialized\n";
@@ -551,7 +561,7 @@ int ExplicitBathe::update(const Vector &U) {
     
     // Store acceleration at t + p*dt
     *A_tpdt = U;
-    this->applyLocalDamping(*A_tpdt, *V_fake);   // V_fake: predicted velocity of sub-step 1
+    this->applyLocalDamping(*A_tpdt, *V_fake, p * deltaT);   // V_fake: predicted velocity of sub-step 1
 
     // Update velocity at t + p*dt (corrected)
     // v_{t+p*dt} = v_t + (a_t + a_{t+p*dt}) * p*dt/2
@@ -587,7 +597,7 @@ int ExplicitBathe::update(const Vector &U) {
     this->formUnbalance();
     theLinSOE->solve();
     *A_tdt = theLinSOE->getX();
-    this->applyLocalDamping(*A_tdt, *V_fake);    // V_fake: predicted velocity of sub-step 2
+    this->applyLocalDamping(*A_tdt, *V_fake, (1.0 - p) * deltaT);    // V_fake: predicted velocity of sub-step 2
 
     // Report maximum acceleration for monitoring
     double A_max = A_tdt->pNorm(0);
@@ -643,6 +653,15 @@ int ExplicitBathe::commit() {
         return -1;
     }
 
+    // Publish the step's local damping work before the domain commit, where
+    // the recorders read the registry; zero it so a repeated commit cannot
+    // count it twice.
+    if (lnvdStepEnergy != 0.0) {
+        Ladruno::EnergyChannelRegistry::instance().addEnergy(
+            Ladruno::EnergyChannelRegistry::LNVD_WORK, lnvdStepEnergy);
+        lnvdStepEnergy = 0.0;
+    }
+
     return theModel->commitDomain();
 }
 
@@ -659,14 +678,27 @@ int ExplicitBathe::commit() {
 // full solver it is applied per equation to M^-1 F and dissipation is not guaranteed.
 // Intended for pseudo-static (dynamic relaxation) analyses; it does not represent
 // physical damping.
-void ExplicitBathe::applyLocalDamping(Vector &accel, const Vector &vel) {
+//
+// The damping force -alpha |F_i| sign(v_i) dissipates the power alpha |F_i| |v_i| >= 0.
+// Its work over the sub-step (p*dt for the first, (1-p)*dt for the second) is added to
+// lnvdStepEnergy, with F the unbalance of the system just solved, and published to the
+// energy channels on commit. The estimate is first order in dt and uses the local
+// unbalance, so it holds for a serial run with a lumped mass.
+void ExplicitBathe::applyLocalDamping(Vector &accel, const Vector &vel, double dtSub) {
     if (alpha_lnvd <= 0.0 || vel.Size() != accel.Size())
         return;
+    LinearSOE *theSOE = this->getLinearSOE();
+    const Vector *F = (theSOE != 0 && theSOE->getB().Size() == accel.Size())
+                      ? &theSOE->getB() : 0;
+    double power = 0.0;
     for (int i = 0; i < accel.Size(); ++i) {
         const double v = vel(i);
         const double sign_v = (v > 0.0) ? 1.0 : ((v < 0.0) ? -1.0 : 0.0);
+        if (F != 0)
+            power += alpha_lnvd * std::fabs((*F)(i)) * std::fabs(v);
         accel(i) -= alpha_lnvd * std::fabs(accel(i)) * sign_v;
     }
+    lnvdStepEnergy += power * dtSub;
 }
 
 

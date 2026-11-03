@@ -125,6 +125,18 @@ class IncrementalIntegrator : public Integrator
     Vector *mV;
     Vector *tmpV1;
     Vector *tmpV2;
+
+    // Modal-damping energy publisher (EnergyBalance -v2): the dissipation
+    // rate v^T C_modal v is overwritten at each addModalDampingForce() call,
+    // so the last call of a step is the converged iterate, and commit()
+    // integrates it over the domain-time increment into the MODAL_WORK
+    // energy channel. mdRateValid is cleared after each commit so an
+    // integrator that stops applying modal forces cannot publish a stale rate.
+    double mdRate = 0.0;
+    double mdPrevRate = 0.0;
+    double mdLastTime = 0.0;
+    bool   mdRateValid = false;
+    bool   mdSeeded = false;
     
   private:
     LinearSOE *theSOE;

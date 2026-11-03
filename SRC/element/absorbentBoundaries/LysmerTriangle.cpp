@@ -44,6 +44,8 @@
 #include <stdlib.h>
 #include <stdio.h> 
 
+#include <LadrunoEnergyChannels.h>
+
 double LysmerTriangle :: oneOverRoot3 = 1.0/sqrt(3.0);
 double LysmerTriangle :: GsPts[1][1];
 Matrix LysmerTriangle :: Bmat(9,3);
@@ -142,6 +144,10 @@ LysmerTriangle::LysmerTriangle(int tag, int Nd1, int Nd2, int Nd3, double rho_, 
 
 	mLoadFactor = 1.0;
 
+  lkPrevRate = 0.0;
+  lkLastTime = 0.0;
+  lkSeeded = false;
+
   // if(stage != 0)
   // {
   //   opserr << "LysmerTriangle::LysmerTriangle - element at tag # " << this->getTag() << " starting at stage = " << stage << " also L = " << element_length <<  endln;
@@ -166,6 +172,9 @@ LysmerTriangle::LysmerTriangle()
     gnd_velocity(3),
     stage(0)
 {
+  lkPrevRate = 0.0;
+  lkLastTime = 0.0;
+  lkSeeded = false;
 }
 
 //  destructor:
@@ -216,6 +225,14 @@ LysmerTriangle::setDomain(Domain *theDomain)
     // call the base class method
     this->DomainComponent::setDomain(theDomain);
 
+    // declare the injection energy channel so the EnergyBalance -v2 layout
+    // writes an E_inject column whenever a Lysmer boundary is present (even
+    // if no velocity load is applied), and restart the injection-work clock
+    Ladruno::EnergyChannelRegistry::instance().declare(
+        Ladruno::EnergyChannelRegistry::ABSORB_LEAK);
+    lkLastTime = theDomain->getCurrentTime();
+    lkSeeded = false;
+
     UpdateBase(GsPts[0][0], GsPts[0][0]);
 
     Bmat(0,0) = 0.5;
@@ -238,6 +255,52 @@ LysmerTriangle::commitState()
     if ((retVal = this->Element::commitState()) != 0) {
     	opserr << "LysmerTriangle::commitState () - failed in base class";
     }    
+
+    // Publish the incident-wave injection work. The velocity-loader forcing
+    // R_inj = C v_gnd is left in the internalForces member by
+    // getResistingForceIncInertia(), and at stage 0 getResistingForce()
+    // returns that member, so the internal-work integral of EnergyBalance
+    // contains int R_inj^T v dt. That quantity (resisting-force sign) is
+    // published so the -v2 layout can report IE without it and the injected
+    // energy as E_inject = -L. R_inj is recomputed as getDamp() v_gnd rather
+    // than read from internalForces because the stage-3 getResistingForce()
+    // overwrites that member on every call. Once per commit, trapezoidal in
+    // domain time, rectangle rule on the first commit; a commit with
+    // dt <= 0 publishes nothing and only resets the clock.
+    {
+        Domain *dom = this->getDomain();
+        if (dom != 0) {
+            double rate = 0.0;
+            if (gnd_velocity.pNorm(0) > 0.0) {
+                const Matrix &C = this->getDamp();   // zero at stage 1
+                static Vector vg(SL_NUM_DOF);
+                static Vector Rinj(SL_NUM_DOF);
+                for (int nd = 0; nd < SL_NUM_NODE; ++nd)
+                    for (int j = 0; j < SL_NUM_NDF; ++j)
+                        vg(nd * SL_NUM_NDF + j) = gnd_velocity(j);
+                Rinj.addMatrixVector(0.0, C, vg, 1.0);
+                int cnt = 0;
+                for (int nd = 0; nd < SL_NUM_NODE; ++nd) {
+                    const Vector &v = theNodes[nd]->getVel();
+                    for (int j = 0; j < SL_NUM_NDF && j < v.Size(); ++j)
+                        rate += Rinj(cnt + j) * v(j);
+                    cnt += SL_NUM_NDF;
+                }
+            }
+            const double tNow = dom->getCurrentTime();
+            const double dt = tNow - lkLastTime;
+            if (dt > 0.0) {
+                const double dE = lkSeeded
+                    ? 0.5 * (lkPrevRate + rate) * dt
+                    : rate * dt;
+                Ladruno::EnergyChannelRegistry::instance().addEnergy(
+                    Ladruno::EnergyChannelRegistry::ABSORB_LEAK, dE);
+                lkSeeded = true;
+            }
+            lkPrevRate = rate;
+            lkLastTime = tNow;
+        }
+    }
 
     return 0; 
 }
