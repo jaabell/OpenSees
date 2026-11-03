@@ -812,7 +812,7 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // U0_computed
     // number of local dofs
     // mapping of local dofs
-    static ID idData(14 + 33);
+    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
     idData.Zero();
     idData(0) = getTag();
     idData(1) = m_node_ids.Size();
@@ -837,8 +837,8 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // DOUBLE data
     // K
     // KP
-    // initial displacement (at most we can have 33 dofs: 11 nodes x 3)
-    static Vector vectData(35);
+    // initial displacement (at most 11 nodes x 6 dofs = 66)
+    static Vector vectData(2 + 66);
     vectData.Zero();
     vectData(0) = m_K;
     vectData(1) = m_KP;
@@ -861,7 +861,7 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
     int dataTag = this->getDbTag();
 
     // INT data: see sendSelf() for the layout
-    static ID idData(14 + 33);
+    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::recvSelf() - " << this->getTag() << " failed to receive ID\n";
@@ -889,7 +889,7 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
     // DOUBLE data
     // K
     // KP
-    static Vector vectData(35);
+    static Vector vectData(2 + 66);
     res += theChannel.recvVector(dataTag, commitTag, vectData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::sendSelf() - " << this->getTag() << " failed to receive Vector\n";
