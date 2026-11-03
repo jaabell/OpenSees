@@ -1015,6 +1015,8 @@
 #define HANDLER_TAG_TransformationConstraintHandler    	4
 #define HANDLER_TAG_PenaltyHandlerNoHomoSPMultipliers   5
 #define HANDLER_TAG_AutoConstraintHandler    6
+// explicit constraint projection
+#define HANDLER_TAG_LadrunoProjectionHandler 33001
 
 #define NUMBERER_TAG_DOF_Numberer      	1
 #define NUMBERER_TAG_PlainNumberer 	2
@@ -1123,6 +1125,8 @@
 #define INTEGRATOR_TAGS_HarmonicSteadyState             60
 #define INTEGRATOR_TAGS_ExplicitBathe                   61
 #define INTEGRATOR_TAGS_ExplicitDifferenceStatic        62
+// explicit leap-frog central difference
+#define INTEGRATOR_TAGS_CentralDifferenceLadruno        33003
 
 
 #define LinSOE_TAGS_FullGenLinSOE		1
