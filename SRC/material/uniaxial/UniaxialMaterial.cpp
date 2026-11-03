@@ -71,8 +71,12 @@ UniaxialMaterial *OPS_getUniaxialMaterial(int tag) {
   return theMat;
 }
 
+// Defined in ASDConcrete1DMaterial.cpp.
+extern void asdConcrete1DResetStorage(void);
+
 void OPS_clearAllUniaxialMaterial(void) {
   theUniaxialMaterialObjects.clearAll();
+  asdConcrete1DResetStorage();
 }
 
 void OPS_printUniaxialMaterial(OPS_Stream &s, int flag) {
