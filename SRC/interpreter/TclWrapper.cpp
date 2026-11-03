@@ -643,6 +643,14 @@ static int Tcl_ops_printGID(ClientData clientData, Tcl_Interp *interp, int argc,
     return TCL_OK;
 }
 
+static int Tcl_ops_criticalTimeStep(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_criticalTimeStep() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
 static int Tcl_ops_getCTestNorms(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
     wrapper->resetCommandLine(argc, 1, argv);
 
@@ -1789,6 +1797,7 @@ TclWrapper::addOpenSeesCommands(Tcl_Interp* interp)
     addCommand(interp,"equationConstraint", &Tcl_ops_equationConstraint);
     addCommand(interp,"nodeEigenvector", &Tcl_ops_nodeEigenvector);
     addCommand(interp,"getTime", &Tcl_ops_getTime);
+    addCommand(interp,"criticalTimeStep", &Tcl_ops_criticalTimeStep);
     addCommand(interp,"setCreep", &Tcl_ops_setCreep);
     addCommand(interp,"eleResponse", &Tcl_ops_eleResponse);
     addCommand(interp,"sp", &Tcl_ops_SP);

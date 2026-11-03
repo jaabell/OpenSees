@@ -424,6 +424,7 @@ using namespace OpenSees::Hash::literals;
 #include "CentralDifference.h"
 #include "CentralDifferenceAlternative.h"
 #include "CentralDifferenceNoDamping.h"
+#include "CentralDifferenceLadruno.h"
 #include "Collocation.h"
 #include "CollocationHSFixedNumIter.h"
 #include "CollocationHSIncrLimit.h"
@@ -1810,6 +1811,9 @@ TclPackageClassBroker::getNewTransientIntegrator(int classTag)
 
   case INTEGRATOR_TAGS_CentralDifferenceNoDamping:
     return new CentralDifferenceNoDamping(); // must recvSelf
+
+  case INTEGRATOR_TAGS_CentralDifferenceLadruno:
+    return new CentralDifferenceLadruno(); // must recvSelf
 
   case INTEGRATOR_TAGS_Collocation:
     return new Collocation();

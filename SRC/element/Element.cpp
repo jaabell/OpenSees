@@ -693,6 +693,13 @@ Element::addResistingForceToNodalReaction(int flag)
   return result;
 }
 
+// Default: no self-reported explicit critical time step; the per-element
+// eigensolve governs.
+double Element::getExplicitCriticalTimeStep(void)
+{
+  return -1.0;
+}
+
 double Element::getCharacteristicLength(void)
 {
   int numNodes = this->getNumExternalNodes();

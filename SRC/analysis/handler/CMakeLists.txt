@@ -19,6 +19,7 @@ target_sources(OPS_Analysis
       LagrangeConstraintHandler.h
       TransformationConstraintHandler.h 
       AutoConstraintHandler.h
+      LadrunoProjectionConsumer.h
 )
 
 target_include_directories(OPS_Analysis PUBLIC ${CMAKE_CURRENT_LIST_DIR})
