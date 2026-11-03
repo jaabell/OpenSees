@@ -121,6 +121,48 @@ void* OPS_FourNodeTetrahedron()
     return the_new_element_ptr;
 }
 
+// Interim alias so models exported by STKO run unchanged:
+//   element ASDTet $tag $n1 $n2 $n3 $n4 $matTag <-corotational>
+// Same node order as FourNodeTetrahedron. -corotational is not supported.
+void* OPS_ASDTet()
+{
+    if (OPS_GetNumRemainingInputArgs() < 6)
+    {
+      opserr << "WARNING insufficient arguments\n";
+      opserr << "Want: element ASDTet eleTag? Node1? Node2? Node3? Node4? matTag?\n";
+      return 0;
+    }
+
+    int idata[6];
+    int num = 6;
+    if (OPS_GetIntInput(&num, idata) < 0)
+    {
+      opserr << "WARNING: invalid integer data -- element ASDTet\n";
+      return 0;
+    }
+
+    while (OPS_GetNumRemainingInputArgs() > 0)
+    {
+        const char* type = OPS_GetString();
+        if (strcmp(type, "-corotational") == 0)
+            opserr << "WARNING element ASDTet " << idata[0] << ": -corotational is not supported (ASDTet is an alias of FourNodeTetrahedron, small strains only)\n";
+        else
+            opserr << "WARNING element ASDTet " << idata[0] << ": unknown option " << type << "\n";
+        return 0;
+    }
+
+    NDMaterial* mat = OPS_getNDMaterial(idata[5]);
+    if (mat == 0)
+    {
+      opserr << "WARNING material not found\n";
+      opserr << "material tag: " << idata[5];
+      opserr << "\nASDTet element: " << idata[0] << endln;
+      return 0;
+    }
+
+    return new FourNodeTetrahedron(idata[0], idata[1], idata[2], idata[3], idata[4], *mat, 0.0, 0.0, 0.0, false);
+}
+
 void* OPS_FourNodeTetrahedron(const ID& info)
 {
     if (info.Size() == 0) {

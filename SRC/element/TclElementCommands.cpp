@@ -182,6 +182,8 @@ extern void *OPS_DistributingCoupling(void);
 extern void *OPS_ASDEmbeddedNodeElementTet10(void);
 extern void *OPS_FourNodeTetrahedron(void);
 extern void *OPS_TenNodeTetrahedron(void);
+extern void *OPS_ASDTet(void);
+extern void *OPS_ASDTet10(void);
 extern void *OPS_TenNodeTetrahedronStd(void);
 extern void *OPS_TenNodeTetrahedronThermal(void);
 extern void *OPS_ThermalBoundaryTri6(void);
@@ -1553,6 +1555,29 @@ TclModelBuilderElementCommand(ClientData clientData, Tcl_Interp *interp,
       }
 
   }
+  
+  else if (strcmp(argv[1], "ASDTet") == 0) {
+      void *theEle = OPS_ASDTet();
+      if (theEle != 0) {
+    theElement = (Element*)theEle;
+      } else {
+    opserr<<"tclelementcommand -- unable to create element of type : "
+    <<argv[1]<<endln;
+    return TCL_ERROR;
+      }
+  }
+
+  else if (strcmp(argv[1], "ASDTet10") == 0) {
+      void *theEle = OPS_ASDTet10();
+      if (theEle != 0) {
+    theElement = (Element*)theEle;
+      } else {
+    opserr<<"tclelementcommand -- unable to create element of type : "
+    <<argv[1]<<endln;
+    return TCL_ERROR;
+      }
+  }
+
   else if (strcmp(argv[1], "TenNodeTetrahedronStd") == 0) {
       void *theEle = OPS_TenNodeTetrahedronStd();
       if (theEle != 0) 

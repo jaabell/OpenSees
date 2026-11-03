@@ -132,6 +132,51 @@ void* OPS_TenNodeTetrahedronStd()
     return parseTenNodeTetrahedron("TenNodeTetrahedronStd", true);
 }
 
+// Interim alias so models exported by STKO run unchanged:
+//   element ASDTet10 $tag $n1 ... $n10 $matTag <-corotational>
+// STKO writes the mid-edge nodes as 5=(1,2) 6=(2,3) 7=(3,1) 8=(1,4) 9=(2,4) 10=(3,4),
+// which is TenNodeTetrahedron's (gmsh) order with nodes 9 and 10 swapped.
+// -corotational is not supported.
+void* OPS_ASDTet10()
+{
+    if (OPS_GetNumRemainingInputArgs() < 12)
+    {
+        opserr << "WARNING insufficient arguments\n";
+        opserr << "Want: element ASDTet10 eleTag? Node1? ... Node10? matTag?\n";
+        return 0;
+    }
+
+    int idata[12];
+    int num = 12;
+    if (OPS_GetIntInput(&num, idata) < 0)
+    {
+        opserr << "WARNING: invalid integer data -- element ASDTet10\n";
+        return 0;
+    }
+
+    while (OPS_GetNumRemainingInputArgs() > 0)
+    {
+        const char* type = OPS_GetString();
+        if (strcmp(type, "-corotational") == 0)
+            opserr << "WARNING element ASDTet10 " << idata[0] << ": -corotational is not supported (ASDTet10 is an alias of TenNodeTetrahedron, small strains only)\n";
+        else
+            opserr << "WARNING element ASDTet10 " << idata[0] << ": unknown option " << type << "\n";
+        return 0;
+    }
+
+    NDMaterial* mat = OPS_getNDMaterial(idata[11]);
+    if (mat == 0)
+    {
+        opserr << "WARNING material not found\n";
+        opserr << "material tag: " << idata[11];
+        opserr << "\nASDTet10 element: " << idata[0] << endln;
+        return 0;
+    }
+
+    // STKO order -> gmsh order: swap nodes 9 and 10
+    return new TenNodeTetrahedron(idata[0], idata[1], idata[2], idata[3], idata[4], idata[5], idata[6], idata[7], idata[8], idata[10], idata[9], *mat, 0.0, 0.0, 0.0, false, false);
+}
+
 void* OPS_TenNodeTetrahedron(const ID& info)
 {
     if (info.Size() == 0) {
