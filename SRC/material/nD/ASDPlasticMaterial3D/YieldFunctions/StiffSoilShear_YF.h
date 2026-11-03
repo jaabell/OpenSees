@@ -33,7 +33,7 @@
 #include "../AllASDModelParameterTypes.h"
 
 
-double cot(double th){ return std::cos(th) / std::sin(th);};
+inline double cot(double th){ return std::cos(th) / std::sin(th);}
 
 
 template<class EpsQpShearType>
