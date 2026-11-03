@@ -185,7 +185,7 @@ ElasticTimoshenkoBeam3d::ElasticTimoshenkoBeam3d(int tag, int Nd1, int Nd2,
     connectedExternalNodes(2), theCoordTransf(0), E(e), G(g), A(a), Jx(jx),
     Iy(iy), Iz(iz), Avy(avy), Avz(avz), rho(r), cMass(cm), nlGeo(gnl), phiY(0.0),
     phiZ(0.0), L(0.0), ul(12), ql(12), ql0(12), kl(12,12), klgeo(12,12),
-    Tgl(12,12), Ki(12,12), M(12,12), theLoad(12)
+    Tgl(12,12), Ki(12,12), M(12,12), theLoad(12), useBasic(true), kb(6,6), kgb(6,6), qb(6), q0b(6), p0b(5)
 {
     // ensure the connectedExternalNode ID is of correct size & set values
     if (connectedExternalNodes.Size() != 2)  {
@@ -239,7 +239,7 @@ ElasticTimoshenkoBeam3d::ElasticTimoshenkoBeam3d(int tag, int Nd1, int Nd2,
     Iy(0.0), Iz(0.0), Avy(0.0), Avz(0.0),      
     rho(r), cMass(cm), nlGeo(gnl), phiY(0.0),
     phiZ(0.0), L(0.0), ul(12), ql(12), ql0(12), kl(12,12), klgeo(12,12),
-    Tgl(12,12), Ki(12,12), M(12,12), theLoad(12)
+    Tgl(12,12), Ki(12,12), M(12,12), theLoad(12), useBasic(true), kb(6,6), kgb(6,6), qb(6), q0b(6), p0b(5)
 {
   // Try to find E in the section
   const char *argv[1] = {"E"};
@@ -330,7 +330,7 @@ ElasticTimoshenkoBeam3d::ElasticTimoshenkoBeam3d()
     connectedExternalNodes(2), theCoordTransf(0), E(0.0), G(0.0), A(0.0),
     Jx(0.0), Iy(0.0), Iz(0.0), Avy(0.0), Avz(0.0), rho(0.0), cMass(0),
     nlGeo(0), phiY(0.0), phiZ(0.0), L(0.0), ul(12), ql(12), ql0(12),
-    kl(12,12), klgeo(12,12), Tgl(12,12), Ki(12,12), M(12,12), theLoad(12)
+    kl(12,12), klgeo(12,12), Tgl(12,12), Ki(12,12), M(12,12), theLoad(12), useBasic(true), kb(6,6), kgb(6,6), qb(6), q0b(6), p0b(5)
 {
     // ensure the connectedExternalNode ID is of correct size & set values
     if (connectedExternalNodes.Size() != 2)  {
@@ -449,9 +449,10 @@ int ElasticTimoshenkoBeam3d::commitState()
     // commit the base class
     errCode += this->Element::commitState();
     
-    // no need to commit coordinate transformation
-    // since it is only used to get type of transf
-    // errCode += theCoordTransf->commitState();
+    // a Corotational transformation is history dependent; the local path
+    // only reads the axes of the transformation
+    if (useBasic)
+        errCode += theCoordTransf->commitState();
     
     return errCode;
 }
@@ -459,24 +460,64 @@ int ElasticTimoshenkoBeam3d::commitState()
 
 int ElasticTimoshenkoBeam3d::revertToLastCommit()
 {
-    return 0;
+    return useBasic ? theCoordTransf->revertToLastCommit() : 0;
 }
 
 
 int ElasticTimoshenkoBeam3d::revertToStart()
 {
-    return 0;
+    return useBasic ? theCoordTransf->revertToStart() : 0;
 }
 
 
 int ElasticTimoshenkoBeam3d::update()
 {
-    return 0;
+    return useBasic ? theCoordTransf->update() : 0;
+}
+
+
+void ElasticTimoshenkoBeam3d::formBasic()
+{
+    // split the local fixed end forces into basic forces q0b and the five
+    // reactions p0b of the transformation, which rebuild ql0 exactly in
+    // CrdTransf::getGlobalResistingForce
+    q0b(0) = ql0(6);
+    q0b(1) = ql0(5);
+    q0b(2) = ql0(11);
+    q0b(3) = ql0(4);
+    q0b(4) = ql0(10);
+    q0b(5) = ql0(9);
+    double vy = (ql0(5) + ql0(11))/L;
+    double vz = (ql0(4) + ql0(10))/L;
+    p0b(0) = ql0(0) + ql0(6);
+    p0b(1) = ql0(1) - vy;
+    p0b(2) = ql0(7) + vy;
+    p0b(3) = ql0(2) + vz;
+    p0b(4) = ql0(8) - vz;
+
+    const Vector &ub = theCoordTransf->getBasicTrialDisp();
+    qb.addMatrixVector(0.0, kb, ub, 1.0);
+    qb.addVector(1.0, q0b, 1.0);
+
+    // P-delta moments of the -geomNonlinear option
+    if (nlGeo == 1 && qb(0) != 0.0)
+        qb.addMatrixVector(1.0, kgb, ub, qb(0));
 }
 
 
 const Matrix& ElasticTimoshenkoBeam3d::getTangentStiff()
 {
+    if (useBasic)  {
+        this->formBasic();
+        if (nlGeo == 1 && qb(0) != 0.0)  {
+            static Matrix kbTot(6,6);
+            kbTot = kb;
+            kbTot.addMatrix(1.0, kgb, qb(0));
+            return theCoordTransf->getGlobalStiffMatrix(kbTot, qb);
+        }
+        return theCoordTransf->getGlobalStiffMatrix(kb, qb);
+    }
+
     // zero the matrix
     theMatrix.Zero();
     
@@ -601,6 +642,14 @@ int ElasticTimoshenkoBeam3d::addInertiaLoadToUnbalance(const Vector &accel)
 
 const Vector& ElasticTimoshenkoBeam3d::getResistingForce()
 {
+    if (useBasic)  {
+        this->formBasic();
+        theVector = theCoordTransf->getGlobalResistingForce(qb, p0b);
+        if (rho != 0.0)
+            theVector.addVector(1.0, theLoad, -1.0);
+        return theVector;
+    }
+
     // zero the residual
     theVector.Zero();
     
@@ -672,7 +721,7 @@ int ElasticTimoshenkoBeam3d::sendSelf(int commitTag, Channel &sChannel)
 {
     int res = 0;
     
-    static Vector data(19);
+    static Vector data(20);
     data(0) = this->getTag();
     data(1) = connectedExternalNodes(0);
     data(2) = connectedExternalNodes(1);
@@ -699,6 +748,7 @@ int ElasticTimoshenkoBeam3d::sendSelf(int commitTag, Channel &sChannel)
             theCoordTransf->setDbTag(dbTag);
     }
     data(18) = dbTag;
+    data(19) = nlGeo;
     
     // send the data vector
     res += sChannel.sendVector(this->getDbTag(), commitTag, data);
@@ -723,7 +773,7 @@ int ElasticTimoshenkoBeam3d::recvSelf(int commitTag, Channel &rChannel,
 {
     int res = 0;
     
-    static Vector data(19);
+    static Vector data(20);
     res += rChannel.recvVector(this->getDbTag(), commitTag, data);
     if (res < 0) {
         opserr << "ElasticTimoshenkoBeam3d::recvSelf() - could not receive data Vector.\n";
@@ -777,18 +827,8 @@ int ElasticTimoshenkoBeam3d::recvSelf(int commitTag, Channel &rChannel,
         return res;
     }
     
-    // get coordinate transformation type and save flag
-    if (strncmp(theCoordTransf->getClassType(),"Linear",6) == 0)  {
-        nlGeo = 0;
-    } else if (strncmp(theCoordTransf->getClassType(),"PDelta",6) == 0)  {
-        nlGeo = 1;
-    } else if (strncmp(theCoordTransf->getClassType(),"Corot",5) == 0)  {
-        nlGeo = 1;
-        opserr << "\nWARNING ElasticTimoshenkoBeam3d::recvSelf()"
-            << " - Element: " << this->getTag() << endln
-            << "Unsupported Corotational transformation assigned.\n"
-            << "Using PDelta transformation instead.\n";
-    }
+    // the flag is the -geomNonlinear option given to the constructor
+    nlGeo = (int)data(19);
     
     // revert the CoordTransf to its last committed state
     theCoordTransf->revertToLastCommit();
@@ -914,7 +954,23 @@ int ElasticTimoshenkoBeam3d::getResponse (int responseID, Information &eleInfo)
 	    this->getResistingForce();
         theVector.Zero();
         // determine resisting forces in local system
-        theVector = ql;
+        if (useBasic)  {
+            double vy = (qb(1) + qb(2))/L;
+            double vz = (qb(3) + qb(4))/L;
+            theVector(0)  = -qb(0) + p0b(0);
+            theVector(1)  = vy + p0b(1);
+            theVector(2)  = -vz + p0b(3);
+            theVector(3)  = -qb(5);
+            theVector(4)  = qb(3);
+            theVector(5)  = qb(1);
+            theVector(6)  = qb(0);
+            theVector(7)  = -vy + p0b(2);
+            theVector(8)  = vz + p0b(4);
+            theVector(9)  = qb(5);
+            theVector(10) = qb(4);
+            theVector(11) = qb(2);
+        } else
+            theVector = ql;
         
         return eleInfo.setVector(theVector);
     
@@ -1096,8 +1152,53 @@ void ElasticTimoshenkoBeam3d::setUp()
         klgeo(5,7) = klgeo(7,5) = klgeo(7,11) = klgeo(11,7) = -klgeo(1,5);
     }
     
+    // The local path with its full geometric matrix is kept only for
+    // -geomNonlinear with a Linear transformation. Every other combination
+    // works in the basic system, so the transformation supplies the rigid end
+    // offsets, the chord P-Delta stiffness and the corotational kinematics.
+    useBasic = !(nlGeo == 1 && strncmp(theCoordTransf->getClassType(),"Linear",6) == 0);
+
+    // the local path has no rigid arms: an offset that changes the length is
+    // detectable here, an offset that does not change it is not
+    if (!useBasic)  {
+        Vector dx(theNodes[1]->getCrds());
+        dx.addVector(1.0, theNodes[0]->getCrds(), -1.0);
+        if (fabs(dx.Norm() - L) > 1.0e-10*L)
+            opserr << "WARNING ElasticTimoshenkoBeam3d::setUp() - element: " << this->getTag()
+                << " - -geomNonlinear with a Linear transformation ignores -jntOffset.\n";
+    }
+
+    // basic stiffness [N, Mz1, Mz2, My1, My2, T]
+    kb.Zero();
+    kb(0,0) = E*A/L;
+    double cz = E*Iz/(L*(1.0 + phiZ));
+    kb(1,1) = kb(2,2) = cz*(4.0 + phiZ);
+    kb(1,2) = kb(2,1) = cz*(2.0 - phiZ);
+    double cy = E*Iy/(L*(1.0 + phiY));
+    kb(3,3) = kb(4,4) = cy*(4.0 + phiY);
+    kb(3,4) = kb(4,3) = cy*(2.0 - phiY);
+    kb(5,5) = G*Jx/L;
+
+    // basic P-delta matrix per unit axial force: klgeo less its chord part
+    // N/L, which belongs to the transformation
+    kgb.Zero();
+    if (nlGeo == 1)  {
+        double gz = L/(30.0*pow(1.0 + phiZ,2));
+        kgb(1,1) = kgb(2,2) = gz*(2.5*phiZ*phiZ + 5.0*phiZ + 4.0);
+        kgb(1,2) = kgb(2,1) = -gz*(2.5*phiZ*phiZ + 5.0*phiZ + 1.0);
+        double gy = L/(30.0*pow(1.0 + phiY,2));
+        kgb(3,3) = kgb(4,4) = gy*(2.5*phiY*phiY + 5.0*phiY + 4.0);
+        kgb(3,4) = kgb(4,3) = -gy*(2.5*phiY*phiY + 5.0*phiY + 1.0);
+    }
+
     // compute initial stiffness matrix in global system
-    Ki.addMatrixTripleProduct(0.0, Tgl, kl, 1.0);
+    if (useBasic)  {
+        // CorotCrdTransf3d keeps T in a class wide matrix, filled only by its
+        // update(): without this call Ki is built from another element's T
+        theCoordTransf->update();
+        Ki = theCoordTransf->getInitialGlobalStiffMatrix(kb);
+    } else
+        Ki.addMatrixTripleProduct(0.0, Tgl, kl, 1.0);
     
     // compute mass matrix in global system
     M.Zero();
