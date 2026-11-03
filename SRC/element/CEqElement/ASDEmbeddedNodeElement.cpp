@@ -185,6 +185,38 @@ namespace
             lz = DL(2);
         }
 
+        // 10-node quadratic tetrahedron shape functions, gmsh node ordering
+        // (TenNodeTetrahedron's default, non-"Std", numbering: node 9 on
+        // edge 3-4, node 10 on edge 2-4 -- see TenNodeTetrahedron::shp3d).
+        // (lx,ly,lz) are the SAME linear-tet natural coordinates the 4-node
+        // TET_3D_* functions already compute from the host's 4 corners
+        // (R-nodes 1-4): for a straight-sided element (mid-edge nodes at
+        // the geometric edge midpoint, which is what every FE mesher
+        // produces -- no curved geometry), the quadratic element's
+        // GEOMETRIC map collapses algebraically to the same affine map as
+        // the linear tet4, so no Newton iteration is needed to invert it;
+        // only the DISPLACEMENT field (what this element ties the
+        // constrained node to) is quadratic.
+        double shapeFun10(double lx, double ly, double lz, int i) {
+            double L1 = 1.0 - lx - ly - lz;
+            double L2 = lx;
+            double L3 = ly;
+            double L4 = lz;
+            switch (i) {
+            case 0: return L1 * (2.0 * L1 - 1.0);
+            case 1: return L2 * (2.0 * L2 - 1.0);
+            case 2: return L3 * (2.0 * L3 - 1.0);
+            case 3: return L4 * (2.0 * L4 - 1.0);
+            case 4: return 4.0 * L1 * L2; // edge 1-2
+            case 5: return 4.0 * L2 * L3; // edge 2-3
+            case 6: return 4.0 * L1 * L3; // edge 1-3
+            case 7: return 4.0 * L1 * L4; // edge 1-4
+            case 8: return 4.0 * L3 * L4; // edge 3-4 (node 9, gmsh)
+            case 9: return 4.0 * L2 * L4; // edge 2-4 (node 10, gmsh)
+            default: return 0.0;
+            }
+        }
+
     }
 
 }
@@ -285,6 +317,84 @@ OPS_ASDEmbeddedNodeElement(void)
         return new ASDEmbeddedNodeElement(iData[0], iData[1], iData[2], iData[3], iData[4], rot, pressure, K, KP);
 }
 
+// Separate command (same pattern as TenNodeTetrahedron / TenNodeTetrahedronStd
+// being two commands rather than a flag) so the mandatory-argument count
+// (tag, Cnode, 10 retained nodes = 12 ints) never has to be disambiguated
+// from the 3/4-node form's fixed-position parsing above -- no token
+// peek/rewind, so no risk of silently misreading one as the other, which
+// is exactly the kind of bug that cost a long debugging session on the
+// hex-host case this element's node-count dispatch used to mishandle.
+void*
+OPS_ASDEmbeddedNodeElementTet10(void)
+{
+    const char* descr = "Want: element ASDEmbeddedNodeElementTet10 $tag $Cnode $Rnode1 ... $Rnode10 <-K $K>\n"
+        "  (gmsh tet10 node ordering: 4 corners, then mid-edge nodes\n"
+        "   5=(1,2) 6=(2,3) 7=(1,3) 8=(1,4) 9=(3,4) 10=(2,4) -- matching\n"
+        "   TenNodeTetrahedron's default, non-\"Std\", numbering. -rot and\n"
+        "   -p are not supported for this host yet.)\n";
+
+    int numArgs = OPS_GetNumRemainingInputArgs();
+    if (numArgs < 12) {
+        opserr << "ASDEmbeddedNodeElementTet10 ERROR : Few arguments:\n" << descr;
+        return 0;
+    }
+
+    int iData[12];
+    int numData = 12;
+    if (OPS_GetInt(&numData, iData) != 0) {
+        opserr << "ASDEmbeddedNodeElementTet10 ERROR: Invalid integer mandatory values: wants 12 integer parameters (tag, Cnode, 10 retained nodes)\n" << descr;
+        return 0;
+    }
+
+    double K = 1.0e18;
+    double KP = 1.0e18;
+    bool KP_set = false;
+    for (int i = 12; i < numArgs; i++) {
+        const char* what = OPS_GetString();
+        if (strcmp(what, "-K") == 0) {
+            if (i == numArgs - 1) {
+                opserr << "ASDEmbeddedNodeElementTet10 ERROR: The -K keyword should be followed by a floating point number.\n" << descr;
+                return 0;
+            }
+            ++i;
+            numData = 1;
+            if (OPS_GetDouble(&numData, &K) != 0) {
+                opserr << "ASDEmbeddedNodeElementTet10 ERROR invalid floating point number for -K keyword.\n";
+                return 0;
+            }
+        }
+        else if (strcmp(what, "-KP") == 0) {
+            if (i == numArgs - 1) {
+                opserr << "ASDEmbeddedNodeElementTet10 ERROR: The -KP keyword should be followed by a floating point number.\n" << descr;
+                return 0;
+            }
+            ++i;
+            numData = 1;
+            if (OPS_GetDouble(&numData, &KP) != 0) {
+                opserr << "ASDEmbeddedNodeElementTet10 ERROR invalid floating point number for -KP keyword.\n";
+                return 0;
+            }
+            KP_set = true;
+        }
+        else if (strcmp(what, "-rot") == 0 || strcmp(what, "-p") == 0) {
+            opserr << "ASDEmbeddedNodeElementTet10 ERROR: -rot and -p are not supported for this host yet.\n" << descr;
+            return 0;
+        }
+        else {
+            opserr << "ASDEmbeddedNodeElementTet10 ERROR: unrecognized option '" << what << "'.\n" << descr;
+            return 0;
+        }
+    }
+    if (!KP_set)
+        KP = K;
+
+    ID rNodes(10);
+    for (int i = 0; i < 10; ++i)
+        rNodes(i) = iData[2 + i];
+
+    return new ASDEmbeddedNodeElement(iData[0], iData[1], rNodes, false, false, K, KP);
+}
+
 ASDEmbeddedNodeElement::ASDEmbeddedNodeElement() 
     : Element(0, ELE_TAG_ASDEmbeddedNodeElement)
 {
@@ -319,6 +429,24 @@ ASDEmbeddedNodeElement::ASDEmbeddedNodeElement(int tag, int cNode, int rNode1, i
     m_node_ids(3) = rNode3;
     m_node_ids(4) = rNode4;
     m_nodes.resize(5, nullptr);
+}
+
+ASDEmbeddedNodeElement::ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNodesTet10, bool rot_flag, bool p_flag, double K, double KP)
+    : Element(tag, ELE_TAG_ASDEmbeddedNodeElement)
+    , m_rot_c_flag(rot_flag)
+    , m_p_flag(p_flag)
+    , m_K(K)
+    , m_KP(KP)
+{
+    if (rNodesTet10.Size() != 10) {
+        opserr << "ASDEmbeddedNodeElement Error: the 10-node tetrahedron host constructor needs exactly 10 retained node ids, got " << rNodesTet10.Size() << "\n";
+        exit(-1);
+    }
+    m_node_ids.resize(11);
+    m_node_ids(0) = cNode;
+    for (int i = 0; i < 10; ++i)
+        m_node_ids(1 + i) = rNodesTet10(i);
+    m_nodes.resize(11, nullptr);
 }
 
 ASDEmbeddedNodeElement::~ASDEmbeddedNodeElement( )
@@ -568,8 +696,8 @@ const Matrix& ASDEmbeddedNodeElement::getTangentStiff()
                 }
             }
         }
-        else {
-            // support shape is a tetrahedron ...
+        else if (m_nodes.size() == 5) {
+            // support shape is a 4-node (linear) tetrahedron ...
             if (m_rot_c) {
                 // ... with rotational dofs
                 return TET_3D_UR();
@@ -582,6 +710,22 @@ const Matrix& ASDEmbeddedNodeElement::getTangentStiff()
                 // ... without rotational dofs
                 return TET_3D_U();
             }
+        }
+        else if (m_nodes.size() == 11) {
+            // support shape is a 10-node (quadratic) tetrahedron ...
+            if (m_rot_c || m_up) {
+                // ... UR/UP variants not implemented for this host yet
+                opserr << "ASDEmbeddedNodeElement Error: the 10-node tetrahedron host does not support -rot or -p (U-only)\n";
+                exit(-1);
+            }
+            return TET10_3D_U();
+        }
+        else {
+            // anything else is unsupported: FAIL LOUDLY rather than
+            // silently reading a wrong subset of the retained nodes (the
+            // very bug this host-count dispatch exists to prevent).
+            opserr << "ASDEmbeddedNodeElement Error: unsupported number of retained nodes (" << (m_nodes.size() - 1) << "); expected 3 (triangle), 4 (tetrahedron) or 10 (quadratic tetrahedron)\n";
+            exit(-1);
         }
     };
     const Matrix& KL = compute_local();
@@ -658,7 +802,7 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // INT data
     // tag
     // number of nodes
-    // 5 nodal ids (the last one is 0 if number of nodes = 4)
+    // up to 11 nodal ids (1 constrained + up to 10 retained; unused slots left 0)
     // ndm
     // num_dofs
     // rot_c_flag
@@ -666,28 +810,24 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // p_flag
     // up
     // U0_computed
-    // number of local dofs (at most 20)
-    // mapping of local dofs (if less then 20, the last ones will be set to 0)
-    static ID idData(35);
+    // number of local dofs
+    // mapping of local dofs
+    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
     idData.Zero();
     idData(0) = getTag();
     idData(1) = m_node_ids.Size();
-    idData(2) = m_node_ids(0);
-    idData(3) = m_node_ids(1);
-    idData(4) = m_node_ids(2);
-    idData(5) = m_node_ids(3);
-    if (m_node_ids.Size() == 5)
-        idData(6) = m_node_ids(4);
-    idData(7) = m_ndm;
-    idData(8) = m_num_dofs;
-    idData(9) = m_rot_c_flag ? 1 : 0;
-    idData(10) = m_rot_c ? 1 : 0;
-    idData(11) = m_p_flag ? 1 : 0;
-    idData(12) = m_up ? 1 : 0;
-    idData(13) = m_U0_computed ? 1 : 0;
-    idData(14) = m_mapping.Size();
+    for (int i = 0; i < m_node_ids.Size(); ++i)
+        idData(2 + i) = m_node_ids(i);
+    idData(13) = m_ndm;
+    idData(14) = m_num_dofs;
+    idData(15) = m_rot_c_flag ? 1 : 0;
+    idData(16) = m_rot_c ? 1 : 0;
+    idData(17) = m_p_flag ? 1 : 0;
+    idData(18) = m_up ? 1 : 0;
+    idData(19) = m_U0_computed ? 1 : 0;
+    idData(20) = m_mapping.Size();
     for (int i = 0; i < m_mapping.Size(); ++i)
-        idData(14 + i) = m_mapping(i);
+        idData(21 + i) = m_mapping(i);
     res += theChannel.sendID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::sendSelf() - " << this->getTag() << " failed to send ID\n";
@@ -697,8 +837,8 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // DOUBLE data
     // K
     // KP
-    // initial displacement (at most we can have 30 dofs)
-    static Vector vectData(32);
+    // initial displacement (at most 11 nodes x 6 dofs = 66)
+    static Vector vectData(2 + 66);
     vectData.Zero();
     vectData(0) = m_K;
     vectData(1) = m_KP;
@@ -720,20 +860,8 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
 
     int dataTag = this->getDbTag();
 
-    // INT data
-    // tag
-    // number of nodes
-    // 5 nodal ids (the last one is 0 if number of nodes = 4)
-    // ndm
-    // num_dofs
-    // rot_c_flag
-    // rot_c
-    // p_flag
-    // up
-    // U0_computed
-    // number of local dofs (at most 20)
-    // mapping of local dofs (if less then 20, the last ones will be set to 0)
-    static ID idData(35);
+    // INT data: see sendSelf() for the layout
+    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::recvSelf() - " << this->getTag() << " failed to receive ID\n";
@@ -744,28 +872,24 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
     int num_nodes = idData(1);
     m_node_ids.resize(num_nodes);
     m_nodes.resize(static_cast<std::size_t>(num_nodes), nullptr);
-    m_node_ids(0) = idData(2);
-    m_node_ids(1) = idData(3);
-    m_node_ids(2) = idData(4);
-    m_node_ids(3) = idData(5);
-    if (m_node_ids.Size() == 5)
-        m_node_ids(4) = idData(6);
-    m_ndm = idData(7);
-    m_num_dofs = idData(8);
-    m_rot_c_flag = idData(9) == 1;
-    m_rot_c = idData(10) == 1;
-    m_p_flag = idData(11) == 1;
-    m_up = idData(12) == 1;
-    m_U0_computed = idData(13) == 1;
-    int num_local_dofs = idData(14);
+    for (int i = 0; i < num_nodes; ++i)
+        m_node_ids(i) = idData(2 + i);
+    m_ndm = idData(13);
+    m_num_dofs = idData(14);
+    m_rot_c_flag = idData(15) == 1;
+    m_rot_c = idData(16) == 1;
+    m_p_flag = idData(17) == 1;
+    m_up = idData(18) == 1;
+    m_U0_computed = idData(19) == 1;
+    int num_local_dofs = idData(20);
     m_mapping.resize(num_local_dofs);
     for (int i = 0; i < m_mapping.Size(); ++i)
-        m_mapping(i) = idData(14 + i);
+        m_mapping(i) = idData(21 + i);
 
     // DOUBLE data
     // K
     // KP
-    static Vector vectData(32);
+    static Vector vectData(2 + 66);
     res += theChannel.recvVector(dataTag, commitTag, vectData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::sendSelf() - " << this->getTag() << " failed to receive Vector\n";
@@ -1434,6 +1558,73 @@ const Matrix& ASDEmbeddedNodeElement::TET_3D_UP()
 
     // compute stiffness
     K.addMatrixTripleProduct(0.0, B, C, 1.0);
+
+    // done
+    return K;
+}
+
+const Matrix& ASDEmbeddedNodeElement::TET10_3D_U()
+{
+    // 10-node quadratic tetrahedron host. Translational DOFs only (no -rot,
+    // no -p: see the dispatch in getTangentStiff()). Same penalty-constraint
+    // pattern as TET_3D_U(), just with 10 retained nodes and quadratic
+    // shape-function weights instead of 4 linear ones.
+
+    // output: 3 (C-node) + 10*3 (R-nodes) = 33
+    static Matrix K(33, 33);
+
+    // the host's 4 CORNER nodes (R-nodes 1-4, i.e. m_nodes[1..4]) define
+    // the affine geometric map -- same as the linear tet4 case, and exact
+    // for the straight-sided (non-curved) elements any mesher produces.
+    static Matrix X(3, 4);
+    for (int i = 1; i < 5; i++) {
+        const Node* node = m_nodes[static_cast<std::size_t>(i)];
+        X(0, i - 1) = node->getCrds()(0);
+        X(1, i - 1) = node->getCrds()(1);
+        X(2, i - 1) = node->getCrds()(2);
+    }
+
+    // shape functions natural derivatives (linear tet4, for the Jacobian)
+    static Matrix dN(4, 3);
+    tet::shapeFunDer(dN);
+
+    // jacobian (of the 4-corner affine map)
+    static Matrix J(3, 3);
+    J.addMatrixProduct(0.0, X, dN, 1.0);
+    double detJ = det3(J);
+    double V = detJ / 6.0;
+    static Matrix invJ(3, 3);
+    J.Invert(invJ);
+
+    // find local (natural) coordinates of the constrained node, from the
+    // 4 corners only -- exact for a straight-sided element, see the
+    // tet::shapeFun10() comment above
+    double lx, ly, lz;
+    tet::localCoord(X, invJ, m_nodes[0]->getCrds()(0), m_nodes[0]->getCrds()(1), m_nodes[0]->getCrds()(2), lx, ly, lz);
+
+    // compute the 10 quadratic shape functions at that point
+    static Vector N(10);
+    for (int i = 0; i < 10; ++i)
+        N(i) = tet::shapeFun10(lx, ly, lz, i);
+
+    // compute B matrix
+    // UCx = sum(N*URx) -> sum(N*URx) - UCx = 0 (and so on for Uy, Uz)
+    static Matrix B(3, 33);
+    B.Zero();
+    for (int i = 0; i < 3; i++)
+        B(i, i) = -1.0;
+    for (int i = 0; i < 10; i++) {
+        int j = 3 + i * 3;
+        B(0, j) = N(i);
+        B(1, j + 1) = N(i);
+        B(2, j + 2) = N(i);
+    }
+
+    // Penalty stiffness
+    double iK = m_K * std::cbrt(V);
+
+    // compute stiffness
+    K.addMatrixTransposeProduct(0.0, B, B, iK);
 
     // done
     return K;

@@ -46,6 +46,14 @@ public:
     ASDEmbeddedNodeElement();
     ASDEmbeddedNodeElement(int tag, int cNode, int rNode1, int rNode2, int rNode3, bool rot_flag, bool p_flag, double K, double KP);
     ASDEmbeddedNodeElement(int tag, int cNode, int rNode1, int rNode2, int rNode3, int rNode4, bool rot_flag, bool p_flag, double K, double KP);
+    // 10-node quadratic tetrahedron host (gmsh node ordering: 4 corners,
+    // then mid-edge nodes 5=(1,2) 6=(2,3) 7=(1,3) 8=(1,4) 9=(3,4) 10=(2,4) --
+    // matching TenNodeTetrahedron's default, non-"Std", numbering). Added so
+    // a quadratic soil mesh (less prone to volumetric/shear locking under
+    // near-incompressible plastic flow, e.g. psi=0 Mohr-Coulomb) can embed a
+    // node without the degenerate-tet misparse a plain 4-R-node line would
+    // produce if fed 10 integers.
+    ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNodesTet10, bool rot_flag, bool p_flag, double K, double KP);
     virtual ~ASDEmbeddedNodeElement();
 
     // domain
@@ -94,6 +102,7 @@ private:
     const Matrix& TET_3D_U();
     const Matrix& TET_3D_UR();
     const Matrix& TET_3D_UP();
+    const Matrix& TET10_3D_U();
 
 private:
 
