@@ -126,6 +126,9 @@ class Node : public DomainComponent
     virtual int setNumEigenvectors(int numVectorsToStore);
     virtual int setEigenvector(int mode, const Vector &eigenVector);
     virtual const Matrix &getEigenvectors(void);
+    // number of stored eigenvectors, 0 when none was set (a node outside
+    // the eigen analysis); unlike getEigenvectors() it never exits
+    virtual int getNumEigenvectors(void) const;
     
     // public methods for output
     virtual int sendSelf(int commitTag, Channel &theChannel);
