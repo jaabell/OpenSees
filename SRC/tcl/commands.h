@@ -135,6 +135,27 @@ modalProperties(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** 
 int
 responseSpectrumAnalysis(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
 
+int
+ladrunoContactSurface(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContact(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactPlane(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactInfo(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactForce(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoMortarPenetration(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoMortarTieResidual(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoEdgePenetration(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoBeginAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoEndAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
 int 
 videoPlayer(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
