@@ -102,15 +102,8 @@ public:
                 double g1 = g(SIG1, phi, c);
                 double g2 = g(SIG2, phi, c);
 
-                if (i < 3)
-                {
-                    result(i) = (g1 - g2) / (2*perturbation);
-                }
-                else
-                {
-                    // result(i) = 2 * (g1 - g2) / (2*perturbation);   // Engineering strain
-                    result(i) = (g1 - g2) / (2*perturbation);   // Engineering strain
-                }
+                result(i) = (g1 - g2) / (2*perturbation);
+                if (i >= 3) result(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
             }
             return result;
         };

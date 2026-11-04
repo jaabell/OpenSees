@@ -220,6 +220,7 @@ public:
                 double g2 = plasticPotential(SIG2, psi_m, c);
 
                 result(i) = (g1 - g2) / (2.0 * perturbation); 
+                if (i >= 3) result(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
             }
             return result;
         };

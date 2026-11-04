@@ -50,7 +50,7 @@ struct LinearHardeningForScalarPolicy {
     HARDENING_FUNCTION_DEFINITION 
     {
         double H = GET_PARAMETER_VALUE(ScalarLinearHardeningParameter);
-        double h = H * sqrt((2 * m.dot(m)) / 3);
+        double h = H * sqrt((2 * tensor_dot_stress_like(m, m)) / 3);  // m holds tensor components
         return h;
     }
     using parameters_t = tuple<ScalarLinearHardeningParameter>;
@@ -109,11 +109,12 @@ struct ArmstrongFrederickPolicy {
         auto alpha_dev = alpha.deviator();
 
 
-        auto eq_norm = [](VoigtVector v){  return sqrt((2./3.)*v.squaredNorm());};
+        // m and alpha hold tensor components, depsilon engineering shear (see strain_like)
+        auto eq_norm = [](VoigtVector v){  return sqrt((2./3.)*tensor_dot_stress_like(v, v));};
 
         auto mdev = m.deviator();
         double mdev_eq = eq_norm(mdev);
-        auto dEPS_dev = depsilon.deviator();
+        auto dEPS_dev = tensor_like(depsilon).deviator();
         double dEPS_dev_eq = eq_norm(dEPS_dev);
         double alpha_norm = eq_norm(alpha_dev);
         // double alpha_norm = alpha_dev.norm();

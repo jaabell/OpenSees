@@ -314,7 +314,9 @@ public:
     const Vector &getEQPstrain(void)
     {
         static Vector result(1);
-        result(0) = std::sqrt(2./3.*TrialPlastic_Strain.squaredNorm());
+        // plastic strain holds engineering shear: use its tensor components
+        const VoigtVector epsp = tensor_like(TrialPlastic_Strain);
+        result(0) = std::sqrt(2./3.*tensor_dot_stress_like(epsp, epsp));
         // opserr << "JOSE: getEQPstrain(void) result = " << result << endln;
         return result;
     }
@@ -346,7 +348,7 @@ public:
     const Vector &getJ2Strain(void)
     {
         static Vector result(1);
-        result(0) = TrialStrain.getJ2();
+        result(0) = tensor_like(TrialStrain).getJ2();  // strain holds engineering shear
         // opserr << "JOSE: getJ2Strain(void) result = " << result << endln;
         return result;
     }
@@ -443,9 +445,9 @@ public:
 
             double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
 
-            double den_after_corrector = n.transpose() * Eelastic * m - hardening;
+            double den_after_corrector = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
-            VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
+            VoigtMatrix Econtinuum = Eelastic - (Eelastic * strain_like(m)) * (strain_like(n).transpose() * Eelastic) / den_after_corrector;
             Stiffness = Econtinuum;
         }
         else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Secant)
@@ -457,9 +459,9 @@ public:
 
             double hardening = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
 
-            double den_after_corrector = n.transpose() * Eelastic * m - hardening;
+            double den_after_corrector = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
-            VoigtMatrix Econtinuum = Eelastic - Eelastic * m * (n.transpose() * Eelastic) / den_after_corrector;
+            VoigtMatrix Econtinuum = Eelastic - (Eelastic * strain_like(m)) * (strain_like(n).transpose() * Eelastic) / den_after_corrector;
             Stiffness = (Econtinuum + Eelastic)/2;
         }
     }
@@ -527,7 +529,7 @@ public:
             const VoigtVector& m = pf(depsilon_elpl, intersection_stress, iv_storage, parameters_storage);
 
             double hardening = yf.hardening( depsilon_elpl, m,  intersection_stress, iv_storage, parameters_storage);
-            double den = n.transpose() * Eelastic * m - hardening;
+            double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
             //Compute the plastic multiplier
             if (abs(den) < MACHINE_EPSILON)
@@ -543,7 +545,7 @@ public:
                 return -1;
             }
 
-            double dLambda =  n.transpose() * Eelastic * depsilon_elpl;
+            double dLambda =  strain_like(n).dot(Eelastic * depsilon_elpl);
             dLambda /= den;
 
             if (dLambda <= 0)
@@ -557,7 +559,7 @@ public:
                 dLambda = 0;
             }
 
-            trial_stress = trial_stress - dLambda * Eelastic * m;
+            trial_stress = trial_stress - dLambda * Eelastic * strain_like(m);
         }
 
         stress_incr = trial_stress - CommitStress;
@@ -1387,7 +1389,7 @@ private:
             const VoigtVector& m = pf(depsilon_elpl, intersection_stress, iv_storage, parameters_storage);
 
             double hardening = yf.hardening( depsilon_elpl, m,  intersection_stress, iv_storage, parameters_storage);
-            double den = n.transpose() * Eelastic * m - hardening;
+            double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
             //Compute the plastic multiplier
             if (abs(den) < MACHINE_EPSILON)
@@ -1403,7 +1405,7 @@ private:
                 return -1;
             }
 
-            double dLambda =  n.transpose() * Eelastic * depsilon_elpl;
+            double dLambda =  strain_like(n).dot(Eelastic * depsilon_elpl);
             dLambda /= den;
 
             if (dLambda <= 0)
@@ -1418,7 +1420,7 @@ private:
             }
 
             // Update the trial plastic strain.
-            TrialPlastic_Strain += dLambda * m;
+            TrialPlastic_Strain += dLambda * strain_like(m);
 
             // This code iterates internal variables and updates the trial values
             iv_storage.apply([&m, &dLambda, this](auto & internal_variable)
@@ -1435,7 +1437,7 @@ private:
             // }
 
             //Correct the trial stress
-            TrialStress = TrialStress - dLambda * Eelastic * m;
+            TrialStress = TrialStress - dLambda * Eelastic * strain_like(m);
 
 
             // Returning to Yield surface as recommended by Crisfield...
@@ -1447,10 +1449,10 @@ private:
 
                 double hardening_corr = yf.hardening( depsilon_elpl, m,  TrialStress, iv_storage, parameters_storage);
                 double dLambda_corr = yf_val_corr / (
-                                                     n_corr.transpose() * Eelastic * m_corr - hardening_corr
+                                                     strain_like(n_corr).dot(Eelastic * strain_like(m_corr)) - hardening_corr
                                                  );
-                TrialStress = TrialStress - dLambda_corr * Eelastic * m_corr;
-                TrialPlastic_Strain += dLambda_corr * m_corr;
+                TrialStress = TrialStress - dLambda_corr * Eelastic * strain_like(m_corr);
+                TrialPlastic_Strain += dLambda_corr * strain_like(m_corr);
             }
             else
             {
@@ -1569,7 +1571,7 @@ private:
                 const VoigtVector& m = pf(depsilon_elpl, intersection_stress, iv_storage, parameters_storage);
 
                 double hardening = yf.hardening( depsilon_elpl, m,  intersection_stress, iv_storage, parameters_storage);
-                double den = n.transpose() * Eelastic * m - hardening;
+                double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
                 //Compute the plastic multiplier
                 if (abs(den) < MACHINE_EPSILON)
@@ -1585,7 +1587,7 @@ private:
                     return -1;
                 }
 
-                double dLambda =  n.transpose() * Eelastic * depsilon_elpl;
+                double dLambda =  strain_like(n).dot(Eelastic * depsilon_elpl);
                 dLambda /= den;
 
                 if (dLambda <= 0)
@@ -1594,7 +1596,7 @@ private:
                 }
 
                 // Update the trial plastic strain.
-                TrialPlastic_Strain += dLambda * m;
+                TrialPlastic_Strain += dLambda * strain_like(m);
 
                 // This code iterates internal variables and updates the trial values
                 iv_storage.apply([&m, &dLambda, this](auto & internal_variable)
@@ -1604,7 +1606,7 @@ private:
                 });
 
                 //Correct the trial stress
-                TrialStress = TrialStress - dLambda * Eelastic * m;
+                TrialStress = TrialStress - dLambda * Eelastic * strain_like(m);
             }
 
             // Returning to Yield surface as recommended by Crisfield...
@@ -1616,10 +1618,10 @@ private:
 
                 double hardening_corr = yf.hardening( depsilon_elpl, m_corr,  TrialStress, iv_storage, parameters_storage);
                 double dLambda_corr = yf_val_corr / (
-                                                     n_corr.transpose() * Eelastic * m_corr - hardening_corr
+                                                     strain_like(n_corr).dot(Eelastic * strain_like(m_corr)) - hardening_corr
                                                  );
-                TrialStress = TrialStress - dLambda_corr * Eelastic * m_corr;
-                TrialPlastic_Strain += dLambda_corr * m_corr;
+                TrialStress = TrialStress - dLambda_corr * Eelastic * strain_like(m_corr);
+                TrialPlastic_Strain += dLambda_corr * strain_like(m_corr);
             }
             else
             {
@@ -2117,7 +2119,7 @@ private:
 
             // dΦ/dλ ≈ - n^T E m + H
             // const double dPhi_dLambda = - (n.transpose() * Eelastic * m) + H;
-            const double nEm = tensor_dot_stress_like(n, Eelastic * m);
+            const double nEm = tensor_dot_stress_like(n, Eelastic * strain_like(m));
             const double dPhi_dLambda = H - nEm;   // == - n^T E m + H
 
             if (std::abs(dPhi_dLambda) < MACHINE_EPSILON) {
@@ -2151,8 +2153,8 @@ private:
 
             // incremental updates (use delta to avoid re-summing from commit each iter)
             dLambda += deltaLambda;
-            TrialStress          = TrialStress - deltaLambda * (Eelastic * m);
-            TrialPlastic_Strain  = TrialPlastic_Strain + deltaLambda * m;
+            TrialStress          = TrialStress - deltaLambda * (Eelastic * strain_like(m));
+            TrialPlastic_Strain  = TrialPlastic_Strain + deltaLambda * strain_like(m);
             // cout << "  =>  dLambda + deltaLambda = " << dLambda << endl;
             // cout << "  =>  CommitStress = " << CommitStress.transpose() << endl;
             // cout << "  =>  TrialStress = " << TrialStress.transpose() << endl;
@@ -2240,7 +2242,7 @@ private:
                 const VoigtVector& m0 = pf(dEps,        TrialStress, iv_storage, parameters_storage);
                 const double       H0 = yf.hardening(dEps, m0,       TrialStress, iv_storage, parameters_storage);
                 const double       Phi0 = yf(TrialStress, iv_storage, parameters_storage);
-                const double       nEm0 = n0.dot(Eelastic * m0);
+                const double       nEm0 = strain_like(n0).dot(Eelastic * strain_like(m0));
                 const double       denom0 = nEm0 - H0; // == -(H0 - nEm0) == -dPhi/dλ
 
                 if (denom0 > MACHINE_EPSILON && Phi0 > 0.0) {
@@ -2251,8 +2253,8 @@ private:
                     dLambda = std::min(dL0, dLmax);
 
                     // aplicar arranque
-                    TrialStress         = TrialStress - dLambda * (Eelastic * m0);
-                    TrialPlastic_Strain = TrialPlastic_Strain + dLambda * m0;
+                    TrialStress         = TrialStress - dLambda * (Eelastic * strain_like(m0));
+                    TrialPlastic_Strain = TrialPlastic_Strain + dLambda * strain_like(m0);
                     iv_storage.apply([&](auto & iv){
                         auto h = iv.hardening_function(dEps, m0, TrialStress, parameters_storage);
                         iv.trial_value += dLambda * h;
@@ -2272,11 +2274,11 @@ private:
                 const double       H = yf.hardening(dEps, m,        TrialStress, iv_storage, parameters_storage);
 
                 const double Phi = yf(TrialStress, iv_storage, parameters_storage);
-                const double Phi_scale = std::abs(n.dot(TrialStress)) + 1.0;
+                const double Phi_scale = std::abs(strain_like(n).dot(TrialStress)) + 1.0;
 
                 if (converged(Phi, Phi_scale)) { newton_ok = true; break; }
 
-                const double nEm = n.dot(Eelastic * m);
+                const double nEm = strain_like(n).dot(Eelastic * strain_like(m));
                 const double dPhi_dLambda = H - nEm;  // total deriv. aprox
 
                 if (!std::isfinite(dPhi_dLambda) || std::abs(dPhi_dLambda) < 1e-20) {
@@ -2322,10 +2324,10 @@ private:
                 }
 
                 // Aplicar actualización aceptada
-                const VoigtVector Em = Eelastic * m;
+                const VoigtVector Em = Eelastic * strain_like(m);
 
                 TrialStress         = TrialStress - dl_accepted * Em;
-                TrialPlastic_Strain = TrialPlastic_Strain + dl_accepted * m;
+                TrialPlastic_Strain = TrialPlastic_Strain + dl_accepted * strain_like(m);
 
                 iv_storage.apply([&](auto & iv){
                     auto h = iv.hardening_function(dEps, m, TrialStress, parameters_storage);
@@ -2350,14 +2352,14 @@ private:
                 const double       H_corr = yf.hardening(dEps, m_corr,   TrialStress, iv_storage, parameters_storage);
                 const double       Phi_corr = yf(TrialStress, iv_storage, parameters_storage);
 
-                const VoigtVector Em_corr = Eelastic * m_corr;
-                const double nEm_corr = n_corr.dot(Em_corr);
+                const VoigtVector Em_corr = Eelastic * strain_like(m_corr);
+                const double nEm_corr = strain_like(n_corr).dot(Em_corr);
                 const double denom_corr = nEm_corr - H_corr;
 
                 if (std::abs(Phi_corr) > tol_abs && std::abs(denom_corr) > MACHINE_EPSILON) {
                     const double dLambda_corr =  Phi_corr / denom_corr;
                     TrialStress         = TrialStress - dLambda_corr * Em_corr;
-                    TrialPlastic_Strain = TrialPlastic_Strain + dLambda_corr * m_corr;
+                    TrialPlastic_Strain = TrialPlastic_Strain + dLambda_corr * strain_like(m_corr);
 
                     iv_storage.apply([&](auto & iv){
                         auto h = iv.hardening_function(dEps, m_corr, TrialStress, parameters_storage);
@@ -2373,13 +2375,13 @@ private:
                 const VoigtVector& m = pf(dEps,        TrialStress, iv_storage, parameters_storage);
                 const double       H = yf.hardening(dEps, m,        TrialStress, iv_storage, parameters_storage);
 
-                const VoigtVector Em = Eelastic * m;
-                const double nEm = n.dot(Em);
+                const VoigtVector Em = Eelastic * strain_like(m);
+                const double nEm = strain_like(n).dot(Em);
                 const double denom = nEm - H; // ojo: este es el de la fórmula de C_alg
 
                 if (std::abs(denom) > MACHINE_EPSILON) {
                     // (6x6) = E - (6x1)*(1x6)/denom
-                    const auto row_nE = (n.transpose() * Eelastic); // 1x6
+                    const auto row_nE = (strain_like(n).transpose() * Eelastic); // 1x6
                     Stiffness = Eelastic - (Em * row_nE) / denom;
                 } else {
                     Stiffness = Eelastic; // fallback
@@ -2426,8 +2428,8 @@ private:
         VoigtVector m = pf(depsilon_elpl, thisSigma, this_iv_storage, this_parameters_storage);
         double hardening = yf.hardening(depsilon_elpl, m, thisSigma, this_iv_storage, this_parameters_storage);
 
-        double den = n.transpose() * Eelastic * m - hardening;
-        double dLambda = (den != 0) ? (n.transpose() * Eelastic * depsilon_elpl).value() / den : 0;
+        double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
+        double dLambda = (den != 0) ? strain_like(n).dot(Eelastic * depsilon_elpl) / den : 0;
 
         if (dLambda != dLambda)
         {
@@ -2540,8 +2542,8 @@ private:
 
                 //Delta 1
                 std::tie(dLambda, m) = CalculateLambdaM(prev_Sigma, dEPS, parameters_storage, prev_iv_storage);
-                dSigma1  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl1 = dLambda * m;
+                dSigma1  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl1 = dLambda * strain_like(m);
                 iv_storage1.apply([&m, &dLambda, &prev_Sigma, &dEPS, this](auto & iv1)
                 {
                     auto h = iv1.hardening_function(dEPS, m, prev_Sigma, parameters_storage);
@@ -2551,8 +2553,8 @@ private:
 
                 //Delta 2
                 std::tie(dLambda, m) = CalculateLambdaM(next_Sigma, dEPS, parameters_storage, iv_storage1);
-                dSigma2  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl2 = dLambda * m;
+                dSigma2  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl2 = dLambda * strain_like(m);
                 iv_storage2.apply([&m, &dLambda, &next_Sigma, &dEPS, &iv_storage1, this](auto & iv2)
                 {
                     using VT1 = std::decay_t<decltype(iv2)>;
@@ -2568,8 +2570,8 @@ private:
 
                 //Delta 3
                 std::tie(dLambda, m) = CalculateLambdaM(next_Sigma, dEPS, parameters_storage, iv_storage2);
-                dSigma3  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl3 = dLambda * m;
+                dSigma3  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl3 = dLambda * strain_like(m);
                 iv_storage3.apply([&m, &dLambda, &next_Sigma, &dEPS, &iv_storage1, &iv_storage2, this](auto & iv3)
                 {
                     using VT = std::decay_t<decltype(iv3)>;
@@ -2587,8 +2589,8 @@ private:
 
                 //Delta 4
                 std::tie(dLambda, m) = CalculateLambdaM(next_Sigma, dEPS, parameters_storage, iv_storage3);
-                dSigma4  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl4 = dLambda * m;
+                dSigma4  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl4 = dLambda * strain_like(m);
                 iv_storage4.apply([&m, &dLambda, &next_Sigma, &dEPS, &iv_storage1, &iv_storage2, &iv_storage3, this](auto & iv4)
                 {
                     using VT = std::decay_t<decltype(iv4)>;
@@ -2608,8 +2610,8 @@ private:
 
                 //Delta 5
                 std::tie(dLambda, m) = CalculateLambdaM(next_Sigma, dEPS, parameters_storage, iv_storage4);
-                dSigma5  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl5 = dLambda * m;
+                dSigma5  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl5 = dLambda * strain_like(m);
                 iv_storage5.apply([&m, &dLambda, &next_Sigma, &dEPS, &iv_storage1, &iv_storage2, &iv_storage3, &iv_storage4, this](auto & iv5)
                 {
                     using VT = std::decay_t<decltype(iv5)>;
@@ -2631,8 +2633,8 @@ private:
 
                 //Delta 6 - The final predictor
                 std::tie(dLambda, m) = CalculateLambdaM(next_Sigma, dEPS, parameters_storage, iv_storage5);
-                dSigma6  = Eelastic * (dEPS - dLambda * m);
-                dEpsilonPl6 = dLambda * m;
+                dSigma6  = Eelastic * (dEPS - dLambda * strain_like(m));
+                dEpsilonPl6 = dLambda * strain_like(m);
                 next_iv_storage.apply([&m, &dLambda, &next_Sigma, &dEPS, &iv_storage1, &iv_storage2, &iv_storage3, &iv_storage4, &iv_storage5, this](auto & niv)
                 {
                     using VT = std::decay_t<decltype(niv)>;
@@ -2752,10 +2754,10 @@ private:
                     // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
                     double dLambda_after_corrector = yf_val_after_corrector / (
-                                                         n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
+                                                         strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector
                                                      );
-                    TrialStress = TrialStress - dLambda_after_corrector * Eelastic * m_after_corrector;
-                    TrialPlastic_Strain += dLambda_after_corrector * m_after_corrector;
+                    TrialStress = TrialStress - dLambda_after_corrector * Eelastic * strain_like(m_after_corrector);
+                    TrialPlastic_Strain += dLambda_after_corrector * strain_like(m_after_corrector);
 
                     // iter++;
                 }
@@ -2782,11 +2784,11 @@ private:
                     // double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
                     double dL = y0 / (
-                                                        n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector
+                                                        strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector
                                                     );
 
                     
-                    VoigtVector TS = TrialStress - dL * Eelastic * m_after_corrector;
+                    VoigtVector TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
 
                     double y1 = yf(TS, iv_storage, parameters_storage);
 
@@ -2795,7 +2797,7 @@ private:
                     while( y1 > 0 && iter < NITER)
                     {
                         dL = dL * 1.1;
-                        TS = TrialStress - dL * Eelastic * m_after_corrector;
+                        TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
                         y1 = yf(TS, iv_storage, parameters_storage);
                         iter ++;
 
@@ -2811,7 +2813,7 @@ private:
                         double dL_max = dL;
                         double dL_mid = dL / 2;
 
-                        VoigtVector TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                        VoigtVector TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                         double y_mid = yf(TS2, iv_storage, parameters_storage);
 
                         // cout << "   y_mid = " << y_mid << "  dL_min =" << dL_min << "   dL_mid =" << dL_mid << "   dL_max =" << dL_max << endl;
@@ -2827,7 +2829,7 @@ private:
                                 dL_max = dL_mid;
                             }
                             dL_mid = 0.5*(dL_min + dL_max);
-                            TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                            TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                             y_mid = yf(TS2, iv_storage, parameters_storage);
                             iter++;
                         }
@@ -2835,8 +2837,8 @@ private:
                     }
                     
 
-                    TrialStress = TrialStress - dL * Eelastic * m_after_corrector;
-                    TrialPlastic_Strain += dL * m_after_corrector;
+                    TrialStress = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
+                    TrialPlastic_Strain += dL * strain_like(m_after_corrector);
 
                     // iter++;
                 }
@@ -2974,8 +2976,8 @@ private:
                 // PREDICTOR STEP (Forward Euler)
                 // k1 = f(t, y)
                 std::tie(dLambda, m) = CalculateLambdaM(current_Sigma, dEPS, parameters_storage, current_iv_storage);
-                k1_sigma = Eelastic * (dEPS - dLambda * m);
-                k1_pstrain = dLambda * m;
+                k1_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k1_pstrain = dLambda * strain_like(m);
                 iv_k1 = current_iv_storage;
                 iv_k1.apply([&m, &dLambda, &current_Sigma, &dEPS, this](auto & iv1)
                 {
@@ -3000,8 +3002,8 @@ private:
                 // k2 = f(t + h, y_pred)
                 Eelastic = et(predictor_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(predictor_sigma, dEPS, parameters_storage, predictor_iv);
-                k2_sigma = Eelastic * (dEPS - dLambda * m);
-                k2_pstrain = dLambda * m;
+                k2_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k2_pstrain = dLambda * strain_like(m);
                 iv_k2 = current_iv_storage;
                 iv_k2.apply([&m, &dLambda, &predictor_sigma, &dEPS, this](auto & iv2)
                 {
@@ -3097,12 +3099,12 @@ private:
                     const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
                     const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
-                    double denominator = n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector;
+                    double denominator = strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector;
                     
                     if (std::abs(denominator) > MACHINE_EPSILON) {
                         double dLambda_after_corrector = yf_val_after_corrector / denominator;
-                        TrialStress = TrialStress - dLambda_after_corrector * Eelastic * m_after_corrector;
-                        TrialPlastic_Strain += dLambda_after_corrector * m_after_corrector;
+                        TrialStress = TrialStress - dLambda_after_corrector * Eelastic * strain_like(m_after_corrector);
+                        TrialPlastic_Strain += dLambda_after_corrector * strain_like(m_after_corrector);
                         
                         // Update internal variables
                         iv_storage.apply([&m_after_corrector, &dLambda_after_corrector, this](auto& iv) {
@@ -3124,18 +3126,18 @@ private:
                     const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
                     const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
-                    double denominator = n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector;
+                    double denominator = strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector;
                     
                     if (std::abs(denominator) > MACHINE_EPSILON) {
                         double dL = y0 / denominator;
-                        VoigtVector TS = TrialStress - dL * Eelastic * m_after_corrector;
+                        VoigtVector TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
                         double y1 = yf(TS, iv_storage, parameters_storage);
 
                         // Try to bracket solution
                         while( y1 > 0 && iter < NITER)
                         {
                             dL = dL * 1.1;
-                            TS = TrialStress - dL * Eelastic * m_after_corrector;
+                            TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
                             y1 = yf(TS, iv_storage, parameters_storage);
                             iter++;
                         }
@@ -3149,7 +3151,7 @@ private:
                             double dL_max = dL;
                             double dL_mid = dL / 2;
 
-                            VoigtVector TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                            VoigtVector TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                             double y_mid = yf(TS2, iv_storage, parameters_storage);
                             
                             while(std::abs(y_mid) > TOL && iter < NITER)
@@ -3160,15 +3162,15 @@ private:
                                     dL_max = dL_mid;
                                 }
                                 dL_mid = 0.5*(dL_min + dL_max);
-                                TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                                TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                                 y_mid = yf(TS2, iv_storage, parameters_storage);
                                 iter++;
                             }
                             dL = dL_mid;
                         }
                         
-                        TrialStress = TrialStress - dL * Eelastic * m_after_corrector;
-                        TrialPlastic_Strain += dL * m_after_corrector;
+                        TrialStress = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
+                        TrialPlastic_Strain += dL * strain_like(m_after_corrector);
                         
                         // Update internal variables
                         iv_storage.apply([&m_after_corrector, &dL, this](auto& iv) {
@@ -3316,8 +3318,8 @@ private:
 
                 // k1 = f(t, y) - compute derivatives at current state
                 std::tie(dLambda, m) = CalculateLambdaM(current_Sigma, dEPS, parameters_storage, current_iv_storage);
-                k1_sigma = Eelastic * (dEPS - dLambda * m);
-                k1_pstrain = dLambda * m;
+                k1_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k1_pstrain = dLambda * strain_like(m);
                 
                 // CORRECTED: Store pure derivatives for internal variables
                 iv_k1_derivatives = current_iv_storage;  // Copy structure
@@ -3343,8 +3345,8 @@ private:
                 
                 Eelastic = et(y2_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(y2_sigma, dEPS, parameters_storage, iv2_state);
-                k2_sigma = Eelastic * (dEPS - dLambda * m);
-                k2_pstrain = dLambda * m;
+                k2_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k2_pstrain = dLambda * strain_like(m);
                 
                 iv_k2_derivatives = current_iv_storage;
                 iv_k2_derivatives.apply([&m, &dLambda, &y2_sigma, &dEPS, this](auto & iv_deriv)
@@ -3369,8 +3371,8 @@ private:
                 
                 Eelastic = et(y3_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(y3_sigma, dEPS, parameters_storage, iv3_state);
-                k3_sigma = Eelastic * (dEPS - dLambda * m);
-                k3_pstrain = dLambda * m;
+                k3_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k3_pstrain = dLambda * strain_like(m);
                 
                 iv_k3_derivatives = current_iv_storage;
                 iv_k3_derivatives.apply([&m, &dLambda, &y3_sigma, &dEPS, this](auto & iv_deriv)
@@ -3398,8 +3400,8 @@ private:
                 
                 Eelastic = et(y4_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(y4_sigma, dEPS, parameters_storage, iv4_state);
-                k4_sigma = Eelastic * (dEPS - dLambda * m);
-                k4_pstrain = dLambda * m;
+                k4_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k4_pstrain = dLambda * strain_like(m);
                 
                 iv_k4_derivatives = current_iv_storage;
                 iv_k4_derivatives.apply([&m, &dLambda, &y4_sigma, &dEPS, this](auto & iv_deriv)
@@ -3430,8 +3432,8 @@ private:
                 
                 Eelastic = et(y5_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(y5_sigma, dEPS, parameters_storage, iv5_state);
-                k5_sigma = Eelastic * (dEPS - dLambda * m);
-                k5_pstrain = dLambda * m;
+                k5_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k5_pstrain = dLambda * strain_like(m);
                 
                 iv_k5_derivatives = current_iv_storage;
                 iv_k5_derivatives.apply([&m, &dLambda, &y5_sigma, &dEPS, this](auto & iv_deriv)
@@ -3464,8 +3466,8 @@ private:
                 
                 Eelastic = et(y6_sigma, parameters_storage);
                 std::tie(dLambda, m) = CalculateLambdaM(y6_sigma, dEPS, parameters_storage, iv6_state);
-                k6_sigma = Eelastic * (dEPS - dLambda * m);
-                k6_pstrain = dLambda * m;
+                k6_sigma = Eelastic * (dEPS - dLambda * strain_like(m));
+                k6_pstrain = dLambda * strain_like(m);
                 
                 iv_k6_derivatives = current_iv_storage;
                 iv_k6_derivatives.apply([&m, &dLambda, &y6_sigma, &dEPS, this](auto & iv_deriv)
@@ -3622,12 +3624,12 @@ private:
                     const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
                     const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
-                    double denominator = n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector;
+                    double denominator = strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector;
                     
                     if (std::abs(denominator) > MACHINE_EPSILON) {
                         double dLambda_after_corrector = yf_val_after_corrector / denominator;
-                        TrialStress = TrialStress - dLambda_after_corrector * Eelastic * m_after_corrector;
-                        TrialPlastic_Strain += dLambda_after_corrector * m_after_corrector;
+                        TrialStress = TrialStress - dLambda_after_corrector * Eelastic * strain_like(m_after_corrector);
+                        TrialPlastic_Strain += dLambda_after_corrector * strain_like(m_after_corrector);
                         
                         // Update internal variables
                         iv_storage.apply([&m_after_corrector, &dLambda_after_corrector, this](auto& iv) {
@@ -3649,11 +3651,11 @@ private:
                     const VoigtVector& n_after_corrector = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
                     const VoigtVector& m_after_corrector = pf(depsilon_elpl, TrialStress, iv_storage, parameters_storage);
                     double hardening_after_corrector = yf.hardening( depsilon_elpl, m_after_corrector,  TrialStress, iv_storage, parameters_storage);
-                    double denominator = n_after_corrector.transpose() * Eelastic * m_after_corrector - hardening_after_corrector;
+                    double denominator = strain_like(n_after_corrector).dot(Eelastic * strain_like(m_after_corrector)) - hardening_after_corrector;
                     
                     if (std::abs(denominator) > MACHINE_EPSILON) {
                         double dL = y0 / denominator;
-                        VoigtVector TS = TrialStress - dL * Eelastic * m_after_corrector;
+                        VoigtVector TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
                         
                         // Create temporary iv storage for testing
                         iv_storage_t temp_iv = iv_storage;
@@ -3668,7 +3670,7 @@ private:
                         while( y1 > 0 && iter < NITER)
                         {
                             dL = dL * 1.1;
-                            TS = TrialStress - dL * Eelastic * m_after_corrector;
+                            TS = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
                             
                             temp_iv = iv_storage;
                             temp_iv.apply([&m_after_corrector, &dL, this](auto& iv) {
@@ -3689,7 +3691,7 @@ private:
                             double dL_max = dL;
                             double dL_mid = dL / 2;
 
-                            VoigtVector TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                            VoigtVector TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                             
                             iv_storage_t mid_iv = iv_storage;
                             mid_iv.apply([&m_after_corrector, &dL_mid, this](auto& iv) {
@@ -3707,7 +3709,7 @@ private:
                                     dL_max = dL_mid;
                                 }
                                 dL_mid = 0.5*(dL_min + dL_max);
-                                TS2 = TrialStress - dL_mid * Eelastic * m_after_corrector;
+                                TS2 = TrialStress - dL_mid * Eelastic * strain_like(m_after_corrector);
                                 
                                 mid_iv = iv_storage;
                                 mid_iv.apply([&m_after_corrector, &dL_mid, this](auto& iv) {
@@ -3721,8 +3723,8 @@ private:
                             dL = dL_mid;
                         }
                         
-                        TrialStress = TrialStress - dL * Eelastic * m_after_corrector;
-                        TrialPlastic_Strain += dL * m_after_corrector;
+                        TrialStress = TrialStress - dL * Eelastic * strain_like(m_after_corrector);
+                        TrialPlastic_Strain += dL * strain_like(m_after_corrector);
                         
                         // Update internal variables with final correction
                         iv_storage.apply([&m_after_corrector, &dL, this](auto& iv) {

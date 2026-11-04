@@ -145,6 +145,7 @@ public:
                 double g2 = plasticPotential(SIG2, internal_variables_storage, parameters_storage);
 
                 result(i) =  (g1 - g2) / (2.0 * perturbation); //- is due to geotech convention
+                if (i >= 3) result(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
             }
             return result;
         };

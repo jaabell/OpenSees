@@ -103,6 +103,32 @@ inline double macaulay_bracket(double x)
     return x > 0 ? x : 0;
 }
 
+
+}
+
+// Voigt conventions. Stresses, yield-function gradients n = df/dsigma and flow
+// directions m = dg/dsigma hold tensor components (shear entry = sigma_12).
+// Strains (total and plastic) hold OpenSees' engineering shear (gamma_12 =
+// 2 eps_12), and the elasticity matrices map engineering strain to stress.
+// So a tensor-form m is the plastic strain direction strain_like(m) = W m,
+// W = diag(1,1,1,2,2,2), and n:dsigma = strain_like(n).dot(dsigma).
+inline VoigtVector strain_like(const VoigtVector& t)
+{
+    VoigtVector r = t;
+    r(3) *= 2;
+    r(4) *= 2;
+    r(5) *= 2;
+    return r;
+}
+
+// Inverse of strain_like: engineering-shear strain to tensor components.
+inline VoigtVector tensor_like(const VoigtVector& e)
+{
+    VoigtVector r = e;
+    r(3) *= 0.5;
+    r(4) *= 0.5;
+    r(5) *= 0.5;
+    return r;
 }
 
 #endif
