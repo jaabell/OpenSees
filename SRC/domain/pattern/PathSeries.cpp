@@ -222,12 +222,16 @@ void *OPS_PathSeries() {
                values.empty() == false) {
         Vector thePath(&values[0], (int)values.size());
         Vector theTime(&times[0], (int)times.size());
+        // BUGFIX: -useLast was parsed and then dropped on the floor for the
+        // -time/-values and -file/-fileTime forms, so an amplitude could not
+        // hold its last value past the end of its path. Only the single
+        // -fileName form below ever honoured it.
         return new PathTimeSeries(tag, thePath, theTime,
-                                  factor);
+                                  factor, useLast);
 
     } else if (fileTime != 0 && filePath != 0) {
         return new PathTimeSeries(tag, filePath, fileTime,
-                                  factor);
+                                  factor, useLast);
     } else if (fileName != 0) {
         return new PathTimeSeries(tag, fileName, factor,
                                   useLast);

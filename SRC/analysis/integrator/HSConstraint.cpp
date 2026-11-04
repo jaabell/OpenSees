@@ -34,6 +34,7 @@
 #include <Channel.h>
 #include <math.h>
 #include <stdlib.h>
+#include <ContinuationLambda.h>
 #include <elementAPI.h>
 
 void* OPS_HSConstraint()
@@ -80,11 +81,68 @@ HSConstraint::HSConstraint(double arcLength, double psi_u, double psi_f, double 
  deltaU(0), 
  deltaUstep(0),
  phat(0), 
- deltaLambdaStep(0.0), 
+ deltaLambdaStep(0.0),
  currentLambda(0.0),
- signLastDeltaLambdaStep(1)
+ signLastDeltaLambdaStep(1),
+ useContinuationTime(false), lambdaChannel(0), dtFixed(0.0), timeStep(0.0),
+ committedLambda(0.0)
 {
 
+}
+
+int
+HSConstraint::setContinuationTime(int chan, double dt)
+{
+   if (!OPS_ContinuationLambda::inRange(chan)) {
+      opserr << "HSConstraint::setContinuationTime() - lambda channel " << chan
+	     << " out of range\n";
+      return -1;
+   }
+   if (!(dt > 0.0)) {
+      opserr << "HSConstraint::setContinuationTime() - need a positive -dt\n";
+      return -1;
+   }
+
+   useContinuationTime = true;
+   lambdaChannel = chan;
+   dtFixed = dt;
+
+   if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+      OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+   committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+   currentLambda = committedLambda;
+   OPS_ContinuationLambda::setOwner(lambdaChannel, INTEGRATOR_TAGS_HSConstraint);
+
+   return 0;
+}
+
+int
+HSConstraint::commit(void)
+{
+   int res = this->StaticIntegrator::commit();
+   if (res == 0 && useContinuationTime)
+      committedLambda = currentLambda;
+   return res;
+}
+
+int
+HSConstraint::revertToLastStep(void)
+{
+   if (useContinuationTime == false)
+      return 0;
+
+   currentLambda = committedLambda;
+   deltaLambdaStep = 0.0;
+   OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+   AnalysisModel *theModel = this->getAnalysisModel();
+   if (theModel != 0) {
+      timeStep = theModel->getCurrentDomainTime();
+      theModel->applyLoadDomain(timeStep);
+      theModel->updateDomain();
+   }
+
+   return 0;
 }
 
 HSConstraint::~HSConstraint()
@@ -114,8 +172,11 @@ HSConstraint::newStep(void)
 	return -1;
     }
 
-    // get the current load factor
-    currentLambda = theModel->getCurrentDomainTime();
+    // get the current load factor (see DisplacementControl::newStep)
+    if (useContinuationTime == false)
+	currentLambda = theModel->getCurrentDomainTime();
+    else
+	currentLambda = committedLambda;
 
     if (deltaLambdaStep < 0)
 	signLastDeltaLambdaStep = -1;
@@ -154,7 +215,14 @@ HSConstraint::newStep(void)
 
     // update model with delta lambda and delta U
     theModel->incrDisp(*deltaU);
-    theModel->applyLoadDomain(currentLambda);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// advance the timeline once per step, freeze it for the iterations
+	timeStep = theModel->getCurrentDomainTime() + dtFixed;
+	OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
     theModel->updateDomain();
 
     return 0;
@@ -256,7 +324,13 @@ HSConstraint::update(const Vector &dU)
 
     // update the model
     theModel->incrDisp(*deltaU);
-    theModel->applyLoadDomain(currentLambda);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// lambda changes every iteration; the TIME must not
+	OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
     theModel->updateDomain();
 
     // set the X soln in linearSOE to be deltaU for convergence Test
@@ -339,13 +413,28 @@ HSConstraint::domainChanged(void)
     // now we have to determine phat
     // do this by incrementing lambda by 1, applying load
     // and getting phat from unbalance.
-    currentLambda = theModel->getCurrentDomainTime();
-    currentLambda += 1.0;
-    theModel->applyLoadDomain(currentLambda);
-    this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
-    (*phat) = theLinSOE->getB();
-    currentLambda -= 1.0;
-    theModel->setCurrentDomainTime(currentLambda);
+    if (useContinuationTime == false) {
+      currentLambda = theModel->getCurrentDomainTime();
+      currentLambda += 1.0;
+      theModel->applyLoadDomain(currentLambda);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+      currentLambda -= 1.0;
+      theModel->setCurrentDomainTime(currentLambda);
+    } else {
+      // probe LAMBDA at a frozen time -- see DisplacementControl::domainChanged
+      double t = theModel->getCurrentDomainTime();
+      double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+      theModel->applyLoadDomain(t);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam);
+      theModel->applyLoadDomain(t);
+      currentLambda = lam;
+    }
 
 
     // check there is a reference load

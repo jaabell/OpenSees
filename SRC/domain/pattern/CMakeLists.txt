@@ -7,6 +7,8 @@
 target_sources(OPS_Domain
     PRIVATE
         ConstantSeries.cpp
+        ContinuationLambda.cpp
+        ContinuationTimeSeries.cpp
         EarthquakePattern.cpp
         LinearSeries.cpp
         LoadPattern.cpp
@@ -27,6 +29,8 @@ target_sources(OPS_Domain
         UniformExcitation.cpp
     PUBLIC
         ConstantSeries.h
+        ContinuationLambda.h
+        ContinuationTimeSeries.h
         EarthquakePattern.h
         LinearSeries.h
         LoadPattern.h

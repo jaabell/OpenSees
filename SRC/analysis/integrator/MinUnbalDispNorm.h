@@ -57,10 +57,26 @@ class MinUnbalDispNorm : public StaticIntegrator
 
     ~MinUnbalDispNorm();
 
-    int newStep(void);    
+    int newStep(void);
     int update(const Vector &deltaU);
     int domainChanged(void);
-    
+    int commit(void);
+    int revertToLastStep(void);
+
+    // Continuous-time (continuation) mode -- OFF by default; see
+    // ContinuationLambda.h.
+    //
+    // PRESCRIBED dt ONLY, and unlike ArcLength/EQPath that is structural, not a
+    // stopgap awaiting a decision. Progress normalisation needs a per-step
+    // increment that is both prescribed and monotone. Here the prescribed
+    // increment is dLambda1, a SIGNED LOAD-FACTOR step whose sign is flipped on
+    // purpose at a limit point (by signLastDeltaLambdaStep or by the change of
+    // the tangent determinant), so it is not monotone; and neither the total
+    // variation of lambda nor the total displacement path length is a quantity
+    // the stage can declare in advance. Monotonicity of the TIME is still
+    // guaranteed, because dt is a positive constant.
+    int setContinuationTime(int lambdaChannel, double dtFixed);
+
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
@@ -106,6 +122,13 @@ class MinUnbalDispNorm : public StaticIntegrator
     double dLambda1min, dLambda1max;       // min & max values for dlambda1 at step (i) 
     double signLastDeterminant;
     int signFirstStepMethod;
+
+    // ---- continuous-time (continuation) mode; see setContinuationTime ------
+    bool useContinuationTime; // false => legacy behaviour, bit for bit
+    int lambdaChannel;
+    double dtFixed;
+    double timeStep;          // domain time frozen for the current step
+    double committedLambda;   // lambda of the last committed step
 
  // int theDofID, theDof; 
       ///////////////////////////////////////Abbas/////////////////////////////////////////

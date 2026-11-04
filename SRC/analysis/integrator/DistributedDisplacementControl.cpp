@@ -46,6 +46,8 @@
 #include <DOF_Group.h>
 #include <ID.h>
 #include <stdlib.h>
+#include <ContinuationLambda.h>
+#include <classTags.h>
 
 DistributedDisplacementControl::DistributedDisplacementControl(int node, int dof, 
 							       double increment, 
@@ -58,7 +60,9 @@ DistributedDisplacementControl::DistributedDisplacementControl(int node, int dof
  deltaUhat(0), deltaUbar(0), deltaU(0), deltaUstep(0), 
  phat(0), deltaLambdaStep(0.0), currentLambda(0.0),
  specNumIncrStep(numIncr), numIncrLastStep(numIncr),
- minIncrement(min), maxIncrement(max)
+ minIncrement(min), maxIncrement(max),
+ useContinuationTime(false), lambdaChannel(0), stageDuration(0.0),
+ stageTarget(0.0), dtFixed(0.0), timeStep(0.0), committedLambda(0.0)
 {
   // to avoid divide-by-zero error on first update() ensure numIncr != 0
   if (numIncr == 0) {
@@ -78,7 +82,9 @@ DistributedDisplacementControl::DistributedDisplacementControl()
  theDofID(0), deltaUhat(0), deltaUbar(0), deltaU(0), deltaUstep(0), 
  phat(0), deltaLambdaStep(0.0), currentLambda(0.0),
  specNumIncrStep(0), numIncrLastStep(0),
- minIncrement(0), maxIncrement(0)
+ minIncrement(0), maxIncrement(0),
+ useContinuationTime(false), lambdaChannel(0), stageDuration(0.0),
+ stageTarget(0.0), dtFixed(0.0), timeStep(0.0), committedLambda(0.0)
 {
 
 }
@@ -122,8 +128,15 @@ DistributedDisplacementControl::newStep(void)
     else if (theIncrement > maxIncrement)
       theIncrement = maxIncrement;
 
-    // get the current load factor
-    currentLambda = theModel->getCurrentDomainTime();
+    // get the current load factor.
+    // legacy: lambda IS the domain pseudo-time. continuation mode: lambda is an
+    // internal accumulator, rolled back by revertToLastStep() -- the legacy path
+    // is self-healing on a failed step only because it re-reads the domain time,
+    // which Domain::revertToLastCommit() has already restored.
+    if (useContinuationTime == false)
+      currentLambda = theModel->getCurrentDomainTime();
+    else
+      currentLambda = committedLambda;
 
     // determine dUhat
     this->formTangent();
@@ -161,8 +174,29 @@ DistributedDisplacementControl::newStep(void)
     (*deltaUstep) = (*deltaU);
 
     // update model with delta lambda and delta U
-    theModel->incrDisp(*deltaU);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+    if (useContinuationTime == false) {
+      theModel->applyLoadDomain(currentLambda);
+    } else {
+      // advance the timeline once per step and freeze it for the iterations
+      double dt = this->continuationDt();
+      if (!(dt > 0.0)) {
+	opserr << "WARNING DistributedDisplacementControl::newStep() - continuation "
+	       << "dt is " << dt << ", must be strictly positive; the controlled "
+	       << "increment has collapsed to zero or the sign of -target disagrees "
+	       << "with the displacement increment\n";
+	return -1;
+      }
+      // dt is a function of stageDuration, stageTarget and theIncrement only --
+      // all three are script constants or driven by the iteration count, which
+      // is collective. So every rank computes the SAME dt with no communication.
+      // At this point in the step the domain time still equals the committed
+      // time (nothing has applied a load yet, and a failed step went through
+      // Domain::revertToLastCommit which restores it).
+      timeStep = theModel->getCurrentDomainTime() + dt;
+      OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+      theModel->applyLoadDomain(timeStep);
+    }
     if (theModel->updateDomain() < 0) {
       opserr << "DistributedDisplacementControl::newStep - model failed to update for new dU\n";
       return -1;
@@ -218,9 +252,16 @@ DistributedDisplacementControl::update(const Vector &dU)
     currentLambda += dLambda;
 
     // update the model
-    theModel->incrDisp(*deltaU);    
-    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+
+    if (useContinuationTime == false) {
+      theModel->applyLoadDomain(currentLambda);
+    } else {
+      // lambda changes every iteration; the TIME must not. Freezing it also
+      // stops ops_Dt from oscillating under rate-dependent materials.
+      OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+      theModel->applyLoadDomain(timeStep);
+    }
     if (theModel->updateDomain() < 0) {
       opserr << "DistributedDisplacementControl::update - model failed to update for new dU\n";
       return -1;
@@ -366,16 +407,37 @@ DistributedDisplacementControl::domainChanged(void)
     // now we have to determine phat
     // do this by incrementing lambda by 1, applying load
     // and getting phat from unbalance.
-    currentLambda = theModel->getCurrentDomainTime();
+    if (useContinuationTime == false) {
+      currentLambda = theModel->getCurrentDomainTime();
 
-    currentLambda += 1.0;
-    theModel->applyLoadDomain(currentLambda);    
-    
-    this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
-    (*phat) = theLinSOE->getB();
+      currentLambda += 1.0;
+      theModel->applyLoadDomain(currentLambda);
 
-    currentLambda -= 1.0;
-    theModel->setCurrentDomainTime(currentLambda);    
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+
+      currentLambda -= 1.0;
+      theModel->setCurrentDomainTime(currentLambda);
+    } else {
+      // Probe LAMBDA, not the time. phat is the derivative of the external load
+      // with respect to lambda, so bumping lambda by one at a FROZEN time gives
+      // it exactly: every pattern driven by a ContinuationTimeSeries contributes
+      // its reference load, and every other pattern contributes zero because its
+      // amplitude is evaluated at an unchanged time. Probing the time here (the
+      // legacy path) would move no amplitude at all in continuation mode and
+      // leave phat == 0.
+      double t = theModel->getCurrentDomainTime();
+      double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+      theModel->applyLoadDomain(t);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam);
+      theModel->applyLoadDomain(t);
+      currentLambda = lam;
+    }
 
     // check there is a reference load
     int haveLoad = 0;
@@ -387,6 +449,10 @@ DistributedDisplacementControl::domainChanged(void)
 
     if (haveLoad == 0) {
       opserr << "WARNING DistributedDisplacementControl::domainChanged() - zero reference load";
+      if (useContinuationTime)
+	opserr << "\n      in continuation-time mode the reference load pattern must "
+	       << "use a ContinuationTimeSeries on lambda channel " << lambdaChannel
+	       << "\n";
       return -1;
     }
 
@@ -399,9 +465,152 @@ DistributedDisplacementControl::domainChanged(void)
     return 0;
 }
 
+double
+DistributedDisplacementControl::continuationDt(void) const
+{
+  // progress-normalised: the sum over the stage is exactly stageDuration,
+  // because sum|theIncrement| == |stageTarget| by definition of the stage and
+  // the controlled displacement cannot reverse sign (that is precisely what
+  // lets a continuation method cross a limit point).
+  if (stageTarget != 0.0)
+    return stageDuration * fabs(theIncrement) / fabs(stageTarget);
+
+  // fixed dt: simple, but drifts off stageDuration when the adaptive stepping
+  // changes the number of steps actually taken
+  return dtFixed;
+}
+
+int
+DistributedDisplacementControl::setContinuationTime(int chan, double duration,
+						    double target, double dt)
+{
+  if (!OPS_ContinuationLambda::inRange(chan)) {
+    opserr << "DistributedDisplacementControl::setContinuationTime() - lambda "
+	   << "channel " << chan << " out of range\n";
+    return -1;
+  }
+  if (target == 0.0 && !(dt > 0.0)) {
+    opserr << "DistributedDisplacementControl::setContinuationTime() - need "
+	   << "either -target (progress-normalised dt) or a positive -dt\n";
+    return -1;
+  }
+
+  useContinuationTime = true;
+  lambdaChannel = chan;
+  stageDuration = duration;
+  stageTarget = target;
+  dtFixed = dt;
+
+  // inherit a lambda left by a previous continuation stage (the load stays
+  // applied); start from zero only if nobody has ever written this channel
+  if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+    OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+  committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+  currentLambda = committedLambda;
+  OPS_ContinuationLambda::setOwner(lambdaChannel,
+				   INTEGRATOR_TAGS_DistributedDisplacementControl);
+
+  return 0;
+}
+
+// Make the committed lambda bit-identical on every rank.
+//
+// dLambda is computed from two components of the solution vector at theDofID,
+// so every rank already gets the same value WHEN the distributed SOE returns a
+// consistent solution -- which this class requires anyway, since domainChanged()
+// hands the same global theDofID to all of them. This exchange therefore does
+// not add an assumption; it makes the agreement explicit and turns a silent
+// divergence (different load factors per rank => wrong results, no error) into
+// a loud one. One scalar per step, negligible against a distributed solve.
+//
+// Only ever called in continuation mode, so a legacy parallel run is unchanged
+// and cannot deadlock on it.
+int
+DistributedDisplacementControl::syncLambda(void)
+{
+  if (numChannels == 0 || theChannels == 0)
+    return 0; // single process: nothing to agree on
+
+  static Vector lamData(1);
+
+  if (processID != 0) {
+    Channel *theChannel = theChannels[0];
+    lamData(0) = committedLambda;
+    theChannel->sendVector(0, 0, lamData);
+    theChannel->recvVector(0, 0, lamData);
+    committedLambda = lamData(0); // P0 is authoritative
+  }
+
+  else {
+    double scale = fabs(committedLambda) > 1.0 ? fabs(committedLambda) : 1.0;
+    double tol = 1.0e-10 * scale;
+
+    for (int j = 0; j < numChannels; j++) {
+      theChannels[j]->recvVector(0, 0, lamData);
+      double diff = fabs(lamData(0) - committedLambda);
+      if (diff > tol) {
+	opserr << "WARNING DistributedDisplacementControl::commit() - process "
+	       << j + 1 << " computed lambda " << lamData(0) << " against "
+	       << committedLambda << " on P0 (difference " << diff << "). The "
+	       << "distributed SOE is not returning a consistent solution at the "
+	       << "control dof; the results are NOT trustworthy. Forcing the P0 "
+	       << "value.\n";
+      }
+    }
+
+    for (int k = 0; k < numChannels; k++) {
+      lamData(0) = committedLambda;
+      theChannels[k]->sendVector(0, 0, lamData);
+    }
+  }
+
+  currentLambda = committedLambda;
+  OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+  return 0;
+}
+
+int
+DistributedDisplacementControl::commit(void)
+{
+  int res = this->StaticIntegrator::commit();
+  if (res == 0 && useContinuationTime) {
+    committedLambda = currentLambda;
+    if (this->syncLambda() < 0)
+      return -1;
+  }
+  return res;
+}
+
+int
+DistributedDisplacementControl::revertToLastStep(void)
+{
+  if (useContinuationTime == false)
+    return 0;
+
+  // StaticAnalysis calls Domain::revertToLastCommit() BEFORE this, and that
+  // re-applies the load while the channel still holds the failed lambda.
+  // Restore lambda and re-apply, so the domain is left consistent for whatever
+  // the script does next.
+  currentLambda = committedLambda;
+  deltaLambdaStep = 0.0;
+  OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+  AnalysisModel *theModel = this->getAnalysisModel();
+  if (theModel != 0) {
+    // Domain::revertToLastCommit has already put currentTime back to the
+    // committed time
+    timeStep = theModel->getCurrentDomainTime();
+    theModel->applyLoadDomain(timeStep);
+    theModel->updateDomain();
+  }
+
+  return 0;
+}
+
 int
 DistributedDisplacementControl::sendSelf(int cTag, Channel &theChannel)
-{					 
+{
   int sendID =0;
 
   // if P0 check if already sent. If already sent use old processID; if not allocate a new process 
@@ -457,12 +666,18 @@ DistributedDisplacementControl::sendSelf(int cTag, Channel &theChannel)
     return -1;
   }
 
-  static Vector dData(5);
+  static Vector dData(11);
   dData(0) = theIncrement;
   dData(1) = minIncrement;
   dData(2) = maxIncrement;
   dData(3) = specNumIncrStep;
   dData(4) = numIncrLastStep;
+  dData(5) = useContinuationTime ? 1.0 : 0.0;
+  dData(6) = lambdaChannel;
+  dData(7) = stageDuration;
+  dData(8) = stageTarget;
+  dData(9) = dtFixed;
+  dData(10) = committedLambda;
   res = theChannel.sendVector(0, cTag, dData);
   if (res < 0) {
     opserr <<"WARNING DistributedDisplacementControl::recvSelf() - failed to recv vector data\n";
@@ -487,18 +702,34 @@ DistributedDisplacementControl::recvSelf(int cTag, Channel &theChannel, FEM_Obje
   theNode = idData(1);
   theDof  = idData(2);
 
-  static Vector dData(5);
+  static Vector dData(11);
   res = theChannel.recvVector(0, cTag, dData);
   if (res < 0) {
     opserr <<"WARNING DistributedDisplacementControl::recvSelf() - failed to recv vector data\n";
     return -1;
-  }	        
+  }
 
   theIncrement = dData(0);
   minIncrement = dData(1);
   maxIncrement = dData(2);
   specNumIncrStep = dData(3);
   numIncrLastStep = dData(4);
+  useContinuationTime = (dData(5) != 0.0);
+  lambdaChannel = (int)dData(6);
+  stageDuration = dData(7);
+  stageTarget = dData(8);
+  dtFixed = dData(9);
+  committedLambda = dData(10);
+  currentLambda = committedLambda;
+
+  // the lambda store is a per-process global and is deliberately NOT part of
+  // the serialised state of the series; seed it here so the remote copy starts
+  // from the same load factor
+  if (useContinuationTime) {
+    OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+    OPS_ContinuationLambda::setOwner(lambdaChannel,
+				     INTEGRATOR_TAGS_DistributedDisplacementControl);
+  }
 
   // set the Channel & processID
   numChannels = 1;

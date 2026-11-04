@@ -616,8 +616,11 @@ printA(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 int 
 printB(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
-int 
+int
 setPrecision(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
+
+int
+setArcLength(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
 int 
 logFile(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
@@ -860,7 +863,9 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
     Tcl_CreateCommand(interp, "setCreep", &setCreep,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
     Tcl_CreateCommand(interp, "setTime", &setTime,
-		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);     
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
+    Tcl_CreateCommand(interp, "setArcLength", &setArcLength,
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
     Tcl_CreateCommand(interp, "getTime", &getTime,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
     Tcl_CreateCommand(interp, "getLoadFactor", &getLoadFactor,
@@ -1683,7 +1688,60 @@ setTime(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   return TCL_OK;
 }
 
-int 
+// setArcLength arcLength?
+//
+// Changes the arc-length increment of the CURRENT static integrator in place,
+// mid-stage. Re-issuing "integrator ArcLength ..." instead constructs a fresh
+// object, and both arc-length classes carry the direction of travel of the
+// previous converged step in their state (ArcLength: committedUstep and
+// deltaLambdaStep; EQPath: du), which a new object starts with zeroed. The
+// predictor then loses the way it was going, which is what makes step-size
+// recovery unsafe for an arc-length method -- independently of any timeline
+// bookkeeping.
+//
+// With -target the timeline follows by itself: dt = D s / S_target picks up the
+// new s from the next step on, so the stage still ends on T_end when the arc
+// consumed reaches S_target.
+int
+setArcLength(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  if (argc < 2) {
+    opserr << "WARNING illegal command - setArcLength arcLength?\n";
+    return TCL_ERROR;
+  }
+  double s;
+  if (Tcl_GetDouble(interp, argv[1], &s) != TCL_OK) {
+    opserr << "WARNING setArcLength - failed to read the arc length\n";
+    return TCL_ERROR;
+  }
+  if (theStaticIntegrator == 0) {
+    opserr << "WARNING setArcLength - no static integrator has been defined\n";
+    return TCL_ERROR;
+  }
+
+  int tag = theStaticIntegrator->getClassTag();
+  if (tag == INTEGRATOR_TAGS_ArcLength) {
+    if (((ArcLength *)theStaticIntegrator)->setArcLength(s) < 0)
+      return TCL_ERROR;
+    return TCL_OK;
+  }
+  if (tag == INTEGRATOR_TAGS_ArcLength1) {
+    if (((ArcLength1 *)theStaticIntegrator)->setArcLength(s) < 0)
+      return TCL_ERROR;
+    return TCL_OK;
+  }
+  if (tag == INTEGRATOR_TAGS_EQPath) {
+    if (((EQPath *)theStaticIntegrator)->setArcLength(s) < 0)
+      return TCL_ERROR;
+    return TCL_OK;
+  }
+
+  opserr << "WARNING setArcLength - the current static integrator is not an "
+	 << "arc-length method (class tag " << tag << ")\n";
+  return TCL_ERROR;
+}
+
+int
 getTime(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
   double time = theDomain.getCurrentTime();
@@ -4384,15 +4442,59 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
   else if (strcmp(argv[1],"ArcLength") == 0) {
       double arcLength;
       double alpha;
-      if (argc != 4) {
-	opserr << "WARNING integrator ArcLength arcLength alpha \n";
+      if (argc < 4) {
+	opserr << "WARNING integrator ArcLength arcLength alpha "
+	       << "<-signAngle> <-duration D -target S> <-dt dt> <-channel c>\n";
 	return TCL_ERROR;
-      }    
-      if (Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)	
-	return TCL_ERROR;	
-      if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK)	
-	return TCL_ERROR;	
-      theStaticIntegrator = new ArcLength(arcLength,alpha);       
+      }
+      if (Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)
+	return TCL_ERROR;
+      if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK)
+	return TCL_ERROR;
+
+      // continuous-time (continuation) options; absent => legacy behaviour.
+      // Same keywords and same meaning as DisplacementControl: -target is the
+      // total the stage covers in the method's own progress measure, which for
+      // an arc-length method is the total ARC LENGTH, not a displacement.
+      int alLambdaChannel = 0;
+      double alDuration = 0.0, alTarget = 0.0, alDtFixed = 0.0;
+      bool alWantContinuation = false;
+      bool alWantSignAngle = false;
+      for (int i = 4; i < argc; i++) {
+	if (strcmp(argv[i],"-signAngle") == 0) {
+	  alWantSignAngle = true;
+	} else if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &alDtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  alWantContinuation = true;
+	} else if (strcmp(argv[i],"-duration") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &alDuration) != TCL_OK)
+	    return TCL_ERROR;
+	  alWantContinuation = true;
+	} else if (strcmp(argv[i],"-target") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &alTarget) != TCL_OK)
+	    return TCL_ERROR;
+	  alWantContinuation = true;
+	} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &alLambdaChannel) != TCL_OK)
+	    return TCL_ERROR;
+	  alWantContinuation = true;
+	}
+      }
+
+      ArcLength *theAL = new ArcLength(arcLength,alpha);
+      if (alWantSignAngle)
+	theAL->setSignFromAngle(true);
+      if (alWantContinuation &&
+	  theAL->setContinuationTime(alLambdaChannel, alDuration,
+				     alTarget, alDtFixed) < 0) {
+	opserr << "WARNING integrator ArcLength - continuation-time options "
+	       << "rejected; want: -duration D? -target S? (the total arc length "
+	       << "of the stage) or -dt dt?, <-channel c?>\n";
+	delete theAL;
+	return TCL_ERROR;
+      }
+      theStaticIntegrator = theAL;
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
@@ -4402,15 +4504,57 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
   else if (strcmp(argv[1],"ArcLength1") == 0) {
       double arcLength;
       double alpha;
-      if (argc != 4) {
-	opserr << "WARNING integrator ArcLength1 arcLength alpha \n";
+      if (argc < 4) {
+	opserr << "WARNING integrator ArcLength1 arcLength alpha "
+	       << "<-signAngle> <-duration D -target S> <-dt dt> <-channel c>\n";
 	return TCL_ERROR;
-      }    
-      if (Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)	
-	return TCL_ERROR;	
-      if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK)	
-	return TCL_ERROR;	
-      theStaticIntegrator = new ArcLength1(arcLength,alpha);       
+      }
+      if (Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)
+	return TCL_ERROR;
+      if (Tcl_GetDouble(interp, argv[3], &alpha) != TCL_OK)
+	return TCL_ERROR;
+
+      // same options and same meaning as ArcLength; this class has the same
+      // predictor and differs only in the corrector
+      int al1Channel = 0;
+      double al1Duration = 0.0, al1Target = 0.0, al1DtFixed = 0.0;
+      bool al1WantContinuation = false;
+      bool al1WantSignAngle = false;
+      for (int i = 4; i < argc; i++) {
+	if (strcmp(argv[i],"-signAngle") == 0) {
+	  al1WantSignAngle = true;
+	} else if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &al1DtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  al1WantContinuation = true;
+	} else if (strcmp(argv[i],"-duration") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &al1Duration) != TCL_OK)
+	    return TCL_ERROR;
+	  al1WantContinuation = true;
+	} else if (strcmp(argv[i],"-target") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &al1Target) != TCL_OK)
+	    return TCL_ERROR;
+	  al1WantContinuation = true;
+	} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &al1Channel) != TCL_OK)
+	    return TCL_ERROR;
+	  al1WantContinuation = true;
+	}
+      }
+
+      ArcLength1 *theAL1 = new ArcLength1(arcLength,alpha);
+      if (al1WantSignAngle)
+	theAL1->setSignFromAngle(true);
+      if (al1WantContinuation &&
+	  theAL1->setContinuationTime(al1Channel, al1Duration,
+				      al1Target, al1DtFixed) < 0) {
+	opserr << "WARNING integrator ArcLength1 - continuation-time options "
+	       << "rejected; want: -duration D? -target S? (the total arc length "
+	       << "of the stage) or -dt dt?, <-channel c?>\n";
+	delete theAL1;
+	return TCL_ERROR;
+      }
+      theStaticIntegrator = theAL1;
 
   // if the analysis exists - we want to change the Integrator
   if (theStaticAnalysis != 0)
@@ -4420,33 +4564,61 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
   
   else if (strcmp(argv[1],"HSConstraint") == 0) {
       double arcLength;
-      double psi_u;
-      double psi_f;
-      double u_ref;
+      // class defaults; the old code left these UNINITIALISED and the switch
+      // below had no breaks, so it fell through and always constructed the
+      // 4-argument form from garbage while leaking the earlier objects
+      double psi_u = 1.0;
+      double psi_f = 1.0;
+      double u_ref = 1.0;
       if (argc < 3) {
-	opserr << "WARNING integrator HSConstraint <arcLength> <psi_u> <psi_f> <u_ref> \n";
+	opserr << "WARNING integrator HSConstraint <arcLength> <psi_u> <psi_f> <u_ref>"
+	       << " <-dt dt> <-channel c>\n";
 	return TCL_ERROR;
-      }    
-      if (argc >= 3 && Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)	
-	return TCL_ERROR;	
-      if (argc>=4 && Tcl_GetDouble(interp, argv[3], &psi_u) != TCL_OK)	
-	return TCL_ERROR;	
-      if (argc>=5 && Tcl_GetDouble(interp, argv[4], &psi_f) != TCL_OK)	
-	return TCL_ERROR;	
-      if (argc==6 && Tcl_GetDouble(interp, argv[5], &u_ref) != TCL_OK)	
-	return TCL_ERROR;	
+      }
+      if (Tcl_GetDouble(interp, argv[2], &arcLength) != TCL_OK)
+	return TCL_ERROR;
 
-      switch(argc)
-	{
-		case 3:
-		    	theStaticIntegrator = new HSConstraint(arcLength);       
-		case 4:
-		      	theStaticIntegrator = new HSConstraint(arcLength, psi_u);       
-		case 5:
-		      	theStaticIntegrator = new HSConstraint(arcLength, psi_u, psi_f);       
-		case 6:
-		      	theStaticIntegrator = new HSConstraint(arcLength, psi_u, psi_f, u_ref);       
+      // continuous-time (continuation) options; absent => legacy behaviour
+      int hsChannel = 0;
+      double hsDtFixed = 0.0;
+      bool hsWantContinuation = false;
+      int hsFirstOpt = argc;
+      for (int i = 3; i < argc; i++) {
+	if (strcmp(argv[i],"-dt") == 0 || strcmp(argv[i],"-channel") == 0) {
+	  hsFirstOpt = i;
+	  break;
 	}
+      }
+
+      if (hsFirstOpt >= 4 && Tcl_GetDouble(interp, argv[3], &psi_u) != TCL_OK)
+	return TCL_ERROR;
+      if (hsFirstOpt >= 5 && Tcl_GetDouble(interp, argv[4], &psi_f) != TCL_OK)
+	return TCL_ERROR;
+      if (hsFirstOpt >= 6 && Tcl_GetDouble(interp, argv[5], &u_ref) != TCL_OK)
+	return TCL_ERROR;
+
+      for (int i = hsFirstOpt; i < argc; i++) {
+	if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &hsDtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  hsWantContinuation = true;
+	} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &hsChannel) != TCL_OK)
+	    return TCL_ERROR;
+	  hsWantContinuation = true;
+	}
+      }
+
+      HSConstraint *theHS = new HSConstraint(arcLength, psi_u, psi_f, u_ref);
+      if (hsWantContinuation &&
+	  theHS->setContinuationTime(hsChannel, hsDtFixed) < 0) {
+	opserr << "WARNING integrator HSConstraint - continuation-time options "
+	       << "rejected; want: -dt dt? <-channel c?>\n";
+	delete theHS;
+	return TCL_ERROR;
+      }
+      theStaticIntegrator = theHS;
+
     // if the analysis exists - we want to change the Integrator
     if (theStaticAnalysis != 0)
     	theStaticAnalysis->setIntegrator(*theStaticIntegrator);
@@ -4457,33 +4629,71 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
       double lambda11, minlambda, maxlambda;
       int numIter;
       if (argc < 3) {
-	opserr << "WARNING integrator MinUnbalDispNorm lambda11 <Jd minLambda1j maxLambda1j>\n";
+	opserr << "WARNING integrator MinUnbalDispNorm lambda11 <Jd minLambda1j "
+	       << "maxLambda1j> <-det> <-dt dt> <-channel c>\n";
 	return TCL_ERROR;
-      }    
-      if (Tcl_GetDouble(interp, argv[2], &lambda11) != TCL_OK)	
-	return TCL_ERROR;	
-      if (argc > 5) {
-	if (Tcl_GetInt(interp, argv[3], &numIter) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[4], &minlambda) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[5], &maxlambda) != TCL_OK)	
-	  return TCL_ERROR;	
+      }
+      if (Tcl_GetDouble(interp, argv[2], &lambda11) != TCL_OK)
+	return TCL_ERROR;
+
+      // Locate the first OPTION KEYWORD at or after argv[3]. Matching on a
+      // leading '-' would be wrong: minLambda1j/maxLambda1j are legitimately
+      // negative.
+      int mudFirstOpt = argc;
+      for (int i = 3; i < argc; i++) {
+	if (strcmp(argv[i],"-det") == 0 || strcmp(argv[i],"-determinant") == 0 ||
+	    strcmp(argv[i],"-dt") == 0  || strcmp(argv[i],"-channel") == 0) {
+	  mudFirstOpt = i;
+	  break;
+	}
+      }
+
+      if (mudFirstOpt >= 6) {
+	if (Tcl_GetInt(interp, argv[3], &numIter) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[4], &minlambda) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[5], &maxlambda) != TCL_OK)
+	  return TCL_ERROR;
       }
       else {
 	minlambda = lambda11;
 	maxlambda = lambda11;
 	numIter = 1;
-	argc += 3;
       }
 
+      // BUGFIX: this used to do "argc += 3" in the short form and then read
+      // argv[argc-1] == argv[6], which is past the real end of argv -- so -det
+      // was BOTH unreachable in the short form AND an out-of-bounds read. Scan
+      // the actual arguments instead.
       int signFirstStepMethod = SIGN_LAST_STEP;
-      if (argc == 7)
-	if ((strcmp(argv[argc-1],"-determinant") == 0) ||
-	    (strcmp(argv[argc-1],"-det") == 0))
-	    signFirstStepMethod = CHANGE_DETERMINANT;	    
+      int mudChannel = 0;
+      double mudDtFixed = 0.0;
+      bool mudWantContinuation = false;
+      for (int i = mudFirstOpt; i < argc; i++) {
+	if (strcmp(argv[i],"-determinant") == 0 || strcmp(argv[i],"-det") == 0) {
+	  signFirstStepMethod = CHANGE_DETERMINANT;
+	} else if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &mudDtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  mudWantContinuation = true;
+	} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &mudChannel) != TCL_OK)
+	    return TCL_ERROR;
+	  mudWantContinuation = true;
+	}
+      }
 
-      theStaticIntegrator = new MinUnbalDispNorm(lambda11,numIter,minlambda,maxlambda,signFirstStepMethod);
+      MinUnbalDispNorm *theMUD =
+	new MinUnbalDispNorm(lambda11,numIter,minlambda,maxlambda,signFirstStepMethod);
+      if (mudWantContinuation &&
+	  theMUD->setContinuationTime(mudChannel, mudDtFixed) < 0) {
+	opserr << "WARNING integrator MinUnbalDispNorm - continuation-time "
+	       << "options rejected; want: -dt dt? <-channel c?>\n";
+	delete theMUD;
+	return TCL_ERROR;
+      }
+      theStaticIntegrator = theMUD;
 
       // if the analysis exists - we want to change the Integrator
       if (theStaticAnalysis != 0)
@@ -4493,8 +4703,8 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
   else if (strcmp(argv[1], "EQPath") == 0) {
 		double arcLength;
 		int type;
-		if (argc != 4) {
-			opserr << "WARNING integrator EQPath $arc_length $type \n";
+		if (argc < 4) {
+			opserr << "WARNING integrator EQPath $arc_length $type <-dt dt> <-channel c>\n";
 			opserr << "REFS : \n";
 			opserr << " https://doi.org/10.12989/sem.2013.48.6.849	 \n";
 			opserr << " https://doi.org/10.12989/sem.2013.48.6.879	 \n";
@@ -4521,12 +4731,48 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 			return TCL_ERROR;
 		}
 
-		theStaticIntegrator = new EQPath(arcLength, type);
+		// continuous-time (continuation) options; absent => legacy behaviour.
+		// same keywords as DisplacementControl and ArcLength; -target is the
+		// total arc length of the stage
+		int eqChannel = 0;
+		double eqDuration = 0.0, eqTarget = 0.0, eqDtFixed = 0.0;
+		bool eqWantContinuation = false;
+		for (int i = 4; i < argc; i++) {
+			if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+				if (Tcl_GetDouble(interp, argv[++i], &eqDtFixed) != TCL_OK)
+					return TCL_ERROR;
+				eqWantContinuation = true;
+			} else if (strcmp(argv[i],"-duration") == 0 && i+1 < argc) {
+				if (Tcl_GetDouble(interp, argv[++i], &eqDuration) != TCL_OK)
+					return TCL_ERROR;
+				eqWantContinuation = true;
+			} else if (strcmp(argv[i],"-target") == 0 && i+1 < argc) {
+				if (Tcl_GetDouble(interp, argv[++i], &eqTarget) != TCL_OK)
+					return TCL_ERROR;
+				eqWantContinuation = true;
+			} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+				if (Tcl_GetInt(interp, argv[++i], &eqChannel) != TCL_OK)
+					return TCL_ERROR;
+				eqWantContinuation = true;
+			}
+		}
+
+		EQPath *theEQ = new EQPath(arcLength, type);
+		if (eqWantContinuation &&
+		    theEQ->setContinuationTime(eqChannel, eqDuration,
+					       eqTarget, eqDtFixed) < 0) {
+			opserr << "WARNING integrator EQPath - continuation-time options "
+			       << "rejected; want: -duration D? -target S? (the total arc "
+			       << "length of the stage) or -dt dt?, <-channel c?>\n";
+			delete theEQ;
+			return TCL_ERROR;
+		}
+		theStaticIntegrator = theEQ;
 
 		// if the analysis exists - we want to change the Integrator
 		if (theStaticAnalysis != 0)
 			theStaticAnalysis->setIntegrator(*theStaticIntegrator);
-  }	
+  }
   
   else if (strcmp(argv[1],"DisplacementControl") == 0) {
       int node;
@@ -4539,28 +4785,42 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	return TCL_ERROR;
       }    
       int tangFlag = 0;
-      
-      if (Tcl_GetInt(interp, argv[2], &node) != TCL_OK)	
-	return TCL_ERROR;	
-      if (Tcl_GetInt(interp, argv[3], &dof) != TCL_OK)	
-	return TCL_ERROR;	
-      if (Tcl_GetDouble(interp, argv[4], &increment) != TCL_OK)	
+
+      // continuous-time (continuation) options; absent => legacy behaviour.
+      // see ContinuationLambda.h and DisplacementControl::setContinuationTime
+      int lambdaChannel = 0;
+      double duration = 0.0, target = 0.0, dtFixed = 0.0;
+      bool wantContinuation = false;
+
+      // Locate the first OPTION KEYWORD at or after argv[5]. Matching on a
+      // leading '-' would be wrong: minIncrement/maxIncrement are legitimately
+      // negative for a push in the negative direction.
+      int firstOpt = argc;
+      for (int i = 5; i < argc; i++) {
+	if (strcmp(argv[i],"-initial")  == 0 || strcmp(argv[i],"-Initial") == 0 ||
+	    strcmp(argv[i],"-channel")  == 0 || strcmp(argv[i],"-duration") == 0 ||
+	    strcmp(argv[i],"-target")   == 0 || strcmp(argv[i],"-dt")       == 0) {
+	  firstOpt = i;
+	  break;
+	}
+      }
+
+      if (Tcl_GetInt(interp, argv[2], &node) != TCL_OK)
+	return TCL_ERROR;
+      if (Tcl_GetInt(interp, argv[3], &dof) != TCL_OK)
+	return TCL_ERROR;
+      if (Tcl_GetDouble(interp, argv[4], &increment) != TCL_OK)
 	return TCL_ERROR;
 
-      if (argc == 6 || argc == 9)
-	if (argc == 6) {
-	  if (strcmp(argv[5],"-initial") == 0)
-	    tangFlag = 1;
-	} else if (strcmp(argv[8],"-initial") == 0)
-	  tangFlag = 1;
-
-      if (argc > 6) {
-	if (Tcl_GetInt(interp, argv[5], &numIter) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[6], &minIncr) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[7], &maxIncr) != TCL_OK)	
-	  return TCL_ERROR;	  
+      // the positional triple <Jd minIncrement maxIncrement> is present only
+      // if three plain values sit before the first option keyword
+      if (firstOpt >= 8) {
+	if (Tcl_GetInt(interp, argv[5], &numIter) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[6], &minIncr) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[7], &maxIncr) != TCL_OK)
+	  return TCL_ERROR;
       }
       else {
 	minIncr = increment;
@@ -4568,12 +4828,46 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	numIter = 1;
       }
 
+      for (int i = firstOpt; i < argc; i++) {
+	if (strcmp(argv[i],"-initial") == 0 || strcmp(argv[i],"-Initial") == 0) {
+	  tangFlag = 1;
+	} else if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &lambdaChannel) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-duration") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &duration) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-target") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &target) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &dtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	}
+      }
+
 
 
 #ifdef _PARALLEL_PROCESSING
 
-      theStaticIntegrator = new DistributedDisplacementControl(node,dof-1,increment,
-							       numIter, minIncr, maxIncr);
+      {
+	DistributedDisplacementControl *theDDC =
+	  new DistributedDisplacementControl(node,dof-1,increment,
+					     numIter, minIncr, maxIncr);
+	if (wantContinuation &&
+	    theDDC->setContinuationTime(lambdaChannel, duration, target, dtFixed) < 0) {
+	  opserr << "WARNING integrator DisplacementControl - continuation-time "
+		 << "options rejected; want: -duration D -target U (or -dt dt) "
+		 << "<-channel c>\n";
+	  delete theDDC;
+	  return TCL_ERROR;
+	}
+	theStaticIntegrator = theDDC;
+      }
 #else
       Node *theNode = theDomain.getNode(node);
       if (theNode == 0) {
@@ -4588,8 +4882,18 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	return TCL_ERROR;	  
       }
 
-      theStaticIntegrator = new DisplacementControl(node, dof-1, increment, &theDomain,
-						    numIter, minIncr, maxIncr, tangFlag);
+      DisplacementControl *theDC =
+	new DisplacementControl(node, dof-1, increment, &theDomain,
+				numIter, minIncr, maxIncr, tangFlag);
+      if (wantContinuation &&
+	  theDC->setContinuationTime(lambdaChannel, duration, target, dtFixed) < 0) {
+	opserr << "WARNING integrator DisplacementControl - continuation-time "
+	       << "options rejected; want: -duration D -target U (or -dt dt) "
+	       << "<-channel c>\n";
+	delete theDC;
+	return TCL_ERROR;
+      }
+      theStaticIntegrator = theDC;
 #endif
 
       // if the analysis exists - we want to change the Integrator
@@ -4614,15 +4918,37 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	return TCL_ERROR;	
       if (Tcl_GetInt(interp, argv[3], &dof) != TCL_OK)	
 	return TCL_ERROR;	
-      if (Tcl_GetDouble(interp, argv[4], &increment) != TCL_OK)	
-	return TCL_ERROR;	      
-      if (argc > 7) {
-	if (Tcl_GetInt(interp, argv[5], &numIter) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[6], &minIncr) != TCL_OK)	
-	  return TCL_ERROR;	
-	if (Tcl_GetDouble(interp, argv[7], &maxIncr) != TCL_OK)	
-	  return TCL_ERROR;	  
+      if (Tcl_GetDouble(interp, argv[4], &increment) != TCL_OK)
+	return TCL_ERROR;
+
+      // continuous-time (continuation) options; absent => legacy behaviour.
+      // see ContinuationLambda.h and
+      // DistributedDisplacementControl::setContinuationTime
+      int lambdaChannel = 0;
+      double duration = 0.0, target = 0.0, dtFixed = 0.0;
+      bool wantContinuation = false;
+
+      // Locate the first OPTION KEYWORD at or after argv[5]. Matching on a
+      // leading '-' would be wrong: minIncrement/maxIncrement are legitimately
+      // negative for a push in the negative direction.
+      int firstOpt = argc;
+      for (int i = 5; i < argc; i++) {
+	if (strcmp(argv[i],"-channel")  == 0 || strcmp(argv[i],"-duration") == 0 ||
+	    strcmp(argv[i],"-target")   == 0 || strcmp(argv[i],"-dt")       == 0) {
+	  firstOpt = i;
+	  break;
+	}
+      }
+
+      // the positional triple <Jd minIncrement maxIncrement> is present only
+      // if three plain values sit before the first option keyword
+      if (firstOpt >= 8) {
+	if (Tcl_GetInt(interp, argv[5], &numIter) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[6], &minIncr) != TCL_OK)
+	  return TCL_ERROR;
+	if (Tcl_GetDouble(interp, argv[7], &maxIncr) != TCL_OK)
+	  return TCL_ERROR;
       }
       else {
 	minIncr = increment;
@@ -4630,12 +4956,42 @@ specifyIntegrator(ClientData clientData, Tcl_Interp *interp, int argc,
 	numIter = 1;
       }
 
+      for (int i = firstOpt; i < argc; i++) {
+	if (strcmp(argv[i],"-channel") == 0 && i+1 < argc) {
+	  if (Tcl_GetInt(interp, argv[++i], &lambdaChannel) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-duration") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &duration) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-target") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &target) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	} else if (strcmp(argv[i],"-dt") == 0 && i+1 < argc) {
+	  if (Tcl_GetDouble(interp, argv[++i], &dtFixed) != TCL_OK)
+	    return TCL_ERROR;
+	  wantContinuation = true;
+	}
+      }
 
       DistributedDisplacementControl *theDDC  = new DistributedDisplacementControl(node,dof-1,increment,
 										   numIter, minIncr, maxIncr);
 
       theDDC->setProcessID(OPS_rank);
       theDDC->setChannels(numChannels, theChannels);
+
+      // after setChannels, so syncLambda() has the channels it needs
+      if (wantContinuation &&
+	  theDDC->setContinuationTime(lambdaChannel, duration, target, dtFixed) < 0) {
+	opserr << "WARNING integrator ParallelDisplacementControl - continuation-time "
+	       << "options rejected; want: -duration D -target U (or -dt dt) "
+	       << "<-channel c>\n";
+	delete theDDC;
+	return TCL_ERROR;
+      }
+
       theStaticIntegrator = theDDC;
 
       // if the analysis exists - we want to change the Integrator

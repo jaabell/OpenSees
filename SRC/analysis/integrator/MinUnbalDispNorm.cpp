@@ -54,6 +54,7 @@
 #include<TaggedObjectStorage.h>
 #include <elementAPI.h>
 #include <Matrix.h>
+#include <ContinuationLambda.h>
 void* OPS_MinUnbalDispNorm()
 {
     double lambda11, minlambda, maxlambda;
@@ -110,7 +111,9 @@ MinUnbalDispNorm::MinUnbalDispNorm(double lambda1, int specNumIter,
  deltaUhat(0), deltaUbar(0), deltaU(0), deltaUstep(0), dUhatdh(0), dLambdaj(0.0),
  phat(0), deltaLambdaStep(0.0), currentLambda(0.0), dLambdaStepDh(0.0),dUIJdh(0),Dlambdadh(0.0),dphatdh(0),Residual2(0),
  signLastDeltaLambdaStep(1), sensitivityFlag(0),Residual(0), dlambdadh(0.0),dLambda(0.0), sensU(0),d_deltaU_dh(0),gradNumber(0),dLAMBDAdh(0),
- dLambda1min(min), dLambda1max(max), signLastDeterminant(1), signFirstStepMethod(signFirstStep)
+ dLambda1min(min), dLambda1max(max), signLastDeterminant(1), signFirstStepMethod(signFirstStep),
+ useContinuationTime(false), lambdaChannel(0), dtFixed(0.0), timeStep(0.0),
+ committedLambda(0.0)
 {
   // to avoid divide-by-zero error on first update() ensure numIncr != 0
   if (specNumIncrStep == 0) {
@@ -118,6 +121,67 @@ MinUnbalDispNorm::MinUnbalDispNorm(double lambda1, int specNumIter,
     specNumIncrStep = 1.0;
     numIncrLastStep = 1.0;
   }
+}
+
+int
+MinUnbalDispNorm::setContinuationTime(int chan, double dt)
+{
+   if (!OPS_ContinuationLambda::inRange(chan)) {
+      opserr << "MinUnbalDispNorm::setContinuationTime() - lambda channel "
+	     << chan << " out of range\n";
+      return -1;
+   }
+   if (!(dt > 0.0)) {
+      opserr << "MinUnbalDispNorm::setContinuationTime() - need a positive -dt. "
+	     << "This method has no progress-normalised form: its prescribed "
+	     << "increment is a signed load-factor step, deliberately flipped at "
+	     << "a limit point, so it is not monotone\n";
+      return -1;
+   }
+
+   useContinuationTime = true;
+   lambdaChannel = chan;
+   dtFixed = dt;
+
+   if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+      OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+   committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+   currentLambda = committedLambda;
+   OPS_ContinuationLambda::setOwner(lambdaChannel,
+				    INTEGRATOR_TAGS_MinUnbalDispNorm);
+
+   return 0;
+}
+
+int
+MinUnbalDispNorm::commit(void)
+{
+   int res = this->StaticIntegrator::commit();
+   if (res == 0 && useContinuationTime)
+      committedLambda = currentLambda;
+   return res;
+}
+
+int
+MinUnbalDispNorm::revertToLastStep(void)
+{
+   if (useContinuationTime == false)
+      return 0;
+
+   // see DisplacementControl::revertToLastStep -- without this a failed step
+   // would leave the inflated lambda in the channel
+   currentLambda = committedLambda;
+   deltaLambdaStep = 0.0;
+   OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+   AnalysisModel *theModel = this->getAnalysisModel();
+   if (theModel != 0) {
+      timeStep = theModel->getCurrentDomainTime();
+      theModel->applyLoadDomain(timeStep);
+      theModel->updateDomain();
+   }
+
+   return 0;
 }
 
 MinUnbalDispNorm::~MinUnbalDispNorm()
@@ -166,8 +230,11 @@ MinUnbalDispNorm::newStep(void)
 	return -1;
     }
 
-    // get the current load factor
-    currentLambda = theModel->getCurrentDomainTime();
+    // get the current load factor (see DisplacementControl::newStep)
+    if (useContinuationTime == false)
+	currentLambda = theModel->getCurrentDomainTime();
+    else
+	currentLambda = committedLambda;
 
 //opserr<<" NewStep=      "<<*phat<<endln;
     // determine dUhat
@@ -279,8 +346,20 @@ MinUnbalDispNorm::newStep(void)
 
 
     // update model with delta lambda and delta U
-    theModel->incrDisp(*deltaU);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+    if (useContinuationTime == false) {
+      theModel->applyLoadDomain(currentLambda);
+    } else {
+      // advance the timeline once per step, freeze it for the iterations
+      if (!(dtFixed > 0.0)) {
+	opserr << "WARNING MinUnbalDispNorm::newStep() - continuation dt is "
+	       << dtFixed << ", must be strictly positive\n";
+	return -1;
+      }
+      timeStep = theModel->getCurrentDomainTime() + dtFixed;
+      OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+      theModel->applyLoadDomain(timeStep);
+    }
     if (theModel->updateDomain() < 0) {
       opserr << "MinUnbalDispNorm::newStep - model failed to update for new dU\n";
       return -1;
@@ -332,8 +411,14 @@ MinUnbalDispNorm::update(const Vector &dU)
  //   opserr<<"dLambda= "<<dLambda<<endln;
 //opserr<<"CURRENTLAMBDA= ..................................................../////////......."<<currentLambda<<endln;
     // update the model
-    theModel->incrDisp(*deltaU);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// lambda changes every iteration; the TIME must not
+	OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
 
     if (theModel->updateDomain() < 0) {
       opserr << "MinUnbalDispNorm::update - model failed to update for new dU\n";
@@ -505,13 +590,30 @@ MinUnbalDispNorm::domainChanged(void)
     // now we have to determine phat
     // do this by incrementing lambda by 1, applying load
     // and getting phat from unbalance.
-    currentLambda = theModel->getCurrentDomainTime();
-    currentLambda += 1.0;
-    theModel->applyLoadDomain(currentLambda);    
-    this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
-    (*phat) = theLinSOE->getB();
-    currentLambda -= 1.0;
-    theModel->setCurrentDomainTime(currentLambda);    
+    if (useContinuationTime == false) {
+      currentLambda = theModel->getCurrentDomainTime();
+      currentLambda += 1.0;
+      theModel->applyLoadDomain(currentLambda);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+      currentLambda -= 1.0;
+      theModel->setCurrentDomainTime(currentLambda);
+    } else {
+      // probe LAMBDA at a frozen time: that is dP_ext/dlambda exactly. Probing
+      // the time moves no amplitude in continuation mode and would leave
+      // phat == 0. See DisplacementControl::domainChanged.
+      double t = theModel->getCurrentDomainTime();
+      double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+      theModel->applyLoadDomain(t);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam);
+      theModel->applyLoadDomain(t);
+      currentLambda = lam;
+    }
 
 
     // check there is a reference load
@@ -536,7 +638,7 @@ int
 MinUnbalDispNorm::sendSelf(int cTag,
 		    Channel &theChannel)
 {
-  Vector data(8);
+  Vector data(13);
   data(0) = dLambda1LastStep;
   data(1) = specNumIncrStep;
   data(2) = numIncrLastStep;
@@ -548,6 +650,11 @@ MinUnbalDispNorm::sendSelf(int cTag,
     data(5) = 0.0;
   data(6) = dLambda1min;
   data(7) = dLambda1max;
+  data(8) = useContinuationTime ? 1.0 : 0.0;
+  data(9) = lambdaChannel;
+  data(10) = dtFixed;
+  data(11) = committedLambda;
+  data(12) = signFirstStepMethod;
 
   if (theChannel.sendVector(this->getDbTag(), cTag, data) < 0) {
       opserr << "MinUnbalDispNorm::sendSelf() - failed to send the data\n";
@@ -561,11 +668,11 @@ int
 MinUnbalDispNorm::recvSelf(int cTag,
 		    Channel &theChannel, FEM_ObjectBroker &theBroker)
 {
-  Vector data(8);
+  Vector data(13);
   if (theChannel.recvVector(this->getDbTag(), cTag, data) < 0) {
       opserr << "MinUnbalDispNorm::sendSelf() - failed to send the data\n";
       return -1;
-  }      
+  }
 
   // set the data
 
@@ -580,6 +687,18 @@ MinUnbalDispNorm::recvSelf(int cTag,
     signLastDeltaLambdaStep = -1;
   dLambda1min = data(6);
   dLambda1max = data(7);
+  useContinuationTime = (data(8) != 0.0);
+  lambdaChannel = (int)data(9);
+  dtFixed = data(10);
+  committedLambda = data(11);
+  signFirstStepMethod = (int)data(12);
+
+  if (useContinuationTime) {
+    currentLambda = committedLambda;
+    OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+    OPS_ContinuationLambda::setOwner(lambdaChannel,
+				     INTEGRATOR_TAGS_MinUnbalDispNorm);
+  }
 
   return 0;
 }

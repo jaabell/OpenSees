@@ -47,6 +47,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <elementAPI.h>
+#include <ContinuationLambda.h>
+#include <classTags.h>
+#include <string.h>
 
 void* OPS_ArcLength1()
 {
@@ -61,24 +64,98 @@ void* OPS_ArcLength1()
 	opserr << "WARNING integrator ArcLength failed to read arc length\n";
 	return 0;
     }
+    double alpha = 1.0;
+    bool haveAlpha = false;
     if (OPS_GetNumRemainingInputArgs() > 0) {
-        double alpha;
-	if (OPS_GetDoubleInput(&numdata, &alpha) < 0) {
-	  opserr << "WARNING integrator ArcLength failed to read alpha\n";
-	  return 0;
+	const char* peek = OPS_GetString();
+	bool isOption = (peek != 0 &&
+			 (strcmp(peek,"-dt") == 0 || strcmp(peek,"-channel") == 0 ||
+			  strcmp(peek,"-duration") == 0 || strcmp(peek,"-target") == 0 ||
+			  strcmp(peek,"-signAngle") == 0));
+	OPS_ResetCurrentInputArg(-1);
+	if (isOption == false) {
+	    if (OPS_GetDoubleInput(&numdata, &alpha) < 0) {
+		opserr << "WARNING integrator ArcLength1 failed to read alpha\n";
+		return 0;
+	    }
+	    haveAlpha = true;
 	}
-	return new ArcLength1(arcLength,alpha);
-    } else {
-      return new ArcLength1(arcLength);
     }
+
+    // continuous-time (continuation) options; absent => legacy behaviour
+    int lambdaChannel = 0;
+    double duration = 0.0, target = 0.0, dtFixed = 0.0;
+    bool wantContinuation = false;
+    bool wantSignAngle = false;
+
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+	const char* arg = OPS_GetString();
+	if (arg == 0)
+	    break;
+	if (strcmp(arg,"-signAngle") == 0) {
+	    wantSignAngle = true;
+	} else if (strcmp(arg,"-dt") == 0) {
+	    numdata = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numdata, &dtFixed) < 0) {
+		opserr << "WARNING integrator ArcLength1 failed to read -dt\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-duration") == 0) {
+	    numdata = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numdata, &duration) < 0) {
+		opserr << "WARNING integrator ArcLength1 failed to read -duration\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-target") == 0) {
+	    numdata = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numdata, &target) < 0) {
+		opserr << "WARNING integrator ArcLength1 failed to read -target\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-channel") == 0) {
+	    numdata = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetIntInput(&numdata, &lambdaChannel) < 0) {
+		opserr << "WARNING integrator ArcLength1 failed to read -channel\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	}
+    }
+
+    ArcLength1* theIntegrator = haveAlpha ? new ArcLength1(arcLength,alpha)
+					  : new ArcLength1(arcLength);
+
+    if (wantSignAngle)
+	theIntegrator->setSignFromAngle(true);
+
+    if (wantContinuation &&
+	theIntegrator->setContinuationTime(lambdaChannel, duration,
+					   target, dtFixed) < 0) {
+	opserr << "WARNING integrator ArcLength1 - continuation-time options "
+	       << "rejected\n";
+	delete theIntegrator;
+	return 0;
+    }
+
+    return theIntegrator;
 }
 
 ArcLength1::ArcLength1(double arcLength, double alpha)
 :StaticIntegrator(INTEGRATOR_TAGS_ArcLength1),
  arcLength2(arcLength*arcLength), alpha2(alpha*alpha),
  deltaUhat(0), deltaUbar(0), deltaU(0), deltaUstep(0), 
- phat(0), deltaLambdaStep(0.0), currentLambda(0.0), 
- signLastDeltaLambdaStep(1)
+ phat(0), deltaLambdaStep(0.0), currentLambda(0.0),
+ signLastDeltaLambdaStep(1),
+ useContinuationTime(false), lambdaChannel(0), stageDuration(0.0),
+ stageTarget(0.0), dtFixed(0.0), timeStep(0.0), committedLambda(0.0),
+ signFromAngle(false), committedUstep(0)
 {
 
 }
@@ -92,10 +169,112 @@ ArcLength1::~ArcLength1()
 	delete deltaU;
     if (deltaUstep != 0)
 	delete deltaUstep;
+    if (committedUstep != 0)
+	delete committedUstep;
     if (deltaUbar != 0)
 	delete deltaUbar;
 	if (phat != 0)
 	delete phat;
+}
+
+double
+ArcLength1::continuationDt(void) const
+{
+    // see ArcLength::continuationDt -- same progress measure
+    if (stageTarget != 0.0)
+	return stageDuration * sqrt(arcLength2) / fabs(stageTarget);
+    return dtFixed;
+}
+
+int
+ArcLength1::setContinuationTime(int chan, double duration,
+				double target, double dt)
+{
+    if (!OPS_ContinuationLambda::inRange(chan)) {
+	opserr << "ArcLength1::setContinuationTime() - lambda channel " << chan
+	       << " out of range\n";
+	return -1;
+    }
+    if (target == 0.0 && !(dt > 0.0)) {
+	opserr << "ArcLength1::setContinuationTime() - need either -target (the "
+	       << "total arc length of the stage) or a positive -dt\n";
+	return -1;
+    }
+    if (target != 0.0 && fabs(target) < sqrt(arcLength2)) {
+	opserr << "ArcLength1::setContinuationTime() - -target " << target
+	       << " is smaller than one arc-length increment " << sqrt(arcLength2)
+	       << "; the stage would overshoot its end time on the first step\n";
+	return -1;
+    }
+
+    useContinuationTime = true;
+    lambdaChannel = chan;
+    stageDuration = duration;
+    stageTarget = target;
+    dtFixed = dt;
+
+    if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+	OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+    committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+    currentLambda = committedLambda;
+    OPS_ContinuationLambda::setOwner(lambdaChannel, INTEGRATOR_TAGS_ArcLength1);
+
+    return 0;
+}
+
+int
+ArcLength1::setSignFromAngle(bool flag)
+{
+    signFromAngle = flag;
+    return 0;
+}
+
+int
+ArcLength1::setArcLength(double s)
+{
+    if (!(s > 0.0)) {
+	opserr << "ArcLength1::setArcLength() - the arc length must be strictly "
+	       << "positive, got " << s << "\n";
+	return -1;
+    }
+    if (useContinuationTime && stageTarget != 0.0 && s > fabs(stageTarget)) {
+	opserr << "ArcLength1::setArcLength() - " << s << " exceeds the stage "
+	       << "total arc length " << stageTarget << "\n";
+	return -1;
+    }
+    arcLength2 = s*s;
+    return 0;
+}
+
+int
+ArcLength1::commit(void)
+{
+    int res = this->StaticIntegrator::commit();
+    if (res == 0 && useContinuationTime)
+	committedLambda = currentLambda;
+    if (res == 0 && signFromAngle && committedUstep != 0 && deltaUstep != 0)
+	(*committedUstep) = (*deltaUstep);
+    return res;
+}
+
+int
+ArcLength1::revertToLastStep(void)
+{
+    if (useContinuationTime == false)
+	return 0;
+
+    currentLambda = committedLambda;
+    deltaLambdaStep = 0.0;
+    OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+    AnalysisModel *theModel = this->getAnalysisModel();
+    if (theModel != 0) {
+	timeStep = theModel->getCurrentDomainTime();
+	theModel->applyLoadDomain(timeStep);
+	theModel->updateDomain();
+    }
+
+    return 0;
 }
 
 int
@@ -110,8 +289,11 @@ ArcLength1::newStep(void)
 	return -1;
     }
 
-    // get the current load factor
-    currentLambda = theModel->getCurrentDomainTime();
+    // get the current load factor (see DisplacementControl::newStep)
+    if (useContinuationTime == false)
+	currentLambda = theModel->getCurrentDomainTime();
+    else
+	currentLambda = committedLambda;
 
     if (deltaLambdaStep < 0)
 	signLastDeltaLambdaStep = -1;
@@ -124,7 +306,17 @@ ArcLength1::newStep(void)
     theLinSOE->solve();
     (*deltaUhat) = theLinSOE->getX();
     Vector &dUhat = *deltaUhat;
-    
+
+    // OPT-IN: sign from the angle with the previous converged step; see
+    // ArcLength::newStep for the derivation
+    if (signFromAngle && committedUstep != 0) {
+	double d = (*committedUstep) ^ dUhat;
+	if (d < 0.0)
+	    signLastDeltaLambdaStep = -1;
+	else if (d > 0.0)
+	    signLastDeltaLambdaStep = +1;
+    }
+
     // determine delta lambda(1) == dlambda
     double dLambda = sqrt(arcLength2/((dUhat^dUhat)+alpha2));
     dLambda *= signLastDeltaLambdaStep; // base sign of load change
@@ -138,8 +330,20 @@ ArcLength1::newStep(void)
     (*deltaUstep) = (*deltaU);
 
     // update model with delta lambda and delta U
-    theModel->incrDisp(*deltaU);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	double dt = this->continuationDt();
+	if (!(dt > 0.0)) {
+	    opserr << "WARNING ArcLength1::newStep() - continuation dt is " << dt
+		   << ", must be strictly positive\n";
+	    return -1;
+	}
+	timeStep = theModel->getCurrentDomainTime() + dt;
+	OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
     theModel->updateDomain();
 
     return 0;
@@ -183,10 +387,16 @@ ArcLength1::update(const Vector &dU)
     currentLambda += dLambda;
 
     // update the model
-    theModel->incrDisp(*deltaU);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*deltaU);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// lambda changes every iteration; the TIME must not
+	OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
     theModel->updateDomain();
-    
+
     // set the X soln in linearSOE to be deltaU for convergence Test
     theLinSOE->setX(*deltaU);
 
@@ -264,12 +474,41 @@ ArcLength1::domainChanged(void)
 	}
     }    
 
+    // only allocated when the angle sign rule is on; see ArcLength
+    if (signFromAngle &&
+	(committedUstep == 0 || committedUstep->Size() != size)) {
+	if (committedUstep != 0)
+	    delete committedUstep;
+	committedUstep = new Vector(size);
+	if (committedUstep == 0 || committedUstep->Size() != size) {
+	    opserr << "FATAL ArcLength1::domainChanged() - ran out of memory for";
+	    opserr << " committedUstep Vector of size " << size << endln;
+	    exit(-1);
+	}
+    }
+
     // now we have to determine phat
     // do this by incrementing lambda by 1, applying load
     // and getting phat from unbalance.
+    if (useContinuationTime) {
+	// probe LAMBDA at a frozen time; see ArcLength::domainChanged
+	double t = theModel->getCurrentDomainTime();
+	double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+	OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+	theModel->applyLoadDomain(t);
+	this->formUnbalance();
+	(*phat) = theLinSOE->getB();
+
+	OPS_ContinuationLambda::set(lambdaChannel, lam);
+	theModel->applyLoadDomain(t);
+	currentLambda = lam;
+	return 0;
+    }
+
     currentLambda = theModel->getCurrentDomainTime();
     currentLambda += 1.0;
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->applyLoadDomain(currentLambda);
     this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
     (*phat) = theLinSOE->getB();
     currentLambda -= 1.0;
@@ -282,12 +521,19 @@ int
 ArcLength1::sendSelf(int cTag,
 		    Channel &theChannel)
 {
-  Vector data(5);
+  Vector data(12);
   data(0) = arcLength2;
   data(1) = alpha2;
   data(2) = deltaLambdaStep;
   data(3) = currentLambda;
   data(4)  = signLastDeltaLambdaStep;
+  data(5) = useContinuationTime ? 1.0 : 0.0;
+  data(6) = lambdaChannel;
+  data(7) = stageDuration;
+  data(8) = stageTarget;
+  data(9) = dtFixed;
+  data(10) = committedLambda;
+  data(11) = signFromAngle ? 1.0 : 0.0;
 
   if (theChannel.sendVector(this->getDbTag(), cTag, data) < 0) {
       opserr << "ArcLength1::sendSelf() - failed to send the data\n";
@@ -301,11 +547,11 @@ int
 ArcLength1::recvSelf(int cTag,
 		    Channel &theChannel, FEM_ObjectBroker &theBroker)
 {
-  Vector data(5);
+  Vector data(12);
   if (theChannel.recvVector(this->getDbTag(), cTag, data) < 0) {
       opserr << "ArcLength1::sendSelf() - failed to send the data\n";
       return -1;
-  }      
+  }
 
   // set the data
   arcLength2 = data(0);
@@ -313,6 +559,19 @@ ArcLength1::recvSelf(int cTag,
   deltaLambdaStep = data(2);
   currentLambda = data(3);
   signLastDeltaLambdaStep = data(4);
+  useContinuationTime = (data(5) != 0.0);
+  lambdaChannel = (int)data(6);
+  stageDuration = data(7);
+  stageTarget = data(8);
+  dtFixed = data(9);
+  committedLambda = data(10);
+  signFromAngle = (data(11) != 0.0);
+
+  if (useContinuationTime) {
+      currentLambda = committedLambda;
+      OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+      OPS_ContinuationLambda::setOwner(lambdaChannel, INTEGRATOR_TAGS_ArcLength1);
+  }
   return 0;
 }
 

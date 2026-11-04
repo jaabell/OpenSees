@@ -60,9 +60,29 @@ class DisplacementControl : public StaticIntegrator
 
       ~DisplacementControl();
 
-      int newStep(void);    
+      int newStep(void);
       int update(const Vector &deltaU);
       int domainChanged(void);
+
+      int commit(void);
+      int revertToLastStep(void);
+
+      // Continuous-time (continuation) mode -- OFF by default, so an
+      // integrator that is never configured behaves exactly as before:
+      // lambda is stored in Domain::currentTime.
+      //
+      // When ON, lambda lives in OPS_ContinuationLambda channel
+      // lambdaChannel (read by a ContinuationTimeSeries on the reference
+      // load pattern) and Domain::currentTime advances monotonically by a
+      // bookkeeping dt, so the recorded time stays a usable timeline.
+      //
+      // Pass target != 0 for progress-normalised dt (recommended):
+      //     dt = duration * |theIncrement| / |target|
+      // whose sum over the stage is exactly `duration` whatever the
+      // adaptive stepping and the retries do. Pass target == 0 to use the
+      // fixed dtFixed instead.
+      int setContinuationTime(int lambdaChannel, double duration,
+			      double target, double dtFixed);
 
       int sendSelf(int commitTag, Channel &theChannel);
       int recvSelf(int commitTag, Channel &theChannel, 
@@ -130,6 +150,17 @@ class DisplacementControl : public StaticIntegrator
       int gradNumber;
       int sensitivityFlag;
       FE_Element *theEle;
+
+      // ---- continuous-time (continuation) mode; see setContinuationTime ----
+      bool useContinuationTime; // false => legacy behaviour, bit for bit
+      int lambdaChannel;        // OPS_ContinuationLambda channel driven here
+      double stageDuration;     // D_stage on the global timeline
+      double stageTarget;       // total controlled displacement of the stage
+      double dtFixed;           // used when stageTarget == 0
+      double timeStep;          // domain time frozen for the current step
+      double committedLambda;   // lambda of the last committed step
+
+      double continuationDt(void) const;
 };
 
 #endif
