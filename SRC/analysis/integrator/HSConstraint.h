@@ -42,10 +42,19 @@ class HSConstraint : public StaticIntegrator
 
     ~HSConstraint();
 
-    int newStep(void);    
+    int newStep(void);
     int update(const Vector &deltaU);
     int domainChanged(void);
-    
+
+    int commit(void);
+    int revertToLastStep(void);
+
+    // Continuous-time (continuation) mode -- OFF by default.
+    // See ContinuationLambda.h. Prescribed-dt variant only, same stopgap and
+    // same open question as ArcLength::setContinuationTime.
+    int setContinuationTime(int lambdaChannel, double dtFixed);
+
+
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
@@ -68,6 +77,13 @@ class HSConstraint : public StaticIntegrator
     double deltaLambdaStep;
     double currentLambda;
     int signLastDeltaLambdaStep;
+
+    // ---- continuous-time (continuation) mode ----
+    bool useContinuationTime;
+    int lambdaChannel;
+    double dtFixed;
+    double timeStep;
+    double committedLambda;
 };
 
 #endif

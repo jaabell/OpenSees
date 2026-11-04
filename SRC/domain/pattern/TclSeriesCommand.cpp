@@ -81,6 +81,7 @@ extern void *OPS_PeerMotion(void);
 extern void *OPS_PeerNGAMotion(void);
 extern void* OPS_MPAccSeries(void);   //Tang.S
 extern void* OPS_PathSeries(void);
+extern void* OPS_ContinuationTimeSeries(void);
 
 #include <elementAPI.h>
 extern "C" int OPS_ResetInputNoBuilder(ClientData clientData, Tcl_Interp * interp, int cArg, int mArg, TCL_Char * *argv, Domain * domain);
@@ -166,7 +167,16 @@ TclTimeSeriesCommand(ClientData clientData,
     void* theResult = OPS_PathSeries();
     if (theResult != 0)
       theSeries = (TimeSeries*)theResult;
-	
+
+  }
+
+  else if ((strcmp(argv[0],"Continuation") == 0) ||
+	   (strcmp(argv[0],"ContinuationTimeSeries") == 0)) {
+
+    void* theResult = OPS_ContinuationTimeSeries();
+    if (theResult != 0)
+      theSeries = (TimeSeries*)theResult;
+
   } 
 
   else if ((strcmp(argv[0],"PeerDatabase") == 0) || (strcmp(argv[0],"PeerMotion") == 0)) {

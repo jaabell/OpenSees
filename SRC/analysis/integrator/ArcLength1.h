@@ -57,10 +57,26 @@ class ArcLength1 : public StaticIntegrator
 
     ~ArcLength1();
 
-    int newStep(void);    
+    int newStep(void);
     int update(const Vector &deltaU);
     int domainChanged(void);
-    
+    int commit(void);
+    int revertToLastStep(void);
+
+    // Continuous-time (continuation) mode and the angle-based predictor sign.
+    // Both are exactly as in ArcLength -- this class has the SAME predictor
+    // (sqrt(arcLength2/(dUhat.dUhat + alpha2)) with the sign of the previous
+    // dLambda) and differs only in the corrector, which is the linearised
+    // dLambda = -a/b instead of the quadratic. So the same progress measure
+    // applies -- the prescribed increment is the positive arc length -- and the
+    // same sign defect is present. Note the criterion is NOT already in this
+    // class: the linear corrector has no root to choose between, so unlike
+    // ArcLength there was nowhere for it to be right.
+    int setContinuationTime(int lambdaChannel, double duration,
+			    double target, double dtFixed);
+    int setSignFromAngle(bool flag);
+    int setArcLength(double arcLength);
+
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
@@ -76,6 +92,21 @@ class ArcLength1 : public StaticIntegrator
     Vector *phat; // the reference load vector
     double deltaLambdaStep, currentLambda;
     int signLastDeltaLambdaStep;
+
+    // ---- continuous-time (continuation) mode; see setContinuationTime ------
+    bool useContinuationTime; // false => legacy behaviour, bit for bit
+    int lambdaChannel;
+    double stageDuration;     // D_stage on the global timeline
+    double stageTarget;       // total arc length of the stage
+    double dtFixed;           // used when stageTarget == 0
+    double timeStep;          // domain time frozen for the current step
+    double committedLambda;
+
+    double continuationDt(void) const;
+
+    // ---- angle-based predictor sign; see setSignFromAngle ------------------
+    bool signFromAngle;
+    Vector *committedUstep;   // dU of the last CONVERGED step
 };
 
 #endif

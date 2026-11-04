@@ -51,6 +51,7 @@
 #include <DOF_GrpIter.h>
 #include <ID.h>
 #include <stdlib.h>
+#include <string.h>
 #include <FE_Element.h>
 #include <FE_EleIter.h>
 #include <LoadPattern.h>
@@ -60,6 +61,7 @@
 #include <EquiSolnAlgo.h>
 #include <Matrix.h>
 #include <TaggedObjectStorage.h>
+#include <ContinuationLambda.h>
 #include <elementAPI.h>
 
 void* OPS_DisplacementControlIntegrator()
@@ -88,24 +90,79 @@ void* OPS_DisplacementControlIntegrator()
     int numIter = 1;
     int formTangent = 0;
     double data[2] = {incr,incr};
+
+    // the legacy positional triple (numIter dumin dumax) is present only when
+    // the next argument is not an option keyword -- peek and push back
     if(OPS_GetNumRemainingInputArgs() > 2) {
-       numData = 1;
-       if(OPS_GetIntInput(&numData,&numIter) < 0) {
-	   opserr << "WARNING failed to read numIter\n";
-	   return 0;
-       }
-       numData = 2;
-       if(OPS_GetDoubleInput(&numData,&data[0]) < 0) {
-	   opserr << "WARNING failed to read dumin and dumax\n";
-	   return 0;
+       // match on the KEYWORD, not on a leading '-': dumin/dumax are
+       // legitimately negative for a push in the negative direction
+       const char* peek = OPS_GetString();
+       bool isOption = (peek != 0 &&
+			(strcmp(peek,"-initial")  == 0 || strcmp(peek,"-Initial") == 0 ||
+			 strcmp(peek,"-channel")  == 0 || strcmp(peek,"-duration") == 0 ||
+			 strcmp(peek,"-target")   == 0 || strcmp(peek,"-dt")       == 0));
+       OPS_ResetCurrentInputArg(-1);
+
+       if (isOption == false) {
+	  numData = 1;
+	  if(OPS_GetIntInput(&numData,&numIter) < 0) {
+	      opserr << "WARNING failed to read numIter\n";
+	      return 0;
+	  }
+	  numData = 2;
+	  if(OPS_GetDoubleInput(&numData,&data[0]) < 0) {
+	      opserr << "WARNING failed to read dumin and dumax\n";
+	      return 0;
+	  }
        }
     }
 
-    if (OPS_GetNumRemainingInputArgs() == 1) {
-      	std::string type = OPS_GetString();
-	if(type=="-initial" || type=="-Initial") {
+    // continuous-time (continuation) options; absent => legacy behaviour
+    int lambdaChannel = 0;
+    double duration = 0.0, target = 0.0, dtFixed = 0.0;
+    bool wantContinuation = false;
+
+    while (OPS_GetNumRemainingInputArgs() > 0) {
+	const char* arg = OPS_GetString();
+	if (arg == 0)
+	    break;
+
+	if (strcmp(arg,"-initial") == 0 || strcmp(arg,"-Initial") == 0) {
 	    formTangent = 1;
-	} 
+	} else if (strcmp(arg,"-channel") == 0) {
+	    numData = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetIntInput(&numData,&lambdaChannel) < 0) {
+		opserr << "WARNING DisplacementControl - failed to read -channel\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-duration") == 0) {
+	    numData = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numData,&duration) < 0) {
+		opserr << "WARNING DisplacementControl - failed to read -duration\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-target") == 0) {
+	    numData = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numData,&target) < 0) {
+		opserr << "WARNING DisplacementControl - failed to read -target\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	} else if (strcmp(arg,"-dt") == 0) {
+	    numData = 1;
+	    if (OPS_GetNumRemainingInputArgs() < 1 ||
+		OPS_GetDoubleInput(&numData,&dtFixed) < 0) {
+		opserr << "WARNING DisplacementControl - failed to read -dt\n";
+		return 0;
+	    }
+	    wantContinuation = true;
+	}
+	// unknown trailing arguments are ignored, as before
     }
 
     // check node
@@ -122,10 +179,24 @@ void* OPS_DisplacementControlIntegrator()
        return 0;
     }
 
-    return new DisplacementControl(iData[0],iData[1]-1,
-				   incr,theDomain,
-				   numIter,data[0],data[1], 
-				   formTangent);
+    DisplacementControl* theIntegrator =
+	new DisplacementControl(iData[0],iData[1]-1,
+				incr,theDomain,
+				numIter,data[0],data[1],
+				formTangent);
+
+    if (wantContinuation) {
+	if (theIntegrator->setContinuationTime(lambdaChannel, duration,
+					       target, dtFixed) < 0) {
+	    opserr << "WARNING integrator DisplacementControl - continuation-time "
+		   << "options rejected; want: -duration D -target U  (or -dt dt)"
+		   << " <-channel c>\n";
+	    delete theIntegrator;
+	    return 0;
+	}
+    }
+
+    return theIntegrator;
 }
 
 
@@ -141,7 +212,9 @@ DisplacementControl::DisplacementControl(int node, int dof,
    phat(0), deltaLambdaStep(0.0), currentLambda(0.0), dLambdaStepDh(0.0),dUIJdh(0),Dlambdadh(0.0),
    specNumIncrStep(numIncr), numIncrLastStep(numIncr),
    minIncrement(min), maxIncrement(max),sensitivityFlag(0),Residual(0),dlambdadh(0.0),
-   dLambda(0.0),  sensU(0),d_deltaU_dh(0),Residual2(0),gradNumber(0),dLAMBDAdh(0),dphatdh(0)
+   dLambda(0.0),  sensU(0),d_deltaU_dh(0),Residual2(0),gradNumber(0),dLAMBDAdh(0),dphatdh(0),
+   useContinuationTime(false), lambdaChannel(0), stageDuration(0.0),
+   stageTarget(0.0), dtFixed(0.0), timeStep(0.0), committedLambda(0.0)
 {
   tangFlag = tang;
 
@@ -219,8 +292,15 @@ DisplacementControl::newStep(void)
       theIncrement = maxIncrement;
 
 
-   // get the current load factor
-   currentLambda = theModel->getCurrentDomainTime();
+   // get the current load factor.
+   // legacy: lambda IS the domain pseudo-time. continuation mode: lambda is
+   // an internal accumulator, rolled back by revertToLastStep() -- the legacy
+   // path is self-healing on a failed step only because it re-reads the
+   // domain time, which Domain::revertToLastCommit() has already restored.
+   if (useContinuationTime == false)
+      currentLambda = theModel->getCurrentDomainTime();
+   else
+      currentLambda = committedLambda;
 
    // determine dUhat
    this->formTangent(tangFlag);
@@ -284,14 +364,116 @@ DisplacementControl::newStep(void)
   ///////////////Abbas/////////////////////////////
 
    // update model with delta lambda and delta U
-   theModel->incrDisp(*deltaU); 
-   theModel->applyLoadDomain(currentLambda);
+   theModel->incrDisp(*deltaU);
+   if (useContinuationTime == false) {
+      theModel->applyLoadDomain(currentLambda);
+   } else {
+      // advance the timeline once per step and freeze it for the iterations
+      double dt = this->continuationDt();
+      if (!(dt > 0.0)) {
+	 opserr << "WARNING DisplacementControl::newStep() - continuation dt is "
+		<< dt << ", must be strictly positive; the controlled increment "
+		<< "has collapsed to zero or the sign of -target disagrees with "
+		<< "the displacement increment\n";
+	 return -1;
+      }
+      // at this point in the step the domain time still equals the committed
+      // time (nothing has applied a load yet, and a failed step went through
+      // Domain::revertToLastCommit which restores it), so getCurrentDomainTime
+      // is the committed time -- no new Domain API needed
+      timeStep = theModel->getCurrentDomainTime() + dt;
+      OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+      theModel->applyLoadDomain(timeStep);
+   }
    if (theModel->updateDomain() < 0) {
       opserr << "DisplacementControl::newStep - model failed to update for new dU\n";
       return -1;
    }
 
    numIncrLastStep = 0;
+   return 0;
+}
+
+double
+DisplacementControl::continuationDt(void) const
+{
+   // progress-normalised: sum over the stage is exactly stageDuration,
+   // because sum|theIncrement| == |stageTarget| by definition of the stage
+   // and the controlled displacement cannot reverse sign (that is precisely
+   // what lets a continuation method cross a limit point).
+   if (stageTarget != 0.0)
+      return stageDuration * fabs(theIncrement) / fabs(stageTarget);
+
+   // fixed dt: simple, but drifts off stageDuration when the adaptive
+   // stepping changes the number of steps actually taken
+   return dtFixed;
+}
+
+int
+DisplacementControl::setContinuationTime(int chan, double duration,
+					 double target, double dt)
+{
+   if (!OPS_ContinuationLambda::inRange(chan)) {
+      opserr << "DisplacementControl::setContinuationTime() - lambda channel "
+	     << chan << " out of range\n";
+      return -1;
+   }
+   if (target == 0.0 && !(dt > 0.0)) {
+      opserr << "DisplacementControl::setContinuationTime() - need either "
+	     << "-target (progress-normalised dt) or a positive -dt\n";
+      return -1;
+   }
+
+   useContinuationTime = true;
+   lambdaChannel = chan;
+   stageDuration = duration;
+   stageTarget = target;
+   dtFixed = dt;
+
+   // inherit a lambda left by a previous continuation stage (the load stays
+   // applied); start from zero only if nobody has ever written this channel
+   if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+      OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+   committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+   currentLambda = committedLambda;
+   OPS_ContinuationLambda::setOwner(lambdaChannel,
+				    INTEGRATOR_TAGS_DisplacementControl);
+
+   return 0;
+}
+
+int
+DisplacementControl::commit(void)
+{
+   int res = this->StaticIntegrator::commit();
+   if (res == 0 && useContinuationTime)
+      committedLambda = currentLambda;
+   return res;
+}
+
+int
+DisplacementControl::revertToLastStep(void)
+{
+   if (useContinuationTime == false)
+      return 0;
+
+   // StaticAnalysis calls Domain::revertToLastCommit() BEFORE this, and that
+   // re-applies the load while the channel still holds the failed lambda.
+   // Restore lambda and re-apply, so the domain is left consistent for
+   // whatever the script does next.
+   currentLambda = committedLambda;
+   deltaLambdaStep = 0.0;
+   OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+   AnalysisModel *theModel = this->getAnalysisModel();
+   if (theModel != 0) {
+      // Domain::revertToLastCommit has already put currentTime back to the
+      // committed time
+      timeStep = theModel->getCurrentDomainTime();
+      theModel->applyLoadDomain(timeStep);
+      theModel->updateDomain();
+   }
+
    return 0;
 }
 
@@ -342,8 +524,15 @@ int DisplacementControl::update(const Vector &dU)
    currentLambda += dLambda;
 
    // update the model
-   theModel->incrDisp(*deltaU);    
-   theModel->applyLoadDomain(currentLambda);    
+   theModel->incrDisp(*deltaU);
+   if (useContinuationTime == false) {
+      theModel->applyLoadDomain(currentLambda);
+   } else {
+      // lambda changes every iteration; the TIME must not. Freezing it also
+      // stops ops_Dt from oscillating under rate-dependent materials.
+      OPS_ContinuationLambda::set(lambdaChannel, currentLambda);
+      theModel->applyLoadDomain(timeStep);
+   }
    if (theModel->updateDomain() < 0) {
       opserr << "DisplacementControl::update - model failed to update for new dU\n";
       return -1;
@@ -514,14 +703,36 @@ DisplacementControl::domainChanged(void)
    // now we have to determine phat
    // do this by incrementing lambda by 1, applying load
    // and getting phat from unbalance.
-   currentLambda = theModel->getCurrentDomainTime();
-   currentLambda += 1.0;
-   theModel->applyLoadDomain(currentLambda);    
-   this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
-   (*phat) = theLinSOE->getB();
+   if (useContinuationTime == false) {
+      currentLambda = theModel->getCurrentDomainTime();
+      currentLambda += 1.0;
+      theModel->applyLoadDomain(currentLambda);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
 
-   currentLambda -= 1.0;
-   theModel->setCurrentDomainTime(currentLambda);    
+      currentLambda -= 1.0;
+      theModel->setCurrentDomainTime(currentLambda);
+   } else {
+      // Probe LAMBDA, not the time. phat is the derivative of the external
+      // load with respect to lambda, so bumping lambda by one at a FROZEN
+      // time gives it exactly: every pattern driven by a
+      // ContinuationTimeSeries contributes its reference load, and every
+      // other pattern contributes zero because its amplitude is evaluated at
+      // an unchanged time. This drops the legacy assumption that the load be
+      // linear in the pseudo-time, and removes the need for loadConst to
+      // keep previous stages out of phat.
+      double t = theModel->getCurrentDomainTime();
+      double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+      theModel->applyLoadDomain(t);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*phat) = theLinSOE->getB();
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam);
+      theModel->applyLoadDomain(t);
+      currentLambda = lam;
+   }
 
 
    // check there is a reference load
@@ -534,6 +745,10 @@ DisplacementControl::domainChanged(void)
 
    if (haveLoad == 0) {
       opserr << "WARNING DisplacementControl::domainChanged() - zero reference load";
+      if (useContinuationTime)
+	 opserr << "\n      in continuation-time mode the reference load pattern "
+		<< "must use a ContinuationTimeSeries on lambda channel "
+		<< lambdaChannel << "\n";
       return -1;
    }
 
@@ -559,7 +774,7 @@ int
 DisplacementControl::sendSelf(int cTag,
       Channel &theChannel)
 {
-  Vector data(10);
+  Vector data(16);
   data(0) = theNode;
   data(1) = theDof;
   data(2) = theIncrement;
@@ -570,6 +785,12 @@ DisplacementControl::sendSelf(int cTag,
   data(7) = numIncrLastStep;
   data(8) = minIncrement;
   data(9) = maxIncrement;
+  data(10) = useContinuationTime ? 1.0 : 0.0;
+  data(11) = lambdaChannel;
+  data(12) = stageDuration;
+  data(13) = stageTarget;
+  data(14) = dtFixed;
+  data(15) = committedLambda;
 
   if (theChannel.sendVector(this->getDbTag(), cTag, data) < 0) {
     opserr << "DisplacementControl::sendSelf() - failed to send the Vector\n";
@@ -584,7 +805,7 @@ int
 DisplacementControl::recvSelf(int cTag,
       Channel &theChannel, FEM_ObjectBroker &theBroker)
 {
-  Vector data(10);
+  Vector data(16);
   if (theChannel.recvVector(this->getDbTag(), cTag, data) < 0) {
     opserr << "DisplacementControl::sendSelf() - failed to send the Vector\n";
     return -1;
@@ -600,7 +821,18 @@ DisplacementControl::recvSelf(int cTag,
   numIncrLastStep = (int)data(7);
   minIncrement = data(8);
   maxIncrement = data(9);
-  
+  useContinuationTime = (data(10) == 1.0);
+  lambdaChannel = (int)data(11);
+  stageDuration = data(12);
+  stageTarget = data(13);
+  dtFixed = data(14);
+  committedLambda = data(15);
+
+  // the lambda VALUE is process-local state of the integrator, not domain
+  // state: seed this process' channel from the received committed lambda
+  if (useContinuationTime)
+    OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
   return 0;
 }
 

@@ -57,10 +57,21 @@ class DistributedDisplacementControl : public StaticIntegrator
 
     ~DistributedDisplacementControl();
 
-    int newStep(void);    
+    int newStep(void);
     int update(const Vector &deltaU);
     int domainChanged(void);
-    
+    int commit(void);
+    int revertToLastStep(void);
+
+    // ---- continuous-time (continuation) mode --------------------------------
+    // Drive lambdaChannel of OPS_ContinuationLambda instead of overloading the
+    // domain pseudo-time with the load factor, so the recorded time advances
+    // monotonically across stages. duration+target give the progress-normalised
+    // dt; pass a positive dtFixed instead when the stage declares no target.
+    // Off by default: without this call the class behaves exactly as before.
+    int setContinuationTime(int lambdaChannel, double duration,
+			    double target, double dtFixed);
+
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
@@ -87,8 +98,23 @@ class DistributedDisplacementControl : public StaticIntegrator
     Vector *phat;                           // the reference load vector
     double deltaLambdaStep, currentLambda;  // dLambda(i) & current value of lambda  
 
-    double specNumIncrStep, numIncrLastStep; // Jd & J(i-1) 
+    double specNumIncrStep, numIncrLastStep; // Jd & J(i-1)
     double minIncrement, maxIncrement; // min/max values of deltaU at (i)
+
+    // ---- continuous-time (continuation) mode; see setContinuationTime ------
+    bool useContinuationTime; // false => legacy behaviour, bit for bit
+    int lambdaChannel;        // OPS_ContinuationLambda channel driven here
+    double stageDuration;     // D_stage on the global timeline
+    double stageTarget;       // total controlled displacement of the stage
+    double dtFixed;           // used when stageTarget == 0
+    double timeStep;          // domain time frozen for the current step
+    double committedLambda;   // lambda of the last committed step
+
+    double continuationDt(void) const;
+
+    // make the committed lambda bit-identical on every rank, and shout if the
+    // ranks disagreed in the first place
+    int syncLambda(void);
 };
 
 #endif

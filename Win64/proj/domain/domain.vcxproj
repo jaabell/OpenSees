@@ -225,6 +225,8 @@
     <ClCompile Include="..\..\..\SRC\domain\domain\single\SingleDomPC_Iter.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\domain\single\SingleDomParamIter.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\domain\single\SingleDomSP_Iter.cpp" />
+    <ClCompile Include="..\..\..\SRC\domain\pattern\ContinuationLambda.cpp" />
+    <ClCompile Include="..\..\..\SRC\domain\pattern\ContinuationTimeSeries.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\pattern\MPAccSeries.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\pattern\PathTimeSeriesThermal.cpp" />
     <ClCompile Include="..\..\..\SRC\domain\pattern\RampSeries.cpp" />
@@ -382,6 +384,8 @@
     <ClInclude Include="..\..\..\SRC\domain\groundMotion\GroundMotionRecord.h" />
     <ClInclude Include="..\..\..\SRC\domain\groundMotion\InterpolatedGroundMotion.h" />
     <ClInclude Include="..\..\..\SRC\domain\pattern\ConstantSeries.h" />
+    <ClInclude Include="..\..\..\SRC\domain\pattern\ContinuationLambda.h" />
+    <ClInclude Include="..\..\..\SRC\domain\pattern\ContinuationTimeSeries.h" />
     <ClInclude Include="..\..\..\SRC\domain\pattern\DiscretizedRandomProcessSeries.h" />
     <ClInclude Include="..\..\..\SRC\domain\pattern\LinearSeries.h" />
     <ClInclude Include="..\..\..\SRC\domain\pattern\PathSeries.h" />

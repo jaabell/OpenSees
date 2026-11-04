@@ -109,6 +109,7 @@
 #define TSERIES_TAG_PathTimeSeriesThermal  13  //L.Jiang [ SIF ]
 #define TSERIES_TAG_RampSeries  14  //CDM
 #define TSERIES_TAG_MPAccSeries       15 //Tang.S[SEU]
+#define TSERIES_TAG_ContinuationTimeSeries 16
 
 #define PARAMETER_TAG_Parameter			   1
 #define PARAMETER_TAG_MaterialStageParameter       2

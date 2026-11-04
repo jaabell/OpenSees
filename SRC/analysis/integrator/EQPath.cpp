@@ -48,11 +48,15 @@
 #include "Domain.h"
 #include "Node.h"
 #include "Element.h"
+#include <ContinuationLambda.h>
+#include <classTags.h>
 
 EQPath::EQPath(double arcLen,int method)
 :StaticIntegrator(INTEGRATOR_TAGS_EQPath),
  arclen(arcLen), 
- uq(0),uq0(0), ur(0), du(0),du0(0),uqn(0), q(0),type(method),m(1),dl(0),changed(0),nitr(0)
+ uq(0),uq0(0), ur(0), du(0),du0(0),uqn(0), q(0),type(method),m(1),dl(0),changed(0),nitr(0),
+ useContinuationTime(false), lambdaChannel(0), dtFixed(0.0), timeStep(0.0),
+ contLambda(0.0), committedLambda(0.0), stageDuration(0.0), stageTarget(0.0)
  {
 	
 	
@@ -78,6 +82,101 @@ EQPath::~EQPath()
 	delete q;
 }
 
+double
+EQPath::continuationDt(void) const
+{
+   // progress-normalised on the arc length. The constraint sets |du| = arclen
+   // exactly (newStep: dLambda = sign*arclen/|uq0|, du = dLambda*uq0), so the
+   // sum over N steps is exactly N*arclen. arclen is positive by construction.
+   if (stageTarget != 0.0)
+      return stageDuration * arclen / fabs(stageTarget);
+
+   return dtFixed;
+}
+
+int
+EQPath::setArcLength(double s)
+{
+   if (!(s > 0.0)) {
+      opserr << "EQPath::setArcLength() - the arc length must be strictly "
+	     << "positive, got " << s << "\n";
+      return -1;
+   }
+   if (useContinuationTime && stageTarget != 0.0 && s > fabs(stageTarget)) {
+      opserr << "EQPath::setArcLength() - " << s << " exceeds the stage total "
+	     << "arc length " << stageTarget << "; the stage would overshoot its "
+	     << "end time on the next step\n";
+      return -1;
+   }
+   arclen = s;
+   return 0;
+}
+
+int
+EQPath::setContinuationTime(int chan, double duration,
+			    double target, double dt)
+{
+   if (!OPS_ContinuationLambda::inRange(chan)) {
+      opserr << "EQPath::setContinuationTime() - lambda channel " << chan
+	     << " out of range\n";
+      return -1;
+   }
+   if (target == 0.0 && !(dt > 0.0)) {
+      opserr << "EQPath::setContinuationTime() - need either -target (the total "
+	     << "arc length of the stage, progress-normalised dt) or a positive "
+	     << "-dt\n";
+      return -1;
+   }
+   if (target != 0.0 && fabs(target) < arclen) {
+      opserr << "EQPath::setContinuationTime() - -target " << target
+	     << " is smaller than one arc-length increment " << arclen
+	     << "; the stage would overshoot its end time on the first step\n";
+      return -1;
+   }
+
+   useContinuationTime = true;
+   lambdaChannel = chan;
+   stageDuration = duration;
+   stageTarget = target;
+   dtFixed = dt;
+
+   if (OPS_ContinuationLambda::isValid(lambdaChannel) == false)
+      OPS_ContinuationLambda::set(lambdaChannel, 0.0);
+   committedLambda = OPS_ContinuationLambda::get(lambdaChannel);
+   contLambda = committedLambda;
+   OPS_ContinuationLambda::setOwner(lambdaChannel, INTEGRATOR_TAGS_EQPath);
+
+   return 0;
+}
+
+int
+EQPath::commit(void)
+{
+   int res = this->StaticIntegrator::commit();
+   if (res == 0 && useContinuationTime)
+      committedLambda = contLambda;
+   return res;
+}
+
+int
+EQPath::revertToLastStep(void)
+{
+   if (useContinuationTime == false)
+      return 0;
+
+   contLambda = committedLambda;
+   OPS_ContinuationLambda::set(lambdaChannel, committedLambda);
+
+   AnalysisModel *theModel = this->getAnalysisModel();
+   if (theModel != 0) {
+      timeStep = theModel->getCurrentDomainTime();
+      theModel->applyLoadDomain(timeStep);
+      theModel->updateDomain();
+   }
+
+   return 0;
+}
+
 int
 EQPath::newStep(void)
 {
@@ -90,8 +189,11 @@ EQPath::newStep(void)
 	return -1;
     }
 
-    // get the current load factor
-    double currentLambda = theModel->getCurrentDomainTime();
+    // get the current load factor (see DisplacementControl::newStep)
+    if (useContinuationTime)
+	contLambda = committedLambda;
+    double currentLambda = (useContinuationTime ? contLambda
+					       : theModel->getCurrentDomainTime());
 
 
     // determine dUhat
@@ -136,10 +238,24 @@ EQPath::newStep(void)
 
     currentLambda += dLambda;
     dl+=dLambda;
-    
+
     // update model with delta lambda and delta U
-    theModel->incrDisp(*du);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*du);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// advance the timeline once per step, freeze it for the iterations
+	double dt = this->continuationDt();
+	if (!(dt > 0.0)) {
+	    opserr << "WARNING EQPath::newStep() - continuation dt is " << dt
+		   << ", must be strictly positive\n";
+	    return -1;
+	}
+	contLambda = currentLambda;
+	timeStep = theModel->getCurrentDomainTime() + dt;
+	OPS_ContinuationLambda::set(lambdaChannel, contLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
     if (theModel->updateDomain() < 0) {
       opserr << "EQPath::newStep - model failed to update for new dU\n";
       return -1;
@@ -378,11 +494,19 @@ EQPath::update(const Vector &dU)
     (*du) += (*sd);
     dl += dLambda;
 
-    double currentLambda = theModel->getCurrentDomainTime();
+    double currentLambda = (useContinuationTime ? contLambda
+					       : theModel->getCurrentDomainTime());
     currentLambda+=dLambda;
     // update the model
-    theModel->incrDisp(*sd);    
-    theModel->applyLoadDomain(currentLambda);    
+    theModel->incrDisp(*sd);
+    if (useContinuationTime == false) {
+	theModel->applyLoadDomain(currentLambda);
+    } else {
+	// lambda changes every iteration; the TIME must not
+	contLambda = currentLambda;
+	OPS_ContinuationLambda::set(lambdaChannel, contLambda);
+	theModel->applyLoadDomain(timeStep);
+    }
 
     if (theModel->updateDomain() < 0) {
       opserr << "EQPath::update - model failed to update for new dU\n";
@@ -458,13 +582,28 @@ EQPath::domainChanged(void)
     // now we have to determine phat
     // do this by incrementing lambda by 1, applying load
     // and getting phat from unbalance.
-    double currentLambda = theModel->getCurrentDomainTime();
-    currentLambda += 1.0;
-    theModel->applyLoadDomain(currentLambda);    
-    this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
-    (*q) = theLinSOE->getB();
-    currentLambda -= 1.0;
-    theModel->setCurrentDomainTime(currentLambda);    
+    if (useContinuationTime == false) {
+      double currentLambda = theModel->getCurrentDomainTime();
+      currentLambda += 1.0;
+      theModel->applyLoadDomain(currentLambda);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*q) = theLinSOE->getB();
+      currentLambda -= 1.0;
+      theModel->setCurrentDomainTime(currentLambda);
+    } else {
+      // probe LAMBDA at a frozen time -- see DisplacementControl::domainChanged
+      double t = theModel->getCurrentDomainTime();
+      double lam = OPS_ContinuationLambda::get(lambdaChannel);
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam + 1.0);
+      theModel->applyLoadDomain(t);
+      this->formUnbalance(); // NOTE: this assumes unbalance at last was 0
+      (*q) = theLinSOE->getB();
+
+      OPS_ContinuationLambda::set(lambdaChannel, lam);
+      theModel->applyLoadDomain(t);
+      contLambda = lam;
+    }
 
 
     // check there is a reference load

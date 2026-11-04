@@ -336,6 +336,12 @@
     <ClCompile Include="..\..\..\SRC\domain\pattern\MPAccSeries.cpp">
       <Filter>timeSeries</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\SRC\domain\pattern\ContinuationLambda.cpp">
+      <Filter>timeSeries</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\SRC\domain\pattern\ContinuationTimeSeries.cpp">
+      <Filter>timeSeries</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\..\SRC\domain\constraints\EQ_Constraint.cpp">
       <Filter>constraints</Filter>
     </ClCompile>
@@ -537,6 +543,12 @@
       <Filter>groundMotion</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\pattern\ConstantSeries.h">
+      <Filter>timeSeries</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\domain\pattern\ContinuationLambda.h">
+      <Filter>timeSeries</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\SRC\domain\pattern\ContinuationTimeSeries.h">
       <Filter>timeSeries</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\SRC\domain\pattern\DiscretizedRandomProcessSeries.h">

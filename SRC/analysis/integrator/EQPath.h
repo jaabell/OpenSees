@@ -60,11 +60,31 @@ class EQPath : public StaticIntegrator
 
     ~EQPath();
 
-    int newStep(void);    
+    int newStep(void);
     int update(const Vector &deltaU);
     int domainChanged(void);
-    
-    
+
+    int commit(void);
+    int revertToLastStep(void);
+
+    // Continuous-time (continuation) mode -- OFF by default.
+    // See ContinuationLambda.h. Prescribed-dt variant only, same stopgap and
+    // Progress-normalised on the arc length, exactly as ArcLength and
+    // DisplacementControl: -target is the total the stage covers in the
+    // method's own progress measure. Here that is |du|, which the constraint
+    // sets to arclen exactly (newStep: dLambda = sign*arclen/|uq0| and
+    // du = dLambda*uq0, so |du| = arclen), so
+    //     dt = D * arclen / |S_target|
+    // A positive dtFixed is kept as the cruder alternative.
+    int setContinuationTime(int lambdaChannel, double duration,
+			    double target, double dtFixed);
+
+    // Change the arc-length increment IN PLACE, mid-stage; see
+    // ArcLength::setArcLength. This class keeps the previous step's direction in
+    // du (newStep: sign from du^uq0), so a fresh object loses it just the same.
+    int setArcLength(double arcLength);
+
+
     int sendSelf(int commitTag, Channel &theChannel);
     int recvSelf(int commitTag, Channel &theChannel, 
 			 FEM_ObjectBroker &theBroker);
@@ -78,8 +98,22 @@ class EQPath : public StaticIntegrator
     double sign;
     int type,changed,nitr;
     Vector *du,*du0, *uq, *uq0, *uqn, *ur;
-    Vector *q; 
-    
+    Vector *q;
+
+    // ---- continuous-time (continuation) mode ----
+    // NOTE: unlike the other continuation integrators, EQPath reads the load
+    // factor from the domain as a LOCAL in both newStep() and update(), so it
+    // needs its own running accumulator here.
+    bool useContinuationTime;
+    int lambdaChannel;
+    double dtFixed;
+    double timeStep;
+    double contLambda;        // running lambda within the step
+    double stageDuration;     // D_stage on the global timeline
+    double stageTarget;       // total arc length of the stage
+
+    double continuationDt(void) const;
+    double committedLambda;
 };
 
 #endif
