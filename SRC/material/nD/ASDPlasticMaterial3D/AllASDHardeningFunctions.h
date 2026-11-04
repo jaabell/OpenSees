@@ -70,7 +70,7 @@ struct NullHardeningTensorPolicy {
     static constexpr const char* NAME = "NullHardeningTensorFunction";
     HARDENING_FUNCTION_DEFINITION 
     {
-        VoigtVector zero;
+        VoigtVector zero = VoigtVector::Zero();
         return zero;
     }
     using parameters_t = tuple<>;
@@ -132,7 +132,7 @@ struct ArmstrongFrederickPolicy {
         if (alpha_norm >= alpha_limit)
         {
             cout << "Saturation!" << endl;
-            derivative *= 0;  // Take care of the saturation limit in case of overshooting
+            derivative.setZero();  // Take care of the saturation limit in case of overshooting
         }
         else
         {
