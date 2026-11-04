@@ -80,7 +80,7 @@ public:
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double ds = GET_PARAMETER_VALUE(MC_ds);
         double psi = GET_PARAMETER_VALUE(MC_psi)*M_PI/180;
-        double c = GET_PARAMETER_VALUE(MC_c)*M_PI/180;
+        double c = GET_PARAMETER_VALUE(MC_c);
 
         using namespace std;
 
