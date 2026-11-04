@@ -113,12 +113,12 @@ public:
     {
 
 
-        TrialStress *= 0;
-        CommitStress *= 0;
-        TrialStrain *= 0;
-        CommitStrain *= 0;
-        TrialPlastic_Strain *= 0;
-        CommitPlastic_Strain *= 0;
+        TrialStress.setZero();
+        CommitStress.setZero();
+        TrialStrain.setZero();
+        CommitStrain.setZero();
+        TrialPlastic_Strain.setZero();
+        CommitPlastic_Strain.setZero();
 
         first_step = true;
         stress_set_externally = false;
@@ -1330,7 +1330,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma = CommitStress;
@@ -1338,9 +1338,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -1506,7 +1506,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma = CommitStress;
@@ -1514,9 +1514,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -1987,9 +1987,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -2189,7 +2189,7 @@ private:
 
         // ------------------ setup ------------------
         static VoigtVector depsilon;
-        depsilon *= 0.0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma   = CommitStress;
@@ -2197,9 +2197,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0.0;
-        intersection_stress *= 0.0;
-        intersection_strain *= 0.0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -2461,16 +2461,16 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
 
         iv_storage.revert_all();
 
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
 
@@ -2886,14 +2886,14 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
         dsigma = Eelastic * depsilon;
@@ -3230,7 +3230,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         // CRITICAL FIX: Initialize trial values from committed values at start
@@ -3238,9 +3238,9 @@ private:
             iv.trial_value = iv.committed_value;
         });
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
         dsigma = Eelastic * depsilon;

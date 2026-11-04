@@ -58,11 +58,11 @@ public:
         if (abs(den) > 100*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON)
             dev_part = dev_part / den;
         else
-            dev_part *= 0.0;  // Zero out if denominator too small
+            dev_part.setZero();  // Zero out if denominator too small
             
         // Add pressure-dependent part: eta * dp/dsigma = eta/3 * I
         VoigtVector pressure_part;
-        pressure_part *= 0.0;  // Initialize to zero
+        pressure_part.setZero();  // Initialize to zero
         pressure_part(0) = eta / 3.0;  // sigma_xx component
         pressure_part(1) = eta / 3.0;  // sigma_yy component  
         pressure_part(2) = eta / 3.0;  // sigma_zz component

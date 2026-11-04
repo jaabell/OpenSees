@@ -72,7 +72,7 @@ public:
         double lambda = ( nu * E ) / ( ( 1.0 + nu ) * ( 1.0 - 2.0 * nu ) );
         double mu = E / ( 2.0 * ( 1.0 + nu ) );
 
-        EE_MATRIX *= 0; //Use the base-class static elasticity matrix for return value
+        EE_MATRIX.setZero(); //Use the base-class static elasticity matrix for return value
 
         EE_MATRIX(0, 0) = EE_MATRIX(1, 1) = EE_MATRIX(2, 2) = 2*mu + lambda;
         EE_MATRIX(0, 1) = EE_MATRIX(1, 0) = EE_MATRIX(0, 2) = EE_MATRIX(2, 0) = EE_MATRIX(1, 2) = EE_MATRIX(2, 1) = lambda;
