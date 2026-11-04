@@ -92,6 +92,7 @@ public:
 
             // Calculate the derivative
             vv_out(i) = (yf1 - yf2) / (2*ds);
+            if (i >= 3) vv_out(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
         }
 
         return vv_out;
