@@ -55,8 +55,9 @@ public:
         VoigtVector dev_part = s - alpha;
         double den = sqrt(0.5*tensor_dot_stress_like(dev_part, dev_part));
         
+        // d sqrt(J2) / dsigma = (s - alpha) / (2 sqrt(J2))
         if (abs(den) > 100*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON)
-            dev_part = dev_part / den;
+            dev_part = dev_part / (2.0 * den);
         else
             dev_part.setZero();  // Zero out if denominator too small
             
