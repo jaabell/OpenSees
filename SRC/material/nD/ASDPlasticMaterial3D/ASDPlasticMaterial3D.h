@@ -105,6 +105,7 @@ public:
         : NDMaterial(0, thisClassTag)
     {
         stress_set_externally = false;
+        Stiffness.setZero();
     }
 
 
@@ -113,12 +114,13 @@ public:
     {
 
 
-        TrialStress *= 0;
-        CommitStress *= 0;
-        TrialStrain *= 0;
-        CommitStrain *= 0;
-        TrialPlastic_Strain *= 0;
-        CommitPlastic_Strain *= 0;
+        TrialStress.setZero();
+        CommitStress.setZero();
+        TrialStrain.setZero();
+        CommitStrain.setZero();
+        TrialPlastic_Strain.setZero();
+        CommitPlastic_Strain.setZero();
+        Stiffness.setZero();
 
         first_step = true;
         stress_set_externally = false;
@@ -685,6 +687,10 @@ public:
     {
         static Matrix return_matrix(6, 6);
 
+        // no strain set yet: the elastic tangent
+        if (Stiffness.isZero(0.0))
+            Stiffness = et(CommitStress, parameters_storage);
+
         copyToMatrixReference(Stiffness, return_matrix);
 
         return return_matrix;
@@ -782,6 +788,7 @@ public:
         newmaterial->iv_storage = this->iv_storage;
         newmaterial->parameters_storage = this->parameters_storage;
         newmaterial->stress_set_externally = this->stress_set_externally;
+        newmaterial->Stiffness = this->Stiffness;
 
         return newmaterial;
     }
@@ -805,6 +812,7 @@ public:
             newmaterial->iv_storage = this->iv_storage;
             newmaterial->parameters_storage = this->parameters_storage;
             newmaterial->stress_set_externally = this->stress_set_externally;
+            newmaterial->Stiffness = this->Stiffness;
 
             return newmaterial;
         } else
@@ -1330,7 +1338,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma = CommitStress;
@@ -1338,9 +1346,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -1506,7 +1514,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma = CommitStress;
@@ -1514,9 +1522,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -1987,9 +1995,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -2189,7 +2197,7 @@ private:
 
         // ------------------ setup ------------------
         static VoigtVector depsilon;
-        depsilon *= 0.0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         const VoigtVector& sigma   = CommitStress;
@@ -2197,9 +2205,9 @@ private:
 
         iv_storage.revert_all();
 
-        dsigma *= 0.0;
-        intersection_stress *= 0.0;
-        intersection_strain *= 0.0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(sigma, parameters_storage);
 
@@ -2461,16 +2469,16 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
 
         iv_storage.revert_all();
 
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
 
@@ -2886,14 +2894,14 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         iv_storage.revert_all();
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
         dsigma = Eelastic * depsilon;
@@ -3230,7 +3238,7 @@ private:
         int errorcode = -1;
 
         static VoigtVector depsilon;
-        depsilon *= 0;
+        depsilon.setZero();
         depsilon = strain_incr;
 
         // CRITICAL FIX: Initialize trial values from committed values at start
@@ -3238,9 +3246,9 @@ private:
             iv.trial_value = iv.committed_value;
         });
 
-        dsigma *= 0;
-        intersection_stress *= 0;
-        intersection_strain *= 0;
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
 
         VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
         dsigma = Eelastic * depsilon;
@@ -3941,7 +3949,9 @@ protected:
     static VoigtVector depsilon_elpl;    //Elastoplastic strain increment : For a strain increment that causes first yield, the step is divided into an elastic one (until yield) and an elastoplastic one.
     static VoigtVector intersection_stress;
     static VoigtVector intersection_strain;
-    static VoigtMatrix Stiffness;
+    // per instance: each Gauss point has its own tangent (a static one was
+    // shared by every instance of the same combination)
+    VoigtMatrix Stiffness;
 
 
 };
@@ -3980,8 +3990,6 @@ VoigtVector ASDPlasticMaterial3D< E,  Y,  P,  tag >::intersection_stress;  //Use
 template < class E, class Y, class P, int tag>
 VoigtVector ASDPlasticMaterial3D< E,  Y,  P,  tag>::intersection_strain;  //Used to compute the yield surface intersection.
 
-template < class E, class Y, class P, int tag>
-VoigtMatrix ASDPlasticMaterial3D< E,  Y,  P,  tag>::Stiffness;  //Used to compute the yield surface intersection.
 
 
 #endif
