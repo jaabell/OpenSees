@@ -254,6 +254,9 @@ public:
         case ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler_LineSearch :
             exitflag = this->Backward_Euler_LineSearch(strain_increment);;
             break;
+        case ASDPlasticMaterial3D_Constitutive_Integration_Method::Full_Backward_Euler :
+            exitflag = this->Full_Backward_Euler(strain_increment);
+            break;
         // case ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler_ddlambda_Subincrement :
         //     exitflag = this->Backward_Euler_ddlambda_Subincrement(strain_increment);;
         //     break;
@@ -430,8 +433,10 @@ public:
             VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
             Stiffness = Eelastic;
         }
-        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_FirstOrder)
+        else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_FirstOrder
+                 || INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Algorithmic)
         {
+            // Algorithmic is computed exactly by Full_Backward_Euler; other integrators difference it
             compute_numerical_tangent_firstorder(TrialStrain-CommitStrain, Stiffness);
         }
         else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_SecondOrder)
@@ -1282,6 +1287,13 @@ public:
             cerr << "ASDPlasticMaterial3D::set_constitutive_integration_method - Unknown constitutive_integration_method\n";
             return false;
         }
+    }
+
+    void set_derivative_options(int derivative_type, double fd_perturbation)
+    {
+        INT_OPT_derivative_type[ASDP_TAG] = (ASDPlasticMaterial3D_Derivative_Type) derivative_type;
+        DBL_OPT_fd_perturbation[ASDP_TAG] = fd_perturbation > 0 ? fd_perturbation : 1e-6;
+        FBE_fallbacks[ASDP_TAG] = 0;
     }
 
 protected:
@@ -2185,6 +2197,283 @@ private:
 
 
         ComputeTangentStiffness();
+
+        return 0;
+    }
+
+    // Fully implicit Backward Euler (closest-point projection). Unlike
+    // Backward_Euler, which iterates on dLambda alone and never differentiates
+    // m or the hardening, this solves the whole return-mapping system with
+    // Newton. Unknowns x = [sigma (6), q (every internal variable, flattened),
+    // dLambda] and residual
+    //     R_sigma = sigma - sigma_trial + dLambda E strain_like(m(sigma, q))
+    //     R_q     = q - q_n - dLambda h(sigma, q)
+    //     R_f     = f(sigma, q)
+    // E is the elastic stiffness at the committed stress, as in Backward_Euler.
+    // The Jacobian's sigma and q columns are central differences of R (option
+    // derivatives Numerical). With derivatives Closed_Form, the closed forms
+    // the components provide replace their blocks: df/dsigma from the yield
+    // function, and dm/dsigma from flow directions that declare has_dm_dsigma.
+    // The dLambda column is exact. Newton starts from the Backward_Euler
+    // (cutting-plane) state; if it does not converge, as at the edges of
+    // Mohr-Coulomb or Hoek-Brown where m jumps, that state is kept.
+    // tangent_type Algorithmic gives the consistent tangent (J^-1)_sigma,sigma E.
+    int Full_Backward_Euler(const VoigtVector & strain_incr)
+    {
+        using namespace ASDPlasticMaterial3DGlobals;
+
+        const int    max_iter = INT_OPT_n_max_iterations[ASDP_TAG];
+        const double tol_yf   = DBL_OPT_f_absolute_tol[ASDP_TAG];
+        const double tol_sig  = DBL_OPT_stress_absolute_tol[ASDP_TAG];
+        const bool   closed_form = INT_OPT_derivative_type[ASDP_TAG] == ASDPlasticMaterial3D_Derivative_Type::Closed_Form;
+        const double h_rel    = DBL_OPT_fd_perturbation[ASDP_TAG];
+
+        static VoigtVector depsilon;
+        depsilon = strain_incr;
+
+        const VoigtVector& sigma_n   = CommitStress;
+        const VoigtVector& epsilon_n = CommitStrain;
+
+        iv_storage.revert_all();
+
+        dsigma.setZero();
+        intersection_stress.setZero();
+        intersection_strain.setZero();
+
+        const VoigtMatrix Eelastic = et(sigma_n, parameters_storage);
+
+        // -------- elastic predictor (same test as Backward_Euler)
+        const VoigtVector sigma_trial = sigma_n + Eelastic * depsilon;
+        TrialStress = sigma_trial;
+        TrialStrain = epsilon_n + depsilon;
+        TrialPlastic_Strain = CommitPlastic_Strain;
+
+        const double yf_val_start = yf(sigma_n,     iv_storage, parameters_storage);
+        const double yf_val_end   = yf(sigma_trial, iv_storage, parameters_storage);
+        if ( (yf_val_start <= 0.0 && yf_val_end <= 0.0) || (yf_val_start - yf_val_end > tol_yf) ) {
+            Stiffness = Eelastic;
+            return 0;
+        }
+
+        // -------- flatten the internal variables
+        int nq = 0;
+        iv_storage.apply([&](auto & iv) { nq += iv.size(); });
+        const int N = 7 + nq;
+        const int iL = 6 + nq;   // position of dLambda
+
+        Eigen::VectorXd q_n(nq);
+        {
+            int k = 0;
+            iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) q_n(k++) = iv.committed_value(j); });
+        }
+
+        auto set_q = [&](const Eigen::VectorXd & q) {
+            int k = 0;
+            iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) iv.trial_value(j) = q(k++); });
+        };
+
+        // residual at (sigma, q, dLambda); also returns m and h there
+        VoigtVector m_last;
+        Eigen::VectorXd h_last(nq);
+        auto residual = [&](const VoigtVector & sig, const Eigen::VectorXd & q, double dL, Eigen::VectorXd & R) {
+            set_q(q);
+            const VoigtVector m = pf(depsilon, sig, iv_storage, parameters_storage);
+            Eigen::VectorXd h(nq);
+            int k = 0;
+            iv_storage.apply([&](auto & iv) {
+                auto hk = iv.hardening_function(depsilon, m, sig, parameters_storage);
+                for (int j = 0; j < iv.size(); ++j) h(k++) = hk(j);
+            });
+            const VoigtVector Rsig = sig - sigma_trial + dL * (Eelastic * strain_like(m));
+            for (int i = 0; i < 6; ++i) R(i) = Rsig(i);
+            for (int j = 0; j < nq; ++j) R(6 + j) = q(j) - q_n(j) - dL * h(j);
+            R(iL) = yf(sig, iv_storage, parameters_storage);
+            m_last = m;
+            h_last = h;
+        };
+
+        // scales for the finite differences and for the line search
+        const double sig_scale = std::max({sigma_trial.cwiseAbs().maxCoeff(), sigma_n.cwiseAbs().maxCoeff(), tol_sig});
+        // f changes by n . dsigma, so |n| sig_scale is the yield-function value of a stress-scale error
+        const double n_scale   = strain_like(yf.df_dsigma_ij(sigma_trial, iv_storage, parameters_storage)).cwiseAbs().maxCoeff();
+        const double f_scale   = std::max({std::abs(yf_val_end), n_scale * sig_scale, tol_yf});
+
+        VoigtVector sig = sigma_trial;
+        Eigen::VectorXd q = q_n;
+        double dL = 0.0;
+
+        // start from the cutting-plane Backward_Euler state: Newton from the
+        // elastic trial overshoots on strongly curved surfaces (e.g. HoekBrown)
+        bool cp_start = false;
+        if (Backward_Euler(strain_incr) == 0 && TrialStress.allFinite())
+        {
+            const VoigtVector dep = TrialPlastic_Strain - CommitPlastic_Strain;
+            if (dep.cwiseAbs().maxCoeff() > 0)
+            {
+                sig = TrialStress;
+                int k = 0;
+                iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) q(k++) = iv.trial_value(j); });
+                cp_start = true;
+            }
+        }
+
+        Eigen::VectorXd R(N), Rp(N), Rm(N);
+        Eigen::MatrixXd J(N, N);
+        Eigen::VectorXd q_step(nq);   // expected change of each q, for its perturbation size
+
+        auto jacobian = [&]() {
+            // R, m_last, h_last must be current at (sig, q, dL)
+            const VoigtVector m0 = m_last;
+            const Eigen::VectorXd h0 = h_last;
+            for (int i = 0; i < 6; ++i) {
+                const double d = h_rel * std::max(std::abs(sig(i)), sig_scale);
+                VoigtVector sp = sig, sm = sig;
+                sp(i) += d;
+                sm(i) -= d;
+                residual(sp, q, dL, Rp);
+                residual(sm, q, dL, Rm);
+                J.col(i) = (Rp - Rm) / (2 * d);
+            }
+            for (int j = 0; j < nq; ++j) {
+                double d = h_rel * std::max({std::abs(q(j)), std::abs(q_n(j)), std::abs(q_step(j))});
+                if (!(d > 0)) d = h_rel * sig_scale;
+                Eigen::VectorXd qp = q, qm = q;
+                qp(j) += d;
+                qm(j) -= d;
+                residual(sig, qp, dL, Rp);
+                residual(sig, qm, dL, Rm);
+                J.col(6 + j) = (Rp - Rm) / (2 * d);
+            }
+            // dLambda column: exact
+            J.col(iL).setZero();
+            const VoigtVector Em = Eelastic * strain_like(m0);
+            for (int i = 0; i < 6; ++i) J(i, iL) = Em(i);
+            for (int j = 0; j < nq; ++j) J(6 + j, iL) = -h0(j);
+
+            if (closed_form) {
+                set_q(q);
+                const VoigtVector n = strain_like(yf.df_dsigma_ij(sig, iv_storage, parameters_storage));
+                for (int i = 0; i < 6; ++i) J(iL, i) = n(i);
+                if constexpr (pf_has_dm_dsigma<PlasticFlowType>::value) {
+                    const VoigtMatrix dm = pf.dm_dsigma_ij(depsilon, sig, iv_storage, parameters_storage);
+                    VoigtMatrix W = VoigtMatrix::Identity();
+                    W(3, 3) = W(4, 4) = W(5, 5) = 2.0;
+                    const VoigtMatrix Jss = VoigtMatrix::Identity() + dL * (Eelastic * W * dm);
+                    J.block(0, 0, 6, 6) = Jss;
+                }
+            }
+            // leave the state at (sig, q, dL)
+            residual(sig, q, dL, R);
+        };
+
+        // an internal variable with no value and no evolution so far (q_scale 0)
+        // stays at q_n: it is kept out of the merit and the convergence test
+        auto q_scale = [&](int j) { return std::max(std::abs(q_n(j)), std::abs(q_step(j))); };
+
+        auto merit = [&](const Eigen::VectorXd & Rv) {
+            double r = 0.0;
+            for (int i = 0; i < 6; ++i) r = std::max(r, std::abs(Rv(i)) / sig_scale);
+            for (int j = 0; j < nq; ++j)
+                if (q_scale(j) > 0) r = std::max(r, std::abs(Rv(6 + j)) / q_scale(j));
+            return std::max(r, std::abs(Rv(iL)) / f_scale);
+        };
+
+        // converged: the absolute tolerances are met, or the scaled residual is at
+        // round-off level (below what components that difference internally resolve)
+        auto converged = [&](const Eigen::VectorXd & Rv) {
+            if (merit(Rv) < 1e-10) return true;
+            if (std::abs(Rv(iL)) > tol_yf) return false;
+            for (int i = 0; i < 6; ++i) if (std::abs(Rv(i)) > tol_sig) return false;
+            for (int j = 0; j < nq; ++j)
+                if (q_scale(j) > 0 && std::abs(Rv(6 + j)) > 1e-10 * std::max(std::abs(q(j)), q_scale(j))) return false;
+            return true;
+        };
+
+        residual(sig, q, dL, R);
+        if (cp_start)
+        {
+            const VoigtVector mW = strain_like(m_last);
+            const double mm = mW.dot(mW);
+            if (mm > 0)
+                dL = std::max(0.0, (TrialPlastic_Strain - CommitPlastic_Strain).dot(mW) / mm);
+            residual(sig, q, dL, R);
+        }
+        // first estimate of each q's change, from a linearized dLambda
+        {
+            const VoigtVector n = strain_like(yf.df_dsigma_ij(sig, iv_storage, parameters_storage));
+            const double den = n.dot(Eelastic * strain_like(m_last));
+            const double dL0 = den > 0 ? std::abs(R(iL)) / den : 0.0;
+            for (int j = 0; j < nq; ++j)
+                q_step(j) = std::max({std::abs(dL0 * h_last(j)), std::abs(dL * h_last(j)), std::abs(q(j) - q_n(j))});
+        }
+
+        bool ok = false;
+        int iter = 0;
+        for (; iter < max_iter; ++iter)
+        {
+            if (converged(R)) { ok = true; break; }
+
+            jacobian();
+            Eigen::PartialPivLU<Eigen::MatrixXd> lu(J);
+            const Eigen::VectorXd dx = lu.solve(-R);
+            if (!dx.allFinite()) break;
+
+            // backtracking on the scaled residual
+            const double phi0 = merit(R);
+            double alpha = 1.0;
+            VoigtVector sig_new;
+            Eigen::VectorXd q_new(nq);
+            double dL_new = dL;
+            for (int ls = 0; ls < 10; ++ls) {
+                for (int i = 0; i < 6; ++i) sig_new(i) = sig(i) + alpha * dx(i);
+                q_new = q + alpha * dx.segment(6, nq);
+                for (int j = 0; j < nq; ++j) if (!(q_scale(j) > 0)) q_new(j) = q_n(j);
+                dL_new = dL + alpha * dx(iL);
+                residual(sig_new, q_new, dL_new, Rp);
+                if (Rp.allFinite() && merit(Rp) < (1.0 - 1e-4 * alpha) * phi0) break;
+                alpha *= 0.5;
+            }
+            sig = sig_new;
+            q = q_new;
+            dL = dL_new;
+            R = Rp;
+            for (int j = 0; j < nq; ++j) q_step(j) = std::max(std::abs(q_step(j)), std::abs(q(j) - q_n(j)));
+        }
+
+        if (!ok || dL < 0.0 || !sig.allFinite()) {
+            // fall back to the cutting-plane Backward_Euler for this step
+            FBE_fallbacks[ASDP_TAG]++;
+            if (FBE_fallbacks[ASDP_TAG] == 1)
+                opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Full_Backward_Euler did not converge"
+                       << " (|f| = " << std::abs(R(iL)) << ", dLambda = " << dL << ") -- using Backward_Euler for"
+                       << " this step. Further fallbacks are counted, not reported.\n";
+            return Backward_Euler(strain_incr);
+        }
+
+        GLOBAL_INT_max_iter[ASDP_TAG] = std::max(GLOBAL_INT_max_iter[ASDP_TAG], iter);
+        GLOBAL_DBL_max_error[ASDP_TAG] = std::max(GLOBAL_DBL_max_error[ASDP_TAG], std::abs(R(iL)));
+
+        // -------- accept the converged state (residual() left q and m_last there)
+        TrialStress = sig;
+        TrialPlastic_Strain = CommitPlastic_Strain + dL * strain_like(m_last);
+        set_q(q);
+
+        if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Algorithmic)
+        {
+            // dR/d(strain) = [-E; 0; 0], so dsigma/dstrain = (J^-1)_{sigma,sigma} E
+            jacobian();
+            Eigen::PartialPivLU<Eigen::MatrixXd> lu(J);
+            Eigen::MatrixXd B = Eigen::MatrixXd::Zero(N, 6);
+            B.block(0, 0, 6, 6) = Eelastic;
+            const Eigen::MatrixXd X = lu.solve(B);
+            Stiffness = X.block(0, 0, 6, 6);
+            set_q(q);
+        }
+        else
+        {
+            depsilon_elpl = depsilon;
+            ComputeTangentStiffness();
+        }
 
         return 0;
     }
@@ -3938,6 +4227,9 @@ protected:
     static std::map<int, int> INT_OPT_return_to_yield_surface;
     static std::map<int, double> DBL_OPT_RK45_dT_min;
     static std::map<int, int> INT_OPT_RK45_niter_max;
+    static std::map<int, ASDPlasticMaterial3D_Derivative_Type> INT_OPT_derivative_type;
+    static std::map<int, double> DBL_OPT_fd_perturbation;
+    static std::map<int, int> FBE_fallbacks;
 
     static std::map<int, int> GLOBAL_INT_max_iter; 
     static std::map<int, double> GLOBAL_DBL_max_error; 
@@ -3972,6 +4264,12 @@ template < class E, class Y, class P, int tag>
 std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DBL_OPT_RK45_dT_min;
 template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_RK45_niter_max;
+template < class E, class Y, class P, int tag>
+std::map<int, ASDPlasticMaterial3D_Derivative_Type> ASDPlasticMaterial3D< E,  Y,  P,  tag>::INT_OPT_derivative_type;
+template < class E, class Y, class P, int tag>
+std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DBL_OPT_fd_perturbation;
+template < class E, class Y, class P, int tag>
+std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::FBE_fallbacks;
 
 template < class E, class Y, class P, int tag>
 std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::GLOBAL_DBL_max_error;
