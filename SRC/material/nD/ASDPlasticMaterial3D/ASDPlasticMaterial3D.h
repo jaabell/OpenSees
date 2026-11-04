@@ -2262,9 +2262,14 @@ private:
         const int iL = 6 + nq;   // position of dLambda
 
         Eigen::VectorXd q_n(nq);
+        std::vector<int> iv_of(nq);   // which internal variable each entry belongs to
+        int n_iv = 0;
         {
             int k = 0;
-            iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) q_n(k++) = iv.committed_value(j); });
+            iv_storage.apply([&](auto & iv) {
+                for (int j = 0; j < iv.size(); ++j) { iv_of[k] = n_iv; q_n(k++) = iv.committed_value(j); }
+                ++n_iv;
+            });
         }
 
         auto set_q = [&](const Eigen::VectorXd & q) {
@@ -2366,9 +2371,20 @@ private:
             residual(sig, q, dL, R);
         };
 
-        // an internal variable with no value and no evolution so far (q_scale 0)
-        // stays at q_n: it is kept out of the merit and the convergence test
-        auto q_scale = [&](int j) { return std::max(std::abs(q_n(j)), std::abs(q_step(j))); };
+        // scale of each entry: its own size or expected change, but at least 1e-8
+        // of the largest entry of the same internal variable (its components share
+        // units; round-off-sized entries must not set their own scale). An internal
+        // variable with no value and no evolution so far (scale 0) stays at q_n
+        // and is kept out of the merit and the convergence test.
+        std::vector<double> iv_max(n_iv, 0.0);
+        auto update_iv_max = [&]() {
+            std::fill(iv_max.begin(), iv_max.end(), 0.0);
+            for (int j = 0; j < nq; ++j)
+                iv_max[iv_of[j]] = std::max({iv_max[iv_of[j]], std::abs(q_n(j)), std::abs(q_step(j))});
+        };
+        auto q_scale = [&](int j) {
+            return std::max({std::abs(q_n(j)), std::abs(q_step(j)), 1e-8 * iv_max[iv_of[j]]});
+        };
 
         auto merit = [&](const Eigen::VectorXd & Rv) {
             double r = 0.0;
@@ -2385,7 +2401,7 @@ private:
             if (std::abs(Rv(iL)) > tol_yf) return false;
             for (int i = 0; i < 6; ++i) if (std::abs(Rv(i)) > tol_sig) return false;
             for (int j = 0; j < nq; ++j)
-                if (q_scale(j) > 0 && std::abs(Rv(6 + j)) > 1e-10 * std::max(std::abs(q(j)), q_scale(j))) return false;
+                if (q_scale(j) > 0 && std::abs(Rv(6 + j)) > 1e-10 * std::max({std::abs(q(j)), iv_max[iv_of[j]]})) return false;
             return true;
         };
 
@@ -2405,6 +2421,7 @@ private:
             const double dL0 = den > 0 ? std::abs(R(iL)) / den : 0.0;
             for (int j = 0; j < nq; ++j)
                 q_step(j) = std::max({std::abs(dL0 * h_last(j)), std::abs(dL * h_last(j)), std::abs(q(j) - q_n(j))});
+            update_iv_max();
         }
 
         bool ok = false;
@@ -2438,6 +2455,7 @@ private:
             dL = dL_new;
             R = Rp;
             for (int j = 0; j < nq; ++j) q_step(j) = std::max(std::abs(q_step(j)), std::abs(q(j) - q_n(j)));
+            update_iv_max();
         }
 
         if (!ok || dL < 0.0 || !sig.allFinite()) {
