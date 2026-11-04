@@ -127,6 +127,8 @@ void populate_ASDPlasticMaterial3D(T* instance)
     int return_to_yield_surface = 1;
     double rk45_dT_min = 1e-2;
     int rk45_niter_max = 110;
+    int derivative_type = (int) ASDPlasticMaterial3D_Derivative_Type::Numerical;
+    double fd_perturbation = 1e-6;
 
     // Loop over input arguments
     while (OPS_GetNumRemainingInputArgs() > 0) {
@@ -256,14 +258,34 @@ void populate_ASDPlasticMaterial3D(T* instance)
                         method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler;                    
                     else if (std::strcmp(method_name, "Backward_Euler_LineSearch") == 0)
                         method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Backward_Euler_LineSearch;
+                    else if (std::strcmp(method_name, "Full_Backward_Euler") == 0)
+                        method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Full_Backward_Euler;
                     else
                     {
                         cout << "\n\nWARNING! Unrecognised ASDPlasticMaterial3D_Constitutive_Integration_Method name " << method_name << endl;
-                        cout << "Available methods: Backward_Euler, Backward_Euler_LineSearch, Forward_Euler, Forward_Euler_Subincrement, Modified_Euler_Error_Control, Runge_Kutta_45_Error_Control\n\n" << endl;
+                        cout << "Available methods: Backward_Euler, Backward_Euler_LineSearch, Full_Backward_Euler, Forward_Euler, Forward_Euler_Subincrement, Modified_Euler_Error_Control, Runge_Kutta_45_Error_Control\n\n" << endl;
                         cout << "Defaulting to Modified_Euler_Error_Control\n\n" << endl;
                         method = (int) ASDPlasticMaterial3D_Constitutive_Integration_Method::Modified_Euler_Error_Control;
                     }
                     cout << "   Setting integration method = " << method_name << " method_int = " << method << endl;
+                }
+
+                if (std::strcmp(param_name, "derivatives") == 0)
+                {
+                    const char *derivative_name = OPS_GetString();
+                    if (std::strcmp(derivative_name, "Numerical") == 0)
+                        derivative_type = (int) ASDPlasticMaterial3D_Derivative_Type::Numerical;
+                    else if (std::strcmp(derivative_name, "Closed_Form") == 0)
+                        derivative_type = (int) ASDPlasticMaterial3D_Derivative_Type::Closed_Form;
+                    else
+                        cout << "WARNING! Unrecognised derivatives " << derivative_name << " (Numerical | Closed_Form), using Numerical" << endl;
+                    cout << "   Setting derivatives = " << derivative_name << endl;
+                }
+
+                if (std::strcmp(param_name, "fd_perturbation") == 0)
+                {
+                    OPS_GetDouble(&get_one_value, &fd_perturbation);
+                    cout << "   Setting fd_perturbation = " << fd_perturbation << endl;
                 }
 
                 if (std::strcmp(param_name, "tangent_type") == 0)
@@ -279,6 +301,8 @@ void populate_ASDPlasticMaterial3D(T* instance)
                         tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_FirstOrder;
                     else if (std::strcmp(tangent_type_name, "Numerical_Algorithmic_SecondOrder") == 0)
                         tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Numerical_Algorithmic_SecondOrder;
+                    else if (std::strcmp(tangent_type_name, "Algorithmic") == 0)
+                        tangent = (int) ASDPlasticMaterial3D_Tangent_Operator_Type::Algorithmic;
                     else
                     {
                         cout << "WARNING! Unrecognised ASDPlasticMaterial3D_Tangent_Operator_Type name " << tangent_type_name << endl;
@@ -294,6 +318,7 @@ void populate_ASDPlasticMaterial3D(T* instance)
     }
 
     instance->set_constitutive_integration_method(method, tangent, f_absolute_tol, stress_absolute_tol, n_max_iterations, return_to_yield_surface, rk45_niter_max, rk45_dT_min);
+    instance->set_derivative_options(derivative_type, fd_perturbation);
 }
 
 #endif // ASDPlasticMaterial3DFactory_h

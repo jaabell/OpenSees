@@ -62,6 +62,13 @@ enum struct ASDPlasticMaterial3D_Constitutive_Integration_Method : int
     Backward_Euler_LineSearch,
 };
 
+// Derivatives used by Full_Backward_Euler's Newton Jacobian
+enum struct ASDPlasticMaterial3D_Derivative_Type : int
+{
+    Numerical,      // central differences of the return-mapping residual
+    Closed_Form,    // closed forms the components provide, differences for the rest
+};
+
 enum struct ASDPlasticMaterial3D_Tangent_Operator_Type : int
 {
     Elastic,
