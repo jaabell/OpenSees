@@ -5,7 +5,8 @@ struct InternalVariableType {
     static constexpr const char* NAME = NAMER::name;
     EvolvingVariableType trial_value;
     EvolvingVariableType committed_value;
-    InternalVariableType() = default;
+    // Eigen storage is not initialized by default construction
+    InternalVariableType() { trial_value.setZero(); committed_value.setZero(); }
     InternalVariableType(EvolvingVariableType x) : trial_value(x), committed_value(x) {}
     void commit() {committed_value = trial_value;};
     void revert() {trial_value = committed_value;};
