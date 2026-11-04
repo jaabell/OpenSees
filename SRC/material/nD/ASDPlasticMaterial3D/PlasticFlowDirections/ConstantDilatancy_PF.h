@@ -55,8 +55,8 @@ public:
         double D = GET_PARAMETER_VALUE(Dilatancy);
 
         vv_out = s - alpha;
-        double den = sqrt(vv_out.dot(vv_out));
-        if (abs(den) > sqrt(s.dot(s))*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON)
+        double den = sqrt(tensor_dot_stress_like(vv_out, vv_out));
+        if (abs(den) > sqrt(tensor_dot_stress_like(s, s))*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON)
             vv_out = vv_out / den;
 
         vv_out -= D * kronecker_delta() / 3;
