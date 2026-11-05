@@ -5,7 +5,7 @@ struct ModelParameterType {
 
     static constexpr const char* NAME = NAMER::name;
     T value;
-    ModelParameterType() = default;
+    ModelParameterType() : value() {}   // a parameter not given in Begin_Model_Parameters is 0, not garbage
     ModelParameterType(T x) : value(x) {}
     inline const char* getName() const { return NAME; }
 };
