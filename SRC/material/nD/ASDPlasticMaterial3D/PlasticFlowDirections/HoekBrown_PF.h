@@ -45,6 +45,7 @@
 #include "../ASDPlasticMaterial3DGlobals.h"
 #include "../AllASDModelParameterTypes.h"
 #include "../HoekBrown_Utils.h"
+#include "../HoekBrown_Invariants.h"
 #include <cmath>
 #include <typeinfo>
 
@@ -59,27 +60,6 @@ public:
         PlasticFlowBase<HoekBrown_PF<NO_HARDENING>>::PlasticFlowBase()
     {}
 
-    // Plastic potential function g (similar to yield function but with dilation parameter)
-    double g(const VoigtVector& sig, double sigma_ci, double mb_psi, double s, double a) const
-    {
-        using namespace std;
-        
-        // Get principal stresses (sorted: sigma1 >= sigma2 >= sigma3)
-        auto [sigma3, sigma2, sigma1] = sig.principalStresses();
-        
-        double arg = mb_psi * sigma3 / sigma_ci + s;
-        
-        double gval;
-        if (arg > 0) {
-            gval = sigma1 - sigma3 - sigma_ci * pow(arg, a);
-        } else {
-            // In tension region - use tension cutoff behavior
-            gval = sigma1 - sigma3 - sigma_ci * s;
-        }
-        
-        return gval;
-    }
-
     PLASTIC_FLOW_DIRECTION
     {
         using namespace std;
@@ -93,43 +73,20 @@ public:
             0.0, GET_PARAMETER_VALUE(HB_s), GET_PARAMETER_VALUE(HB_a),
             mb_unused, s, a);
         double ds = GET_PARAMETER_VALUE(HB_ds);
+        double theta_T = GET_PARAMETER_VALUE(HB_theta_T);
 
-        double sigma_norm = sigma.norm();
-        ds = std::max(ds, ds * sigma_norm);
-
-        // Use numerical differentiation of the plastic potential
-        auto computeNumericalFlowDirection = [this, sigma_ci, mb_psi, s, a, &internal_variables_storage, &parameters_storage]
-            (const VoigtVector& sig, double perturbation) -> VoigtVector {
-            VoigtVector result;
-            for (int i = 0; i < 6; ++i) {
-                VoigtVector SIG1 = sig;
-                VoigtVector SIG2 = sig;
-                
-                SIG1(i) += perturbation;
-                SIG2(i) -= perturbation;
-
-                double g1 = this->g(SIG1, sigma_ci, mb_psi, s, a);
-                double g2 = this->g(SIG2, sigma_ci, mb_psi, s, a);
-
-                result(i) = (g1 - g2) / (2.0 * perturbation);
-                if (i >= 3) result(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
-            }
-            return result;
-        };
-
-        if (ds > 0) {
-            vv_out = computeNumericalFlowDirection(sigma, ds);
-        } else {
-            // Default to numerical with small perturbation
-            vv_out = computeNumericalFlowDirection(sigma, 1e-8 * std::max(1.0, sigma_norm));
-        }
+        // gradient of the yield function's shear part with mb_psi in place of mb
+        // (compression positive like the yield function, edges rounded; see
+        // HoekBrown_Invariants.h)
+        vv_out = HoekBrownInvariants::gradient(sigma, ds,
+            [&](const VoigtVector& sig) { return HoekBrownInvariants::shear_function(sig, sigma_ci, mb_psi, s, a, theta_T); });
 
         return vv_out;
     }
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_GSI, HB_mi, HB_D, HB_s, HB_a, HB_ds>;
+    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_GSI, HB_mi, HB_D, HB_s, HB_a, HB_ds, HB_theta_T>;
 
 private:
     static VoigtVector vv_out;
