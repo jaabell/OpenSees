@@ -76,3 +76,8 @@ using HB_mb_psi = ModelParameterType<double, HB_mb_psi_Name>;
 // Typical value: 1e-6 to 1e-8 times the stress level
 struct HB_ds_Name { static constexpr const char* name = "HB_ds";};
 using HB_ds = ModelParameterType<double, HB_ds_Name>;
+
+// HB_theta_T: Lode angle (deg) above which the edges are rounded (see HoekBrown_Invariants.h);
+// 0 (not given) = default 29.9, >= 30 = the exact surface with sharp edges
+struct HB_theta_T_Name { static constexpr const char* name = "HB_theta_T";};
+using HB_theta_T = ModelParameterType<double, HB_theta_T_Name>;

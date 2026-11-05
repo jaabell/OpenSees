@@ -48,6 +48,7 @@
 #include "../ASDPlasticMaterial3DGlobals.h"
 #include "../AllASDModelParameterTypes.h"
 #include "../HoekBrown_Utils.h"
+#include "../HoekBrown_Invariants.h"
 #include <cmath>
 #include <iostream>
 #include <algorithm>
@@ -123,13 +124,9 @@ public:
         // Rock-mass tensile strength (negative in compression-positive sense)
         double sigma_t = -s * sigma_ci / mb;
 
-        // arg = mb·σ3/σci + s.  arg > 0 ⇔ σ3 > σt (shear regime).
-        // Clamp to 0 before pow() so the negative-arg case doesn't NaN.
-        double arg      = mb * sigma3 / sigma_ci + s;
-        double arg_safe = max(arg, 0.0);
-
-        // Hoek–Brown shear surface
-        double f_shear   = sigma1 - sigma3 - sigma_ci * pow(arg_safe, a);
+        // Hoek-Brown shear surface, f = sigma1 - sigma3 - sigma_ci max(mb sigma3/sigma_ci + s, 0)^a,
+        // evaluated in invariants with its edges rounded (see HoekBrown_Invariants.h)
+        double f_shear   = HoekBrownInvariants::shear_function(sigma, sigma_ci, mb, s, a, GET_PARAMETER_VALUE(HB_theta_T));
 
         // Tension cut-off surface (Rankine-style on σ3)
         double f_tension = sigma_t - sigma3;
@@ -240,7 +237,7 @@ public:
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<HB_sigci, HB_GSI, HB_mi, HB_D, HB_mb, HB_s, HB_a, HB_ds>;
+    using parameters_t = std::tuple<HB_sigci, HB_GSI, HB_mi, HB_D, HB_mb, HB_s, HB_a, HB_ds, HB_theta_T>;
 
 private:
     static VoigtVector vv_out;  // For returning VoigtVectors
