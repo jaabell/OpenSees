@@ -36,6 +36,7 @@
 #include "cmath"
 #include <iostream>
 #include "../AllASDModelParameterTypes.h"
+#include "../MohrCoulomb_Utils.h"
 
 
 template<class NO_HARDENING>
@@ -52,119 +53,22 @@ public:
 
     YIELD_FUNCTION 
     {
-        using namespace std;
-
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
-
-        double rThresh = c * cos(phi);
-        double I1 = sigma.getI1();
-        double J2 = sigma.getJ2();
-        double lode_angle = sigma.lodeAngle();
-
-        double rEquivalentStress = (std::cos(lode_angle) - std::sin(lode_angle) * std::sin(phi) / std::sqrt(3.0))  * std::sqrt(J2) +
-            I1 * std::sin(phi) / 3.0;
-
-        double yf = rEquivalentStress - rThresh;
-
-        return yf;
+        double theta_T = GET_PARAMETER_VALUE(MC_theta_T);
+        return MohrCoulombUtils::function(sigma, phi, c, theta_T);
     }
 
+    // central differences of the yield function above (corners rounded, see
+    // MohrCoulomb_Utils.h), relative perturbation MC_ds
     YIELD_FUNCTION_STRESS_DERIVATIVE
     {  
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
         double ds = GET_PARAMETER_VALUE(MC_ds);
-
-        using namespace std;
-
-        double sigma_norm = sigma.norm();
-
-        // Perturbation to smooth the YF
-        ds = std::max(ds, ds*sigma_norm);
-
-        // Helper lambda for numerical differentiation
-        auto computeNumericalDerivative = [this, &internal_variables_storage, &parameters_storage](const VoigtVector& sig, double perturbation) -> VoigtVector {
-            VoigtVector result;
-            for (int i = 0; i < 6; ++i) {
-                VoigtVector SIG1 = sig;
-                VoigtVector SIG2 = sig;
-                
-                SIG1(i) += perturbation;
-                SIG2(i) -= perturbation;
-
-                double yf1 = YF(SIG1);
-                double yf2 = YF(SIG2);
-
-                result(i) = (yf1 - yf2) / (2*perturbation);
-                if (i >= 3) result(i) *= 0.5; // perturbing storage entry i>=3 moves both sigma_ij and sigma_ji: halve it to get the tensor component (see strain_like)
-            }
-            return result;
-        };
-
-        // If perturbation is set, use numerical differentiation
-        if (ds > 0) {
-            vv_out = computeNumericalDerivative(sigma, ds);
-        } 
-        else {
-            // Try analytical solution with fallback to numerical
-            bool useNumerical = false;
-            
-            try {
-                double J2 = sigma.getJ2();
-                
-                // Check for numerical issues - use simplified approach for hydrostatic states
-                if (J2 < 1e-15) {
-                    vv_out = std::sin(phi) / 3.0 * calculate_first_vector();
-                } else {
-                    VoigtVector first_vector = calculate_first_vector();
-                    VoigtVector second_vector = calculate_second_vector(sigma);
-                    VoigtVector third_vector = calculate_third_vector(sigma);
-
-                    double lode_angle = sigma.lodeAngle();
-                    double c1, c2, c3;
-                    double checker = std::abs(lode_angle * 180.0 / M_PI);
-
-                    if (std::abs(checker) < 29.0) { // Regular case
-                        c1 = std::sin(phi) / 3.0;
-                        
-                        double denominator = 2.0 * J2 * std::cos(3.0 * lode_angle);
-                        if (std::abs(denominator) < 1e-15) {
-                            useNumerical = true; // Division by zero risk
-                        } else {
-                            c3 = (std::sqrt(3.0) * std::sin(lode_angle) + std::sin(phi) * std::cos(lode_angle)) / denominator;
-                            c2 = 0.5 * std::cos(lode_angle)*(1.0 + std::tan(lode_angle) * std::sin(3.0 * lode_angle) +
-                                std::sin(phi) * (std::tan(3.0 * lode_angle) - std::tan(lode_angle)) / std::sqrt(3.0));
-                        }
-                    } else { // Edge smoothing with Drucker-Prager
-                        c1 = 3.0 * (2.0 * std::sin(phi) / (std::sqrt(3.0) * (3.0 - std::sin(phi))));
-                        c2 = 1.0;
-                        c3 = 0.0;
-                    }
-
-                    if (!useNumerical) {
-                        vv_out = c1 * first_vector + c2 * second_vector + c3 * third_vector;
-
-                        // Validate result - check for NaN/Inf
-                        for (int i = 0; i < 6; ++i) {
-                            if (!std::isfinite(vv_out(i))) {
-                                useNumerical = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (...) {
-                useNumerical = true;
-            }
-
-            // Fallback to numerical if analytical failed
-            if (useNumerical) {
-                vv_out = computeNumericalDerivative(sigma, 1e-6);
-            }
-        }
-
+        double theta_T = GET_PARAMETER_VALUE(MC_theta_T);
+        vv_out = MohrCoulombUtils::gradient(sigma, ds,
+            [&](const VoigtVector& s) { return MohrCoulombUtils::function(s, phi, c, theta_T); });
         return vv_out;
     }
 
@@ -204,7 +108,7 @@ public:
   
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<MC_phi,MC_c,MC_ds>;
+    using parameters_t = std::tuple<MC_phi,MC_c,MC_ds,MC_theta_T>;
 
 private:
 
