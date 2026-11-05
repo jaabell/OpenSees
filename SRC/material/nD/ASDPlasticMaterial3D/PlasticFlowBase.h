@@ -47,6 +47,23 @@ template <typename T>
 struct pf_has_internal_variables_t<T, typename std::enable_if<!std::is_same<typename T::internal_variables_t, void>::value>::type> : std::true_type {};
 
 
+// A flow direction that also provides its closed-form derivative declares
+//     static constexpr bool has_dm_dsigma = true;
+// and a PLASTIC_FLOW_DIRECTION_STRESS_DERIVATIVE member returning
+// dm_i/dsigma_j (m in tensor components, sigma_j the Voigt storage entry).
+// Full_Backward_Euler uses it with derivatives Closed_Form.
+template <typename T, typename = void>
+struct pf_has_dm_dsigma : std::false_type {};
+template <typename T>
+struct pf_has_dm_dsigma<T, typename std::enable_if<T::has_dm_dsigma>::type> : std::true_type {};
+
+#define PLASTIC_FLOW_DIRECTION_STRESS_DERIVATIVE template <typename StorageType, typename ParameterStorageType> \
+    VoigtMatrix dm_dsigma_ij( \
+        const VoigtVector &depsilon, \
+        const VoigtVector& sigma, \
+        const StorageType& internal_variables_storage,  \
+        const ParameterStorageType& parameters_storage) const
+
 #define PLASTIC_FLOW_DIRECTION template <typename StorageType, typename ParameterStorageType> \
     const VoigtVector& operator()( \
         const VoigtVector &depsilon, \
