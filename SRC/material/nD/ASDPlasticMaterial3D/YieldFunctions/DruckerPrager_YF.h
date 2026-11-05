@@ -39,7 +39,11 @@ public:
         // - eta is the friction parameter 
         // - p is the mean stress (positive in compression)
         // - xi_c is the adjusted cohesion
-        return sqrt_J2 + eta * p - (xi_c);
+        // the DP_cohesion internal variable adds to xi_c: its rate already enters
+        // the consistency condition through df/d(cohesion) = -1 in the hardening
+        // term, so it must enter f too
+        auto cohesion = GET_TRIAL_INTERNAL_VARIABLE(CohesionHardeningType);
+        return sqrt_J2 + eta * p - (xi_c + cohesion.value());
     }
 
     YIELD_FUNCTION_STRESS_DERIVATIVE
