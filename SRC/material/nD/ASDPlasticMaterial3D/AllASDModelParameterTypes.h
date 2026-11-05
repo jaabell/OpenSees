@@ -59,6 +59,8 @@ struct MC_ds_Name { static constexpr const char* name = "MC_ds";};     // relati
 using MC_ds = ModelParameterType<double, MC_ds_Name>;
 struct MC_psi_Name { static constexpr const char* name = "MC_psi";};   // dilatancy angle
 using MC_psi = ModelParameterType<double, MC_psi_Name>;
+struct MC_theta_T_Name { static constexpr const char* name = "MC_theta_T";};   // Lode angle (deg) where the corners are rounded; 0 = default 29.9, >= 30 = sharp
+using MC_theta_T = ModelParameterType<double, MC_theta_T_Name>;
 struct MC_psi_cv_Name { static constexpr const char* name = "MC_psi_cv";};   // dilatancy angle
 using MC_psi_cv = ModelParameterType<double, MC_psi_cv_Name>;
 

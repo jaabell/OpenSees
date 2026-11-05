@@ -59,8 +59,10 @@ public:
         VoigtVector dev_part = s - alpha;
         double den = sqrt(0.5*tensor_dot_stress_like(dev_part, dev_part));
         
+        // gradient of g = sqrt(J2) + etabar p: d sqrt(J2) / dsigma = (s - alpha) / (2 sqrt(J2)),
+        // so etabar = DP_eta is associated with DruckerPrager_YF
         if (abs(den) > sqrt(0.5*tensor_dot_stress_like(s, s))*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON)
-            dev_part = dev_part / den;
+            dev_part = dev_part / (2.0 * den);
         else
             dev_part.setZero();  // Zero out if denominator too small
             
