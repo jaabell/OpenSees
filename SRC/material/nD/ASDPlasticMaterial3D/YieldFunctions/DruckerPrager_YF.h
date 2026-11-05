@@ -99,7 +99,8 @@ public:
             return dbl_result;
         }
         
-        auto df_dalpha = -(s - alpha) / den;
+        // d sqrt(J2) / dalpha = -(s - alpha) / (2 sqrt(J2))
+        auto df_dalpha = -(s - alpha) / (2.0 * den);
         VoigtVector hh = GET_INTERNAL_VARIABLE_HARDENING(AlphaHardeningType);
         dbl_result += tensor_dot_stress_like(df_dalpha, hh);
         
