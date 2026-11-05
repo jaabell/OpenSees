@@ -2745,6 +2745,10 @@ private:
 
         double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
         double dLambda = (den != 0) ? strain_like(n).dot(Eelastic * depsilon_elpl) / den : 0;
+        // the plastic multiplier is never negative: a substep heading back inside
+        // the surface (unloading from a yielded state) is elastic
+        if (dLambda < 0)
+            dLambda = 0;
 
         if (dLambda != dLambda)
         {
