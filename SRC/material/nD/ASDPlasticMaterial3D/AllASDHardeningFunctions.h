@@ -121,17 +121,11 @@ struct ArmstrongFrederickPolicy {
         // double alpha_limit = sqrt(2. / 3.) * ha / cr;
         double alpha_limit =  ha / cr;
 
-        cout << "depsilon    = " << depsilon.transpose() << endl;
-        cout << "m           = " << m.transpose() << endl;
-        cout << "mdev        = " << mdev.transpose() << endl;
-        cout << "alpha       = " << alpha.transpose() << endl;
-        cout << "alpha_norm  = " << alpha_norm << "  <= alpha_limit = " << alpha_limit <<  endl;
         VoigtVector derivative;
 
         //Compute the derivative (hardening function)
         if (alpha_norm >= alpha_limit)
         {
-            cout << "Saturation!" << endl;
             derivative.setZero();  // Take care of the saturation limit in case of overshooting
         }
         else
@@ -142,7 +136,6 @@ struct ArmstrongFrederickPolicy {
             // derivative =  (2. / 3.) * ha * mdev - cr * sqrt((2. / 3.) * mdev.dot(mdev)) * alpha;
             // derivative =  ha * dEPS_dev - cr * dEPS_dev_eq * alpha_dev;
         }
-        cout << "----> derivative = " << derivative.transpose() << endl;
 
         return derivative;
 
