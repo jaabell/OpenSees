@@ -2441,14 +2441,22 @@ private:
             VoigtVector sig_new;
             Eigen::VectorXd q_new(nq);
             double dL_new = dL;
+            bool decreased = false;
             for (int ls = 0; ls < 10; ++ls) {
                 for (int i = 0; i < 6; ++i) sig_new(i) = sig(i) + alpha * dx(i);
                 q_new = q + alpha * dx.segment(6, nq);
                 for (int j = 0; j < nq; ++j) if (!(q_scale(j) > 0)) q_new(j) = q_n(j);
                 dL_new = dL + alpha * dx(iL);
                 residual(sig_new, q_new, dL_new, Rp);
-                if (Rp.allFinite() && merit(Rp) < (1.0 - 1e-4 * alpha) * phi0) break;
+                if (Rp.allFinite() && merit(Rp) < (1.0 - 1e-4 * alpha) * phi0) { decreased = true; break; }
                 alpha *= 0.5;
+            }
+            // no descent left with f within tolerance and the scaled residual tiny:
+            // Newton is at the noise floor of the components' own differences
+            if (!decreased && phi0 < 1e-8 && std::abs(R(iL)) <= tol_yf) {
+                residual(sig, q, dL, R);   // back to the current state
+                ok = true;
+                break;
             }
             sig = sig_new;
             q = q_new;
