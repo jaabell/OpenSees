@@ -123,4 +123,8 @@ VoigtVector MohrCoulomb_YF<NO_HARDENING>::vv_out;
 template<class NO_HARDENING>
 struct yf_has_apex<MohrCoulomb_YF<NO_HARDENING>> : std::true_type {};
 
+// Return mapping to the tensile apex c cot(phi)
+template<class NO_HARDENING>
+struct yf_has_apex_return<MohrCoulomb_YF<NO_HARDENING>> : std::true_type {};
+
 #endif

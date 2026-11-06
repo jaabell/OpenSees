@@ -14,6 +14,11 @@ one brick with a fixed base for the global Newton iteration.
   mc_extension_corner         Backward_Euler converges with step refinement to the
                               RK45 answer on a path from the triaxial extension
                               meridian (the Mohr-Coulomb corner, now rounded)
+  mc_tension_apex             a trial stress beyond the tensile apex (hydrostatic
+                              extension, and extension plus shear) returns to
+                              p = c cot(phi), q = 0 with Backward_Euler and
+                              Full_Backward_Euler, for psi = 0 (no volumetric flow)
+                              and psi > 0
   dp_hardening_consistency    Backward_Euler and RK45 agree for Drucker-Prager with
                               kinematic and cohesion hardening (consistent f and
                               hardening terms)
@@ -155,6 +160,16 @@ def test_mc_extension_corner():
     ref = strain_path(lambda: mc_material(RK), legs(200))
     e = [rel_diff(strain_path(lambda: mc_material(BE), legs(n)), ref) for n in (10, 40, 160)]
     assert e[2] < e[0] and e[2] < 5e-3
+
+
+@pytest.mark.parametrize('opts', [BE, FBE_N])
+@pytest.mark.parametrize('psi', [0.0, 10.0])
+@pytest.mark.parametrize('legs', [[([3e-4] * 3 + [0, 0, 0], 10), ([4e-4] * 3 + [0, 0, 0], 10)],
+                                  [([0, 0, 0, 1e-3, 0, 0], 10), ([6e-4] * 3 + [1e-3, 0, 0], 10)]])
+def test_mc_tension_apex(opts, psi, legs):
+    apex = 10000. / 0.5773502691896257   # c cot(30 deg)
+    s = strain_path(lambda: mc_material(opts, psi=psi), legs)
+    assert s == pytest.approx([apex] * 3 + [0.] * 3, rel=1e-9, abs=1e-6)
 
 
 def test_dp_hardening_consistency():
