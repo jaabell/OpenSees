@@ -875,6 +875,78 @@ static int Tcl_ops_modalDampingQ(ClientData clientData, Tcl_Interp *interp, int 
     return TCL_OK;
 }
 
+static int Tcl_ops_contactSurface(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoContactSurface() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_contact(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoContact() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_contactPlane(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoContactPlane() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoContactInfo(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoContactInfo() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoContactForce(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoContactForce() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoMortarPenetration(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoMortarPenetration() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoMortarTieResidual(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoMortarTieResidual() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoBeginAugment(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoBeginAugment() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
+static int Tcl_ops_ladrunoEndAugment(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoEndAugment() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
 static int Tcl_ops_setElementRayleighDampingFactors(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
     wrapper->resetCommandLine(argc, 1, argv);
 
@@ -1831,6 +1903,15 @@ TclWrapper::addOpenSeesCommands(Tcl_Interp* interp)
     addCommand(interp,"stop", &Tcl_ops_stopTimer);
     addCommand(interp,"modalDamping", &Tcl_ops_modalDamping);
     addCommand(interp,"modalDampingQ", &Tcl_ops_modalDampingQ);
+    addCommand(interp,"contactSurface", &Tcl_ops_contactSurface);
+    addCommand(interp,"contact", &Tcl_ops_contact);
+    addCommand(interp,"contactPlane", &Tcl_ops_contactPlane);
+    addCommand(interp,"ladrunoContactInfo", &Tcl_ops_ladrunoContactInfo);
+    addCommand(interp,"ladrunoContactForce", &Tcl_ops_ladrunoContactForce);
+    addCommand(interp,"ladrunoMortarPenetration", &Tcl_ops_ladrunoMortarPenetration);
+    addCommand(interp,"ladrunoMortarTieResidual", &Tcl_ops_ladrunoMortarTieResidual);
+    addCommand(interp,"ladrunoBeginAugment", &Tcl_ops_ladrunoBeginAugment);
+    addCommand(interp,"ladrunoEndAugment", &Tcl_ops_ladrunoEndAugment);
     addCommand(interp,"setElementRayleighDampingFactors", &Tcl_ops_setElementRayleighDampingFactors);
     addCommand(interp,"region", &Tcl_ops_region);
     addCommand(interp,"setPrecision", &Tcl_ops_setPrecision);
