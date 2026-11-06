@@ -83,6 +83,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <SymmGeneralizedEigenSOE.h>
 #include <ArpackSOE.h>
 #include <LoadControl.h>
+#include <LadrunoSolverQuery.h>
 #include <CTestPFEM.h>
 #include <PFEMIntegrator.h>
 #include <TransientIntegrator.h>
@@ -1695,6 +1696,9 @@ int OPS_CTest()
     } else if (strcmp(type,"NormUnbalance") == 0) {
 	theTest = (ConvergenceTest*)OPS_CTestNormUnbalance();
 
+    } else if (strcmp(type,"LadrunoStabilizedUnbalance") == 0) {
+	theTest = (ConvergenceTest*)OPS_LadrunoStabilizedUnbalance();
+
     } else if (strcmp(type,"NormDispIncr") == 0) {
 	theTest = (ConvergenceTest*)OPS_CTestNormDispIncr();
 
@@ -1762,6 +1766,12 @@ int OPS_Integrator()
 
     } else if (strcmp(type,"ArcLength1") == 0) {
 	si = (StaticIntegrator*)OPS_ArcLength1();
+
+    } else if (strcmp(type,"LadrunoArcLength") == 0) {
+	si = (StaticIntegrator*)OPS_LadrunoArcLength();
+
+    } else if (strcmp(type,"LadrunoIndirectControl") == 0) {
+	si = (StaticIntegrator*)OPS_LadrunoIndirectControl();
 
     } else if (strcmp(type,"HSConstraint") == 0) {
 	si = (StaticIntegrator*)OPS_HSConstraint();
@@ -1894,6 +1904,9 @@ int OPS_Integrator()
 
     } else if (strcmp(type,"CentralDifferenceNoDamping") == 0) {
 	ti = (TransientIntegrator*)OPS_CentralDifferenceNoDamping();
+
+    } else if (strcmp(type,"LadrunoDynamicRelaxation") == 0) {
+	ti = (TransientIntegrator*)OPS_LadrunoDynamicRelaxation();
 
 	} else if (strcmp(type, "ExplicitDifference") == 0) {
     ti = (TransientIntegrator*)OPS_ExplicitDifference();
@@ -2771,6 +2784,21 @@ int OPS_getCTestIter()
 
     opserr << "ERROR testIter - no convergence test!\n";
     return -1;
+}
+
+// ladrunoArcLength <sub <value>>: the dispatch is in LadrunoSolverQuery.h,
+// shared with the classic Tcl interpreter
+int OPS_LadrunoArcLengthCmd()
+{
+    if (cmds == 0) return -1;
+    return Ladruno::arcLengthCommand(cmds->getStaticIntegrator());
+}
+
+// ladrunoDR <sub>: the dispatch is in LadrunoSolverQuery.h
+int OPS_LadrunoDRCmd()
+{
+    if (cmds == 0) return -1;
+    return Ladruno::drCommand(cmds->getTransientIntegrator());
 }
 
 int OPS_Database()
