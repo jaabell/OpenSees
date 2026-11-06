@@ -33,6 +33,8 @@
 #include "NDMaterial.h"
 #include <G3Globals.h>
 #include <iostream>
+#include <cstdio>
+#include <string>
 #include <Channel.h>
 #include <Information.h>
 #include <MaterialResponse.h>
@@ -2473,10 +2475,28 @@ private:
         if (!ok || dL < 0.0 || !sig.allFinite()) {
             // keep the converged cutting-plane state for this step, if there is one
             FBE_fallbacks[ASDP_TAG]++;
-            if (FBE_fallbacks[ASDP_TAG] == 1)
-                opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Full_Backward_Euler did not converge"
-                       << " (|f| = " << std::abs(R(iL)) << ", dLambda = " << dL << ") -- using the Backward_Euler"
-                       << " state for this step. Further fallbacks are counted, not reported.\n";
+            if (FBE_fallbacks[ASDP_TAG] <= 5)
+            {
+                // stress invariants of each state, to tell a corner (Lode angle near
+                // +-30 deg) from the apex (p near the tensile apex, q near 0)
+                auto invariants = [](const VoigtVector& st) {
+                    char buf[128];
+                    std::snprintf(buf, sizeof(buf), "p = %.6g, q = %.6g, Lode = %.3f deg",
+                                  st.getI1() / 3.0, std::sqrt(3.0 * std::max(st.getJ2(), 0.0)),
+                                  st.lodeAngle() * 180.0 / M_PI);
+                    return std::string(buf);
+                };
+                set_q(cp_q);
+                const double f_cp = yf(cp_sig, iv_storage, parameters_storage);
+                opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Full_Backward_Euler did not converge ("
+                       << FBE_fallbacks[ASDP_TAG] << (FBE_fallbacks[ASDP_TAG] == 5 ? ", further ones are counted, not reported" : "") << ")"
+                       << (cp_converged ? " -- using the converged Backward_Euler state\n" : " -- Backward_Euler did not converge either: returning -1\n")
+                       << "    p = I1/3 (tension positive), q = sqrt(3 J2)\n"
+                       << "    committed: " << invariants(sigma_n).c_str() << ", f = " << yf_val_start << "\n"
+                       << "    trial:     " << invariants(sigma_trial).c_str() << ", f = " << yf_val_end << "\n"
+                       << "    Newton:    " << invariants(sig).c_str() << ", f = " << R(iL) << ", dLambda = " << dL << "\n"
+                       << "    Backward_Euler: " << invariants(cp_sig).c_str() << ", f = " << f_cp << "\n";
+            }
             if (!cp_converged)
                 return -1;
             TrialStress = cp_sig;
