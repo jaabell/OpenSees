@@ -301,17 +301,9 @@ public:
     }
 
 
+    // deviator stress q = sqrt(3 J2) (= sigma1 - sigma3 in triaxial states)
     double stressDeviatorQ() const {
-        VoigtVector deviator = this->deviator();
-        double J2 = 0.5 * (
-                        deviator.v11() * deviator.v11() + deviator.v22() * deviator.v22() + deviator.v33() * deviator.v33()
-                        - 2 * deviator.v11() * deviator.v22()
-                        - 2 * deviator.v22() * deviator.v33()
-                        - 2 * deviator.v33() * deviator.v11()
-                        + 6 * (deviator.v12() * deviator.v12() + deviator.v23() * deviator.v23() + deviator.v13() * deviator.v13())
-                    );
-
-        return std::sqrt(0.5 * J2);
+        return std::sqrt(3.0 * std::max(this->getJ2(), 0.0));
     }
 
     // double lodeAngle() const {
