@@ -124,6 +124,7 @@ public:
         using namespace std;
 
         double ds = GET_PARAMETER_VALUE(MC_ds);
+        if (!(ds > 0.0)) ds = 1e-6;   // MC_ds not given
 
         double sigma_norm = sigma.norm();
 

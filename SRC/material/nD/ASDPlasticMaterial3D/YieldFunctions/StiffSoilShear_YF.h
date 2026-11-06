@@ -176,7 +176,8 @@ public:
         VoigtVector sig_geo = -sigma;   // Geotech stress 
         double q = sig_geo.stressDeviatorQ();
         auto [sigma3,sigma2,sigma1] = sig_geo.principalStresses(); // ascending order in geotech conventon
-        sigma3 = std::max(sigma3, p_lim);
+        const double sigma3_actual = sigma3;   // for the tension cut-off
+        sigma3 = std::max(sigma3, p_lim);      // for stiffness and strength only
         // double q = (sigma1 - sigma3);
         // std::cout << "   sigma = " << sigma.transpose() << endl;
         // std::cout << "   sigma3 = " << sig_geo.transpose() << endl;
@@ -251,9 +252,9 @@ public:
 
         //Handle tensile part
         double T = 0.0;
-        double Ft = T - sigma3;
+        double Ft = T - sigma3_actual;
 
-        if (sigma3 > T + 1e-10 && sigma1 > 1e-10) {
+        if (sigma3_actual > T + 1e-10 && sigma1 > 1e-10) {
           //pass
         } else {
           Fs = -1e10;
@@ -341,6 +342,7 @@ public:
         using namespace std;
 
         double ds = GET_PARAMETER_VALUE(MC_ds);
+        if (!(ds > 0.0)) ds = 1e-6;   // MC_ds not given
         double sigma_norm = sigma.norm();
 
         // Perturbation to smooth the YF
