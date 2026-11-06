@@ -972,7 +972,6 @@ public:
             // cout << "responseID == 7 !! info.theType = " << info.theType << " DoubleType = " << DoubleType << endl;
             // if (info.theType == DoubleType) {
                 const double& K02D = info.theDouble;
-                cout << "ASDPL @ tag = " << this->getTag() << " K02D  K0 = " << K02D << endl;
                 CommitStress(0) = K02D * CommitStress(1);
                 CommitStress(2) = K02D * CommitStress(1);
                 stress_set_externally = true;
@@ -982,7 +981,6 @@ public:
         else if (responseID == 8) { // K03D - Use Sigma_Z
             // if (info.theType == DoubleType) {
                 const double& K03D = info.theDouble;
-                cout << "ASDPL @ tag = " << this->getTag() << " K03D  K0 = " << K03D << endl;
                 CommitStress(0) = K03D * CommitStress(2);
                 CommitStress(1) = K03D * CommitStress(2);
                 stress_set_externally = true;
@@ -992,7 +990,6 @@ public:
         else if (responseID == 9) { // trialStressIncrement
             if (info.theType == VectorType) {
                 const Vector& newTrialStress = *(info.theVector);
-                opserr << "ASDPL @ tag = " << this->getTag() << "  newTrialStress = " << newTrialStress   << endln;
                 TrialStress += VoigtVector::fromStress(newTrialStress);
                 stress_set_externally = true;
             }
@@ -2144,10 +2141,7 @@ private:
 
             if (std::abs(dPhi_dLambda) < MACHINE_EPSILON) {
                 // singular local tangent
-                cout << " SINGULAR LOCAL TANGENT - FAILING!" << endl;
-                cout << "  =>  n = " << n.transpose() << endl;
-                cout << "  =>  m = " << m.transpose() << endl;
-                cout << "  =>  H = " << H << endl;
+                opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Backward_Euler: singular local tangent (n:E:m - H = 0)\n";
                 return -1;
             }
 
@@ -2165,7 +2159,6 @@ private:
 
             // keep λ >= 0
             if (dLambda + deltaLambda < 0.0) {
-                cout << " PLASTIC INCONSISTENCY - ELASTIC STEP! (dLambda + deltaLambda < 0.0)" << endl << endl;
                 // step cannot be plastic; fall back to elastic in this rare case
                 Stiffness = Eelastic;
                 return 0;
@@ -2189,7 +2182,7 @@ private:
             // NaN guard
             const double norm_trial_stress = TrialStress.transpose() * TrialStress;
             if (!(norm_trial_stress == norm_trial_stress)) { // NaN chec
-               cout << "NaN!" << endl;
+               opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Backward_Euler: NaN stress\n";
                 return -1;
             }
         }
