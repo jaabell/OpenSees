@@ -2189,7 +2189,8 @@ private:
         // cout << "BE - END iterations----------" << endl << endl;
 
 
-        ComputeTangentStiffness();
+        if (!skip_BE_tangent)   // Full_Backward_Euler uses this state only as its starting point
+            ComputeTangentStiffness();
 
         return 0;
     }
@@ -2302,17 +2303,27 @@ private:
 
         // start from the cutting-plane Backward_Euler state: Newton from the
         // elastic trial overshoots on strongly curved surfaces (e.g. HoekBrown)
+        // Backward_Euler returns 0 even when its loop ran out of iterations: its
+        // state is used (as starting point, and as fallback) only if f is within
+        // tolerance there
         bool cp_start = false;
-        if (Backward_Euler(strain_incr) == 0 && TrialStress.allFinite())
+        skip_BE_tangent = true;
+        const int be_flag = Backward_Euler(strain_incr);
+        skip_BE_tangent = false;
+        const VoigtVector cp_sig = TrialStress;
+        const VoigtVector cp_epsp = TrialPlastic_Strain;
+        Eigen::VectorXd cp_q(nq);
         {
-            const VoigtVector dep = TrialPlastic_Strain - CommitPlastic_Strain;
-            if (dep.cwiseAbs().maxCoeff() > 0)
-            {
-                sig = TrialStress;
-                int k = 0;
-                iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) q(k++) = iv.trial_value(j); });
-                cp_start = true;
-            }
+            int k = 0;
+            iv_storage.apply([&](auto & iv) { for (int j = 0; j < iv.size(); ++j) cp_q(k++) = iv.trial_value(j); });
+        }
+        const bool cp_converged = be_flag == 0 && cp_sig.allFinite()
+            && std::abs(yf(cp_sig, iv_storage, parameters_storage)) <= tol_yf;
+        if (cp_converged && (cp_epsp - CommitPlastic_Strain).cwiseAbs().maxCoeff() > 0)
+        {
+            sig = cp_sig;
+            q = cp_q;
+            cp_start = true;
         }
 
         Eigen::VectorXd R(N), Rp(N), Rm(N);
@@ -2460,13 +2471,20 @@ private:
         }
 
         if (!ok || dL < 0.0 || !sig.allFinite()) {
-            // fall back to the cutting-plane Backward_Euler for this step
+            // keep the converged cutting-plane state for this step, if there is one
             FBE_fallbacks[ASDP_TAG]++;
             if (FBE_fallbacks[ASDP_TAG] == 1)
                 opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Full_Backward_Euler did not converge"
-                       << " (|f| = " << std::abs(R(iL)) << ", dLambda = " << dL << ") -- using Backward_Euler for"
-                       << " this step. Further fallbacks are counted, not reported.\n";
-            return Backward_Euler(strain_incr);
+                       << " (|f| = " << std::abs(R(iL)) << ", dLambda = " << dL << ") -- using the Backward_Euler"
+                       << " state for this step. Further fallbacks are counted, not reported.\n";
+            if (!cp_converged)
+                return -1;
+            TrialStress = cp_sig;
+            TrialPlastic_Strain = cp_epsp;
+            set_q(cp_q);
+            depsilon_elpl = depsilon;
+            ComputeTangentStiffness();
+            return 0;
         }
 
         GLOBAL_INT_max_iter[ASDP_TAG] = std::max(GLOBAL_INT_max_iter[ASDP_TAG], iter);
@@ -4259,6 +4277,7 @@ protected:
 
     bool first_step;
     bool stress_set_externally;
+    bool skip_BE_tangent = false;   // set by Full_Backward_Euler around its warm start
 
     static VoigtVector dsigma;
     static VoigtVector depsilon_elpl;    //Elastoplastic strain increment : For a strain increment that causes first yield, the step is divided into an elastic one (until yield) and an elastoplastic one.
