@@ -124,7 +124,8 @@ public:
 
         // Mobilized friction angle (Eq. 15.7)
         double cot_phi = (abs(sin_phi) > 1e-12) ? cos(phi) / sin_phi : 1e12;
-        double denom_m = sigma1 + sigma3 - 2.0 * c * cot_phi;
+        // mobilized friction, compression positive: sin(phi_m) = (s1 - s3) / (s1 + s3 + 2 c cot(phi))
+        double denom_m = sigma1 + sigma3 + 2.0 * c * cot_phi;
         double sin_phi_m = (abs(denom_m) > 1e-12) ? (sigma1 - sigma3) / denom_m : 0.0;
         
         // Clamp to valid range
@@ -194,6 +195,7 @@ public:
         double psi = GET_PARAMETER_VALUE(MC_psi) * M_PI / 180.0;
         double c = GET_PARAMETER_VALUE(MC_c);
         double ds = GET_PARAMETER_VALUE(MC_ds);
+        if (!(ds > 0.0)) ds = 1e-6;   // MC_ds not given
 
         double sigma_norm = sigma.norm();
 
