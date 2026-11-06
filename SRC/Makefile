@@ -1090,7 +1090,15 @@ MATERIAL_LIBS   =  $(FE)/material/Material.o \
 	$(FE)/material/nD/stressDensityModel/SDM-UC.o \
 	$(FE)/material/nD/OrthotropicRotatingAngleConcreteT2DMaterial01/OrthotropicRotatingAngleConcreteT2DMaterial01.o \
 	$(FE)/material/nD/SmearedSteelDoubleLayerT2DMaterial01/SmearedSteelDoubleLayerT2DMaterial01.o \
-	$(FE)/material/nD/ASDPlasticMaterial3D/OPS_AllASDPlasticMaterial3Ds.o
+	$(FE)/material/nD/ASDPlasticMaterial3D/OPS_AllASDPlasticMaterial3Ds.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_0.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_1.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_2.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_3.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_4.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_5.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_6.o \
+	$(FE)/material/nD/ASDPlasticMaterial3D/ASD_material_definitions_7.o
 
 FEDEAS_LIBS = $(FE)/material/uniaxial/FedeasMaterial.o \
 	$(FE)/material/uniaxial/fedeas/FedeasHardeningMaterial.o \

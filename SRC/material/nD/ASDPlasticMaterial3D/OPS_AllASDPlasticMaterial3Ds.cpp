@@ -86,8 +86,7 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
     // check arguments
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 2) {
-        "nDMaterial ASDPlasticMaterial3D Error: Few arguments \n";
-        opserr << "    numArgs = " << numArgs << endln << endln;
+        opserr << "nDMaterial ASDPlasticMaterial3D Error: Few arguments\n";
         print_usage();
         return nullptr;
     }
@@ -112,8 +111,6 @@ void *OPS_AllASDPlasticMaterial3Ds(void)
     pf_type = numArgs >= 3 ? OPS_GetString() : " X ";
     el_type = numArgs >= 4 ? OPS_GetString() : " X ";
     iv_type = numArgs >= 5 ? OPS_GetString() : " X ";
-    
-    opserr << "    numArgs = " << numArgs << endln << endln;
 
 
     cout << "Searching for instance with:\n";

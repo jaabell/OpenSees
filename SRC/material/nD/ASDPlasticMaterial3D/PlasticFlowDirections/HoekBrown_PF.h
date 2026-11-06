@@ -67,26 +67,39 @@ public:
         // Get Hoek-Brown parameters
         double sigma_ci = GET_PARAMETER_VALUE(HB_sigci);
         double mb_psi = GET_PARAMETER_VALUE(HB_mb_psi);  // Dilation parameter (reduced mb)
-        double mb_unused, s, a;
+        double mb, s, a;
         HoekBrownUtils::effective_rock_mass_parameters(
             GET_PARAMETER_VALUE(HB_mi), GET_PARAMETER_VALUE(HB_GSI), GET_PARAMETER_VALUE(HB_D),
-            0.0, GET_PARAMETER_VALUE(HB_s), GET_PARAMETER_VALUE(HB_a),
-            mb_unused, s, a);
+            GET_PARAMETER_VALUE(HB_mb), GET_PARAMETER_VALUE(HB_s), GET_PARAMETER_VALUE(HB_a),
+            mb, s, a);
         double ds = GET_PARAMETER_VALUE(HB_ds);
         double theta_T = GET_PARAMETER_VALUE(HB_theta_T);
 
         // gradient of the yield function's shear part with mb_psi in place of mb
         // (compression positive like the yield function, edges rounded; see
         // HoekBrown_Invariants.h)
-        vv_out = HoekBrownInvariants::gradient(sigma, ds,
-            [&](const VoigtVector& sig) { return HoekBrownInvariants::shear_function(sig, sigma_ci, mb_psi, s, a, theta_T); });
+        // where the yield function's tension cut-off governs (f_tension > f_shear),
+        // flow normal to it: the gradient of sigma_t - sigma3 (compression positive)
+        const double sigma_t = -s * sigma_ci / mb;
+        auto f_tension = [&](const VoigtVector& sig) {
+            VoigtVector sig_geo = -sig;
+            auto [s3, s2, s1] = sig_geo.principalStresses();
+            (void) s2; (void) s1;
+            return sigma_t - s3;
+        };
+        const double f_shear = HoekBrownInvariants::shear_function(sigma, sigma_ci, mb, s, a, theta_T);
+        if (f_tension(sigma) > f_shear)
+            vv_out = HoekBrownInvariants::gradient(sigma, ds, f_tension);
+        else
+            vv_out = HoekBrownInvariants::gradient(sigma, ds,
+                [&](const VoigtVector& sig) { return HoekBrownInvariants::shear_function(sig, sigma_ci, mb_psi, s, a, theta_T); });
 
         return vv_out;
     }
 
     using internal_variables_t = std::tuple<NO_HARDENING>;
 
-    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_GSI, HB_mi, HB_D, HB_s, HB_a, HB_ds, HB_theta_T>;
+    using parameters_t = std::tuple<HB_sigci, HB_mb_psi, HB_GSI, HB_mi, HB_D, HB_mb, HB_s, HB_a, HB_ds, HB_theta_T>;
 
 private:
     static VoigtVector vv_out;
