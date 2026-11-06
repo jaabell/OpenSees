@@ -38,6 +38,13 @@
 template <typename T>
 struct yf_has_apex : std::false_type {};
 
+// Yield functions shaped as a cone with one apex (apex_stress), such as
+// Mohr-Coulomb. Backward_Euler and Full_Backward_Euler return trial stresses
+// that lie beyond the apex, where no point of the faces can be reached along
+// the flow direction, to the apex itself.
+template <typename T>
+struct yf_has_apex_return : std::false_type {};
+
 
 
 // Helper template to check if a class has a parameters_t type alias

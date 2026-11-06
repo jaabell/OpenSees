@@ -1988,6 +1988,103 @@ private:
 
 
 
+    // Return mapping to the apex of a cone-shaped yield surface (yf_has_apex_return).
+    // At the apex f is not differentiable and the cutting-plane iteration stalls
+    // (with psi = 0 the flow has no volumetric part and cannot reduce p at all).
+    // The trial stress is in the apex region when removing its deviatoric part
+    // along the flow direction at the trial stress, dsigma = -dLambda E W m,
+    // leaves the mean stress at or beyond the apex:
+    //     dLambda_q = (s_tr : s_tr) / (s_tr : dev(E W m)),
+    //     p_tr - dLambda_q tr(E W m) / 3 >= p_apex          (p = I1 / 3, tension positive)
+    // For psi = 0 this is p_tr >= p_apex. The stress is then the apex, the
+    // plastic strain increment is C (sigma_tr - sigma_apex) exactly, and dLambda
+    // is its projection on W m (used only to update the internal variables).
+    // For a perfectly plastic cone the consistent tangent at the apex is zero;
+    // a small fraction of E (APEX_TANGENT_FRACTION) keeps the global matrix
+    // regular when whole elements reach the apex. Tangent types Elastic and
+    // Secant keep their meaning (E and E / 2).
+    bool apex_return_applied = false;
+    static constexpr double APEX_TANGENT_FRACTION = 1e-6;
+
+    bool Apex_Return(const VoigtMatrix& Eelastic, const VoigtVector& depsilon)
+    {
+        if constexpr (!yf_has_apex_return<YieldFunctionType>::value)
+        {
+            return false;
+        }
+        else
+        {
+            using namespace ASDPlasticMaterial3DGlobals;
+
+            const VoigtVector sigma_apex = yf.apex_stress(iv_storage, parameters_storage);
+            if (!sigma_apex.allFinite())   // e.g. phi = 0: no apex
+                return false;
+
+            const double p_apex = sigma_apex.getI1() / 3.0;
+            const double p_tr   = TrialStress.getI1() / 3.0;
+            const VoigtVector s_tr = TrialStress.deviator();
+            const double s_norm = std::sqrt(std::max(tensor_dot_stress_like(s_tr, s_tr), 0.0));
+            const double scale  = std::max({std::abs(p_apex), std::abs(p_tr), s_norm});
+
+            VoigtVector m = pf(depsilon, TrialStress, iv_storage, parameters_storage);
+            if (!m.allFinite())
+                m.setZero();
+            const VoigtVector v = Eelastic * strain_like(m);
+            const double sv = tensor_dot_stress_like(s_tr, v.deviator());
+
+            bool in_apex_region;
+            if (s_norm <= 1e-12 * scale || !(sv > 0.0))
+                in_apex_region = p_tr >= p_apex;
+            else
+                in_apex_region = p_tr - (s_norm * s_norm / sv) * v.getI1() / 3.0 >= p_apex;
+            if (!in_apex_region)
+                return false;
+
+            // plastic strain increment C (sigma_tr - sigma_apex), in strain-like (engineering) components
+            Eigen::Matrix<double, 6, 6> E6;
+            Eigen::Matrix<double, 6, 1> r6;
+            for (int i = 0; i < 6; ++i) {
+                r6(i) = TrialStress(i) - sigma_apex(i);
+                for (int j = 0; j < 6; ++j) E6(i, j) = Eelastic(i, j);
+            }
+            const Eigen::Matrix<double, 6, 1> e6 = E6.ldlt().solve(r6);
+            if (!e6.allFinite())
+                return false;
+            VoigtVector depsp;
+            for (int i = 0; i < 6; ++i) depsp(i) = e6(i);
+
+            const VoigtVector Wm = strain_like(m);
+            const double WmWm = Wm.dot(Wm);
+            const double dLambda = WmWm > MACHINE_EPSILON ? std::max(depsp.dot(Wm) / WmWm, 0.0) : 0.0;
+
+            iv_storage.apply([&](auto & internal_variable)
+            {
+                auto h = internal_variable.hardening_function(depsilon, m, sigma_apex, parameters_storage);
+                internal_variable.trial_value += dLambda * h;
+            });
+
+            // with hardening the apex moves: use this return only if the apex is still on the surface
+            if (std::abs(yf(sigma_apex, iv_storage, parameters_storage)) > DBL_OPT_f_absolute_tol[ASDP_TAG])
+            {
+                iv_storage.revert_all();
+                return false;
+            }
+
+            TrialStress = sigma_apex;
+            TrialPlastic_Strain = CommitPlastic_Strain + depsp;
+
+            if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Elastic)
+                Stiffness = Eelastic;
+            else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Secant)
+                Stiffness = 0.5 * Eelastic;
+            else
+                Stiffness = APEX_TANGENT_FRACTION * Eelastic;
+
+            apex_return_applied = true;
+            return true;
+        }
+    }
+
     int Backward_Euler(const VoigtVector & strain_incr)
     {
         using namespace ASDPlasticMaterial3DGlobals;
@@ -1996,6 +2093,8 @@ private:
 
         int    max_iter = INT_OPT_n_max_iterations[ASDP_TAG];
         double tol_yf   = DBL_OPT_f_absolute_tol[ASDP_TAG]; 
+
+        apex_return_applied = false;
 
         // -------- setup
         static VoigtVector depsilon;
@@ -2035,75 +2134,9 @@ private:
         }
 
 
-        // Deal with the APEX if needed
-        // -------- APEX return (one-shot projection) -------------------------------
-        if constexpr (yf_has_apex<YieldFunctionType>::value)
-        {
-            if (yf.check_apex_region(TrialStress, iv_storage, parameters_storage))
-            {
-                // // 1) Target apex stress from YF (hydrostatic vector in Voigt form)
-                // const VoigtVector sigma_apex = yf.apex_stress(iv_storage, parameters_storage);
-
-                // // 2) Plastic strain increment needed to hit apex:
-                // //    Δε^p = S_elastic : (σ_trial − σ_apex)
-                // // const VoigtMatrix Selastic = se(CommitStress, parameters_storage); // compliance at commit
-                
-                // const VoigtVector rhs = TrialStress - sigma_apex;
-
-                // // const VoigtVector dep      = Selastic * (TrialStress - sigma_apex);
-                // // If Eelastic is SPD (usual for linear elasticity):
-                // // Eigen::LLT<VoigtMatrix> chol(et(CommitStress, parameters_storage));
-                // // VoigtVector dep;
-                // // if (chol.info() == Eigen::Success) {
-                // //     dep = chol.solve(rhs);
-                // // } else {
-                // //     // fallback if not strictly SPD
-                // //     dep = Eelastic.ldlt().solve(rhs);
-                // // }
-
-
-                // Eigen::Matrix<double,6,6> E_eig;        // copia desde Eelastic
-                // Eigen::Matrix<double,6,1> rhs_eig;      // copia desde rhs
-                // for (int i=0;i<6;++i) {
-                //     rhs_eig(i) = rhs(i);
-                //     for (int j=0;j<6;++j) E_eig(i,j) = Eelastic(i,j);
-                // }
-                // Eigen::Matrix<double,6,1> dep_eig;
-                // auto chol = E_eig.selfadjointView<Eigen::Lower>().llt();
-                // if (chol.info()==Eigen::Success) dep_eig = chol.solve(rhs_eig);
-                // else                             dep_eig = E_eig.ldlt().solve(rhs_eig);
-                // VoigtVector dep = dep_eig;  // asigna de vuelta
-
-                // // 3) Equivalent plastic multiplier using apex flow direction
-                // //    (least-squares projection of dep onto m_apex)
-                // // const VoigtVector m_apex   = pf.apex_flow_direction(sigma_apex, iv_storage, parameters_storage);
-                // const VoigtVector m_apex   = pf(depsilon, sigma_apex, iv_storage, parameters_storage);
-                // double m_dot_m             = tensor_dot_stress_like(m_apex, m_apex);
-                // double dLambda_apex        = 0.0;
-                // double dLambda             = 0.0;
-                // if (m_dot_m > MACHINE_EPSILON) {
-                //     dLambda_apex = tensor_dot_stress_like(m_apex, dep) / m_dot_m;
-                //     if (dLambda + dLambda_apex < 0.0) dLambda_apex = -dLambda; // keep λ ≥ 0
-                //     dLambda += dLambda_apex;
-                // }
-
-                // // 4) Update stress, plastic strain, internal variables
-                // TrialStress         = sigma_apex;
-                // TrialPlastic_Strain = TrialPlastic_Strain + dep;
-
-                // iv_storage.apply([&](auto & internal_variable)
-                // {
-                //     auto h = internal_variable.hardening_function(depsilon, m_apex, TrialStress, parameters_storage);
-                //     internal_variable.trial_value += dLambda_apex * h;
-                // });
-
-                // // 5) Tangent: simplest safe choice is elastic; or call your usual builder
-                // //    If you have a special apex-consistent tangent, compute it inside ComputeTangentStiffness()
-                // Stiffness = Eelastic;
-                // // ComputeTangentStiffness(); // (optional if it knows how to handle apex)
-                // return 0;
-            }
-        }
+        // -------- trial stress beyond the apex of a cone (e.g. Mohr-Coulomb in tension)
+        if (Apex_Return(Eelastic, depsilon))
+            return 0;
 
         // -------- plastic correction (Backward Euler)
 
@@ -2312,6 +2345,8 @@ private:
         skip_BE_tangent = true;
         const int be_flag = Backward_Euler(strain_incr);
         skip_BE_tangent = false;
+        if (apex_return_applied)   // the apex is the exact solution; there is no Newton system there
+            return be_flag;
         const VoigtVector cp_sig = TrialStress;
         const VoigtVector cp_epsp = TrialPlastic_Strain;
         Eigen::VectorXd cp_q(nq);
