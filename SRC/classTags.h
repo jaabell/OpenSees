@@ -885,6 +885,7 @@
 #define ELE_TAG_InertiaTruss              218	//Added by Xiaodong Ji, Yuhao Cheng, Yue Yu
 #define ELE_TAG_ASDAbsorbingBoundary2D    219  // Massimo Petracca (ASDEA)
 #define ELE_TAG_ASDAbsorbingBoundary3D    220  // Massimo Petracca (ASDEA)
+#define ELE_TAG_SplitElastic              222  // Jose Antonio Abell
 #define ELE_TAG_ZeroLengthContactASDimplex  221  // Onur Deniz Akan (IUSS), Massimo Petracca (ASDEA)
 #define ELE_TAG_IGALinePatch       	  250 // IGA Shell by Felipe Elgueta and jaabell (UANDES)
 #define ELE_TAG_IGASurfacePatch       	  251 // IGA Shell by Felipe Elgueta and jaabell (UANDES)

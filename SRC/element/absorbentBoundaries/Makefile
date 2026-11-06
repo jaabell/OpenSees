@@ -1,6 +1,7 @@
 include ../../../Makefile.def
 
-OBJS       = LysmerTriangle.o \
+OBJS       = SplitElastic.o \
+	LysmerTriangle.o \
 	ASDAbsorbingBoundary2D.o \
 	ASDAbsorbingBoundary3D.o \
 	FSIFluidElement2D.o \

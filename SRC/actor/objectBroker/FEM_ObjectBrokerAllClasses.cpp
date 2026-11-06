@@ -505,6 +505,7 @@
 
 #include "absorbentBoundaries/ASDAbsorbingBoundary2D.h"
 #include "absorbentBoundaries/ASDAbsorbingBoundary3D.h"
+#include "absorbentBoundaries/SplitElastic.h"
 #include "absorbentBoundaries/FSIFluidElement2D.h"
 #include "absorbentBoundaries/FSIInterfaceElement2D.h"
 #include "absorbentBoundaries/FSIFluidBoundaryElement2D.h"
@@ -1250,6 +1251,9 @@ FEM_ObjectBrokerAllClasses::getNewElement(int classTag)
 
     case ELE_TAG_ASDAbsorbingBoundary2D:
       return new ASDAbsorbingBoundary2D();
+
+    case ELE_TAG_SplitElastic:
+      return new SplitElastic();
 
     case ELE_TAG_ASDAbsorbingBoundary3D:
       return new ASDAbsorbingBoundary3D();

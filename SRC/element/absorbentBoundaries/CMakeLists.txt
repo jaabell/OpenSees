@@ -13,6 +13,7 @@ target_sources(OPS_Element
   PRIVATE
     ASDAbsorbingBoundary2D.cpp
     ASDAbsorbingBoundary3D.cpp
+    SplitElastic.cpp
     LysmerTriangle.cpp
     FSIFluidElement2D.cpp
     FSIInterfaceElement2D.cpp
@@ -20,6 +21,7 @@ target_sources(OPS_Element
   PUBLIC
     ASDAbsorbingBoundary2D.h
     ASDAbsorbingBoundary3D.h
+    SplitElastic.h
     LysmerTriangle.h
     FSIFluidElement2D.h
     FSIInterfaceElement2D.h

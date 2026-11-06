@@ -182,6 +182,7 @@ extern void *OPS_TenNodeTetrahedron(void);
 extern void *OPS_TenNodeTetrahedronStd(void);
 extern void *OPS_LysmerTriangle(void);
 extern void *OPS_ASDAbsorbingBoundary2D(void); // Massimo Petracca (ASDEA)
+extern void *OPS_SplitElastic(void);
 extern void *OPS_ASDAbsorbingBoundary3D(void); // Massimo Petracca (ASDEA)
 extern void *OPS_FSIFluidElement2D(void); // Massimo Petracca (ASDEA)
 extern void *OPS_FSIInterfaceElement2D(void); // Massimo Petracca (ASDEA)
@@ -1450,6 +1451,11 @@ TclModelBuilderElementCommand(ClientData clientData, Tcl_Interp *interp,
     <<argv[1]<<endln;
     return TCL_ERROR;
       }
+  }
+
+  else if (strcmp(argv[1], "SplitElastic") == 0) {
+      theElement = (Element *)OPS_SplitElastic();
+      if (theElement == 0) return TCL_ERROR;
   }
 
   else if (strcmp(argv[1], "ASDAbsorbingBoundary3D") == 0) {

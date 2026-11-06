@@ -247,6 +247,7 @@ void* OPS_GradientInelasticBeamColumn3d();
 void* OPS_RockingBC();
 void* OPS_InertiaTrussElement();
 void *OPS_ASDAbsorbingBoundary2D(void);
+void *OPS_SplitElastic(void);
 void *OPS_ASDAbsorbingBoundary3D(void);
 void *OPS_FSIFluidElement2D(void);
 void *OPS_FSIInterfaceElement2D(void);
@@ -824,6 +825,7 @@ namespace {
 	functionMap.insert(std::make_pair("RockingBC", &OPS_RockingBC));
 	functionMap.insert(std::make_pair("InertiaTruss", &OPS_InertiaTrussElement));
 	functionMap.insert(std::make_pair("ASDAbsorbingBoundary2D", &OPS_ASDAbsorbingBoundary2D));
+	functionMap.insert(std::make_pair("SplitElastic", &OPS_SplitElastic));
 	functionMap.insert(std::make_pair("ASDAbsorbingBoundary3D", &OPS_ASDAbsorbingBoundary3D));
 	functionMap.insert(std::make_pair("FSIFluidElement2D", &OPS_FSIFluidElement2D));
 	functionMap.insert(std::make_pair("FSIInterfaceElement2D", &OPS_FSIInterfaceElement2D));
