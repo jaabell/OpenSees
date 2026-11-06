@@ -20,8 +20,12 @@ and exactly zero for common branch motion. Ordinary Rayleigh/region damping
 is independent of this connector. Elastic operators are cached once.
 
 Default mass is **row-summed lumped** in both dimensions. `-cMass` selects
-consistent mass for full-matrix solvers. Upstream `Diagonal`/`MPIDiagonal`
-do not row-sum consistent mass. The connector also restricts explicit time
+consistent mass. `Diagonal`/`MPIDiagonal` sum each element matrix's columns
+onto the diagonal only with `-lumped`; without it they keep the diagonal of a
+consistent mass, which loses mass. The generic solver parsers (OpenSeesPy)
+accept `-lumped` upstream, but the traditional Tcl `system Diagonal|MPIDiagonal`
+command ignored it until the fix on this branch (also on
+`fix/tcl-diagonal-lumped`). The connector also restricts explicit time
 steps: its isolated rigid differential mode requires
 `dt < rho/(2*eta*f_i)`; the full mesh can require a smaller step.
 
