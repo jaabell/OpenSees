@@ -24,3 +24,16 @@ add_test(
   NAME matrix-vector-otherfact
   COMMAND matrix-vector-otherfact-test
 )
+
+add_executable(logstrain-kernel-test
+  test_logstrain_kernel.cpp
+)
+
+target_include_directories(logstrain-kernel-test PRIVATE
+  ${PROJECT_SOURCE_DIR}/SRC/material/nD
+)
+
+add_test(
+  NAME logstrain-kernel
+  COMMAND logstrain-kernel-test
+)
