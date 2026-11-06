@@ -61,6 +61,26 @@ public:
         return vv_out;
     }
 
+    // m = r / |r|, r = dev(sigma) - alpha:  dm/dsigma = (I - m strain_like(m)^T) P / |r|,
+    // with P = d dev(sigma) / dsigma
+    static constexpr bool has_dm_dsigma = true;
+    PLASTIC_FLOW_DIRECTION_STRESS_DERIVATIVE
+    {
+        auto alpha = GET_TRIAL_INTERNAL_VARIABLE(AlphaHardeningType);
+        VoigtVector r = sigma.deviator() - alpha;
+        double rho = sqrt(tensor_dot_stress_like(r, r));
+        VoigtMatrix dm = VoigtMatrix::Zero();
+        if (!(rho > sqrt(tensor_dot_stress_like(sigma.deviator(), sigma.deviator()))*ASDPlasticMaterial3DGlobals::MACHINE_EPSILON))
+            return dm;
+        VoigtVector mm = r / rho;
+        VoigtMatrix P = VoigtMatrix::Identity();
+        for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b)
+                P(a, b) -= 1.0 / 3.0;
+        dm = (VoigtMatrix::Identity() - mm * strain_like(mm).transpose()) * P / rho;
+        return dm;
+    }
+
     using internal_variables_t = std::tuple<AlphaHardeningType>;
     using parameters_t = std::tuple<>;
 
