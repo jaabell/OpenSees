@@ -19,6 +19,10 @@ one brick with a fixed base for the global Newton iteration.
                               p = c cot(phi), q = 0 with Backward_Euler and
                               Full_Backward_Euler, for psi = 0 (no volumetric flow)
                               and psi > 0
+  mc_apex_then_shear          two bricks pulled into the apex, then sheared, with
+                              Full_Backward_Euler + Algorithmic and psi = 0: when it
+                              falls back to Backward_Euler from a committed apex state,
+                              the differenced tangent stays finite (m = 0 there)
   dp_hardening_consistency    Backward_Euler and RK45 agree for Drucker-Prager with
                               kinematic and cohesion hardening (consistent f and
                               hardening terms)
@@ -170,6 +174,46 @@ def test_mc_tension_apex(opts, psi, legs):
     apex = 10000. / 0.5773502691896257   # c cot(30 deg)
     s = strain_path(lambda: mc_material(opts, psi=psi), legs)
     assert s == pytest.approx([apex] * 3 + [0.] * 3, rel=1e-9, abs=1e-6)
+
+
+def test_mc_apex_then_shear():
+    ops.wipe()
+    ops.model('basic', '-ndm', 3, '-ndf', 3)
+    tag = 0
+    for z in (0, 1, 2):
+        for y in (0, 1):
+            for x in (0, 1):
+                tag += 1
+                ops.node(tag, x, y, z)
+    for n in (1, 2, 3, 4):
+        ops.fix(n, 1, 1, 1)
+    ops.nDMaterial('ASDPlasticMaterial3D', 1, 'MohrCoulomb_YF', 'MohrCoulomb_PF', 'LinearIsotropic3D_EL',
+                   'BackStress(NullHardeningTensorFunction):',
+                   'Begin_Model_Parameters', 'MC_phi', 30., 'MC_c', 10000., 'MC_ds', 1e-4, 'MC_psi', 0.,
+                   'MC_theta_T', 29., 'YoungsModulus', E, 'PoissonsRatio', NU, 'MassDensity', 0., 'InitialP0', 0.,
+                   'End_Model_Parameters',
+                   'Begin_Integration_Options', 'f_absolute_tol', 10., 'n_max_iterations', 60,
+                   *FBE_N, 'End_Integration_Options')
+    ops.element('stdBrick', 1, 1, 2, 4, 3, 5, 6, 8, 7, 1)
+    ops.element('stdBrick', 2, 5, 6, 8, 7, 9, 10, 12, 11, 1)
+    ts = 0
+    for n in (9, 10, 11, 12):
+        x, y, _ = ops.nodeCoord(n)
+        for d, v1, dv in ((1, (2 * x - 1) * 1e-3, 2e-3), (2, (2 * y - 1) * 1e-3, 0.), (3, 2e-3, 0.)):
+            ts += 1
+            ops.timeSeries('Path', ts, '-time', 0., 1., 2., 3., '-values', 0., v1, v1 + dv, v1 + dv)
+            ops.pattern('Plain', ts, ts)
+            ops.sp(n, d, 1.0)
+    ops.constraints('Transformation')
+    ops.numberer('RCM')
+    ops.system('FullGeneral')
+    ops.test('NormDispIncr', 1e-10, 60)
+    ops.algorithm('Newton')
+    ops.integrator('LoadControl', 0.1)
+    ops.analysis('Static')
+    for _ in range(20):
+        assert ops.analyze(1) == 0
+        assert ops.testIter() <= 10
 
 
 def test_dp_hardening_consistency():
