@@ -541,16 +541,13 @@ public:
             double den = strain_like(n).dot(Eelastic * strain_like(m)) - hardening;
 
             //Compute the plastic multiplier
+            // n:E:m - H = 0 where the flow direction vanishes, e.g. at the Mohr-Coulomb
+            // apex with psi = 0 (m = 0): no plastic flow can be computed and the stress
+            // stays on the yield surface. The numerical tangents difference this
+            // function and ignore its return value, so stress_incr is always set.
             if (abs(den) < MACHINE_EPSILON)
             {
-                cout << "CEP - den = 0\n";
-                cout << "yf_val_start = " << yf_val_start << endl;
-                cout << "yf_val_end = " << yf_val_end << endl;
-                printTensor1("m", m);
-                printTensor1("n", n);
-                cout << "hardening = " << hardening << endl;
-                cout << "den = " << den << endl;
-                printTensor1("depsilon_elpl", depsilon_elpl);
+                stress_incr = intersection_stress - local_stress;
                 return -1;
             }
 
