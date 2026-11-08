@@ -1082,12 +1082,29 @@ public:
 
         static Vector return_vector(6);
 
+        // the output tags give MPCO (and the xml recorders) the component names,
+        // as in NDMaterial::setResponse; without them MPCO records no components
+        auto tagged = [&](int id, const Vector& v, const char* const* names) {
+            s.tag("NdMaterialOutput");
+            s.attr("matType", this->getClassType());
+            s.attr("matTag", this->getTag());
+            for (int i = 0; i < 6; ++i)
+                s.tag("ResponseType", names[i]);
+            Response* resp = new MaterialResponse(this, id, v);
+            s.endTag();
+            return resp;
+        };
+        static const char* const stress_names[6]  = {"sigma11", "sigma22", "sigma33", "sigma12", "sigma23", "sigma13"};
+        static const char* const strain_names[6]  = {"eps11", "eps22", "eps33", "eps12", "eps23", "eps13"};
+        static const char* const pstrain_names[6] = {"epsP11", "epsP22", "epsP33", "epsP12", "epsP23", "epsP13"};
+
         if (strcmp(argv[0], "stress") == 0 || strcmp(argv[0], "stresses") == 0)
-            return new MaterialResponse(this, 1, this->getStress());
+            return tagged(1, this->getStress(), stress_names);
         else if (strcmp(argv[0], "strain") == 0 || strcmp(argv[0], "strains") == 0)
-            return new MaterialResponse(this, 2, this->getStrain());
-        else if (strcmp(argv[0], "pstrain") == 0 || strcmp(argv[0], "pstrains") == 0)
-            return new MaterialResponse(this, 3, this->getPstrain());
+            return tagged(2, this->getStrain(), strain_names);
+        else if (strcmp(argv[0], "pstrain") == 0 || strcmp(argv[0], "pstrains") == 0
+                 || strcmp(argv[0], "plasticStrain") == 0 || strcmp(argv[0], "plasticStrains") == 0)
+            return tagged(3, this->getPstrain(), pstrain_names);
         else if (strcmp(argv[0], "eqpstrain") == 0 )
             return new MaterialResponse(this, 4, this->getEQPstrain());        
         else if (strcmp(argv[0], "equivalentPlasticStrain") == 0 || strcmp(argv[0], "EquivalentPlasticStrain") == 0)
