@@ -424,6 +424,16 @@ NodeRecorder::NodeRecorder(const ID &dofs,
   } else if ((strcmp(dataToStore, "dispNorm") == 0)) {
     dataFlag = 10000;
 
+  // complex (phased) mode shapes of complexEigen, 'complexEigenRe<N>' and
+  // 'complexEigenIm<N>' (tested before 'eigen'; magnitude and phase follow
+  // from the pair). Flags 200000+N / 210000+N stay clear of the
+  // sensitivity flags (1000+, 2000+, 3000+grad).
+  } else if ((strncmp(dataToStore, "complexEigenRe", 14) == 0)) {
+    int mode = atoi(&(dataToStore[14]));
+    dataFlag = 200000 + ((mode > 0) ? mode : 1);
+  } else if ((strncmp(dataToStore, "complexEigenIm", 14) == 0)) {
+    int mode = atoi(&(dataToStore[14]));
+    dataFlag = 210000 + ((mode > 0) ? mode : 1);
   } else if ((strncmp(dataToStore, "eigen",5) == 0)) {
     int mode = atoi(&(dataToStore[5]));
     if (mode > 0)
@@ -777,6 +787,32 @@ NodeRecorder::record(int commitTag, double timeStamp)
 		response(cnt) = 0.0;
 	      cnt++;
 	    }
+	  }
+
+	// complex mode shapes (tested before the open-ended >= 3000
+	// sensitivity branch); 0.0 when none is stored
+	} else if (dataFlag >= 200000 && dataFlag < 201000) {
+	  int column = (dataFlag - 200000) - 1;
+	  const Matrix *reM = theNode->getComplexEigenvectorsRe();
+	  for (int j=0; j<numDOF; j++) {
+	    int dof = (*theDofs)(j);
+	    if (reM != 0 && reM->noCols() > column && reM->noRows() > dof)
+	      response(cnt) = (*reM)(dof, column);
+	    else
+	      response(cnt) = 0.0;
+	    cnt++;
+	  }
+
+	} else if (dataFlag >= 210000 && dataFlag < 211000) {
+	  int column = (dataFlag - 210000) - 1;
+	  const Matrix *imM = theNode->getComplexEigenvectorsIm();
+	  for (int j=0; j<numDOF; j++) {
+	    int dof = (*theDofs)(j);
+	    if (imM != 0 && imM->noCols() > column && imM->noRows() > dof)
+	      response(cnt) = (*imM)(dof, column);
+	    else
+	      response(cnt) = 0.0;
+	    cnt++;
 	  }
 
 	} else if (dataFlag  >= 1000 && dataFlag < 2000) {

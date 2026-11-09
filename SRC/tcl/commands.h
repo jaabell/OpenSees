@@ -135,6 +135,24 @@ modalProperties(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** 
 int
 responseSpectrumAnalysis(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
 
+int
+complexEigen(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
+int
+modalResponseHistory(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
+int
+frequencyResponse(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
+int
+steadyStateDynamics(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
+int
+randomResponse(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
+int
+responseSpectrumPerMode(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
 int 
 videoPlayer(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
