@@ -59,6 +59,10 @@ target_sources(OPS_Material
     WrapperNDMaterial.cpp
     InitStressNDMaterial.cpp
     InitStrainNDMaterial.cpp
+    LogStrainNDMaterial.cpp
+    LogStrain2D.cpp
+    InitDefGradNDMaterial.cpp
+    StagedStrainNDMaterial.cpp
     MinMaxNDMaterial.cpp    
     IncrementalElasticIsotropicThreeDimensional.cpp
     ConcreteMcftNonLinear5.cpp
@@ -138,6 +142,13 @@ target_sources(OPS_Material
     WrapperNDMaterial.h
     InitStressNDMaterial.h
     InitStrainNDMaterial.h
+    FiniteStrainNDMaterial.h
+    FiniteStrainND2DMaterial.h
+    LogStrainNDMaterial.h
+    LogStrainKernel.h
+    LogStrain2D.h
+    InitDefGradNDMaterial.h
+    StagedStrainNDMaterial.h
     MinMaxNDMaterial.h    
     IncrementalElasticIsotropicThreeDimensional.h
     ConcreteMcftNonLinear5.h
