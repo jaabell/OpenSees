@@ -1307,6 +1307,7 @@ public:
         INT_OPT_derivative_type[ASDP_TAG] = (ASDPlasticMaterial3D_Derivative_Type) derivative_type;
         DBL_OPT_fd_perturbation[ASDP_TAG] = fd_perturbation > 0 ? fd_perturbation : 1e-6;
         FBE_fallbacks[ASDP_TAG] = 0;
+        FBE_failures[ASDP_TAG] = 0;
     }
 
 protected:
@@ -2109,6 +2110,7 @@ private:
         double tol_yf   = DBL_OPT_f_absolute_tol[ASDP_TAG]; 
 
         apex_return_applied = false;
+        be_last_iter = 0;
 
         // -------- setup
         static VoigtVector depsilon;
@@ -2159,8 +2161,10 @@ private:
 
         // cout << "BE - Plastic! Begin iterations----------" << endl << endl;
 
+        be_last_iter = 0;
         for (int iter = 0; iter < max_iter; ++iter)
         {
+            be_last_iter = iter + 1;
             // directions at current (trial) end state
             const VoigtVector& n = yf.df_dsigma_ij(TrialStress, iv_storage, parameters_storage);
 
@@ -2480,6 +2484,7 @@ private:
         }
 
         bool ok = false;
+        bool newton_nonfinite_step = false;
         int iter = 0;
         for (; iter < max_iter; ++iter)
         {
@@ -2488,7 +2493,7 @@ private:
             jacobian();
             Eigen::PartialPivLU<Eigen::MatrixXd> lu(J);
             const Eigen::VectorXd dx = lu.solve(-R);
-            if (!dx.allFinite()) break;
+            if (!dx.allFinite()) { newton_nonfinite_step = true; break; }
 
             // backtracking on the scaled residual
             const double phi0 = merit(R);
@@ -2522,9 +2527,14 @@ private:
         }
 
         if (!ok || dL < 0.0 || !sig.allFinite()) {
-            // keep the converged cutting-plane state for this step, if there is one
-            FBE_fallbacks[ASDP_TAG]++;
-            if (FBE_fallbacks[ASDP_TAG] <= 5)
+            // keep the converged cutting-plane state for this step, if there is one.
+            // Fallbacks (Backward_Euler state used) are reported 5 times per
+            // combination and process; failures (-1 returned, which fails the
+            // element and the domain update) 20 times, each with the full state
+            // so the step can be replayed on one material point.
+            const bool report = cp_converged ? (++FBE_fallbacks[ASDP_TAG] <= 5)
+                                             : (++FBE_failures[ASDP_TAG] <= 20);
+            if (report)
             {
                 // stress invariants of each state, to tell a corner (Lode angle near
                 // +-30 deg) from the apex (p near the tensile apex, q near 0)
@@ -2537,14 +2547,58 @@ private:
                 };
                 set_q(cp_q);
                 const double f_cp = yf(cp_sig, iv_storage, parameters_storage);
+                const int nrep = cp_converged ? FBE_fallbacks[ASDP_TAG] : FBE_failures[ASDP_TAG];
+                const int cap = cp_converged ? 5 : 20;
                 opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") Full_Backward_Euler did not converge ("
-                       << FBE_fallbacks[ASDP_TAG] << (FBE_fallbacks[ASDP_TAG] == 5 ? ", further ones are counted, not reported" : "") << ")"
+                       << nrep << (nrep == cap ? ", further ones are counted, not reported" : "") << ")"
                        << (cp_converged ? " -- using the converged Backward_Euler state\n" : " -- Backward_Euler did not converge either: returning -1\n")
                        << "    p = I1/3 (tension positive), q = sqrt(3 J2)\n"
                        << "    committed: " << invariants(sigma_n).c_str() << ", f = " << yf_val_start << "\n"
                        << "    trial:     " << invariants(sigma_trial).c_str() << ", f = " << yf_val_end << "\n"
                        << "    Newton:    " << invariants(sig).c_str() << ", f = " << R(iL) << ", dLambda = " << dL << "\n"
                        << "    Backward_Euler: " << invariants(cp_sig).c_str() << ", f = " << f_cp << "\n";
+                if (!cp_converged)
+                {
+                    // why each solver stopped
+                    char buf[256];
+                    if (newton_nonfinite_step)
+                        std::snprintf(buf, sizeof(buf), "non-finite Newton step at iteration %d", iter);
+                    else if (!ok)
+                        std::snprintf(buf, sizeof(buf), "no convergence in %d iterations (merit %.3g)", iter, merit(R));
+                    else if (!sig.allFinite())
+                        std::snprintf(buf, sizeof(buf), "non-finite stress");
+                    else
+                        std::snprintf(buf, sizeof(buf), "converged to dLambda = %.6g < 0 after %d iterations", dL, iter);
+                    opserr << "    Newton stopped: " << buf << "\n";
+                    if (be_flag != 0)
+                        std::snprintf(buf, sizeof(buf), "returned %d", be_flag);
+                    else if (!cp_sig.allFinite())
+                        std::snprintf(buf, sizeof(buf), "non-finite stress");
+                    else
+                        std::snprintf(buf, sizeof(buf), "|f| = %.6g > f_absolute_tol = %.6g after %d of %d iterations",
+                                      std::abs(f_cp), tol_yf, be_last_iter, max_iter);
+                    opserr << "    Backward_Euler stopped: " << buf << "\n";
+                    // full Voigt vectors (11 22 33 12 23 13; strains with engineering shear)
+                    auto row = [](const char* name, const VoigtVector& v) {
+                        char b[512];
+                        std::snprintf(b, sizeof(b), "    %-26s %.17g %.17g %.17g %.17g %.17g %.17g\n",
+                                      name, v(0), v(1), v(2), v(3), v(4), v(5));
+                        return std::string(b);
+                    };
+                    opserr << row("committed stress:", sigma_n).c_str()
+                           << row("committed strain:", epsilon_n).c_str()
+                           << row("committed plastic strain:", CommitPlastic_Strain).c_str()
+                           << row("strain increment:", depsilon).c_str()
+                           << row("trial stress:", sigma_trial).c_str()
+                           << row("Newton stress:", sig).c_str()
+                           << row("Backward_Euler stress:", cp_sig).c_str();
+                    if (nq > 0)
+                    {
+                        opserr << "    committed internal variables:";
+                        for (int j = 0; j < nq; ++j) { std::snprintf(buf, sizeof(buf), " %.17g", q_n(j)); opserr << buf; }
+                        opserr << "\n";
+                    }
+                }
             }
             if (!cp_converged)
                 return -1;
@@ -4340,6 +4394,7 @@ protected:
     static std::map<int, ASDPlasticMaterial3D_Derivative_Type> INT_OPT_derivative_type;
     static std::map<int, double> DBL_OPT_fd_perturbation;
     static std::map<int, int> FBE_fallbacks;
+    static std::map<int, int> FBE_failures;
 
     static std::map<int, int> GLOBAL_INT_max_iter; 
     static std::map<int, double> GLOBAL_DBL_max_error; 
@@ -4347,6 +4402,7 @@ protected:
     bool first_step;
     bool stress_set_externally;
     bool skip_BE_tangent = false;   // set by Full_Backward_Euler around its warm start
+    int be_last_iter = 0;           // iterations of the last Backward_Euler loop, for the Full_Backward_Euler failure report
 
     static VoigtVector dsigma;
     static VoigtVector depsilon_elpl;    //Elastoplastic strain increment : For a strain increment that causes first yield, the step is divided into an elastic one (until yield) and an elastoplastic one.
@@ -4381,6 +4437,8 @@ template < class E, class Y, class P, int tag>
 std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::DBL_OPT_fd_perturbation;
 template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::FBE_fallbacks;
+template < class E, class Y, class P, int tag>
+std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::FBE_failures;
 
 template < class E, class Y, class P, int tag>
 std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::GLOBAL_DBL_max_error;
