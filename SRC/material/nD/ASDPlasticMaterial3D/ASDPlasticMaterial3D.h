@@ -2014,12 +2014,13 @@ private:
     // For psi = 0 this is p_tr >= p_apex. The stress is then the apex, the
     // plastic strain increment is C (sigma_tr - sigma_apex) exactly, and dLambda
     // is its projection on W m (used only to update the internal variables).
-    // For a perfectly plastic cone the consistent tangent at the apex is zero;
-    // a small fraction of E (APEX_TANGENT_FRACTION) keeps the global matrix
-    // regular when whole elements reach the apex. Tangent types Elastic and
-    // Secant keep their meaning (E and E / 2).
+    // For a perfectly plastic cone the consistent tangent at the apex is zero.
+    // It is replaced by E / 2 (the Secant tangent) for every tangent type but
+    // Elastic (E): a near-zero tangent (1e-6 E was used first) leaves nodes
+    // whose Gauss points are all at the apex, a pocket of soil in tension,
+    // almost without stiffness, and the global solve then returns
+    // displacement corrections of 1e10 and more without any solver warning.
     bool apex_return_applied = false;
-    static constexpr double APEX_TANGENT_FRACTION = 1e-6;
 
     bool Apex_Return(const VoigtMatrix& Eelastic, const VoigtVector& depsilon)
     {
@@ -2090,10 +2091,8 @@ private:
 
             if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Elastic)
                 Stiffness = Eelastic;
-            else if (INT_OPT_tangent_operator_type[ASDP_TAG] == ASDPlasticMaterial3D_Tangent_Operator_Type::Secant)
-                Stiffness = 0.5 * Eelastic;
             else
-                Stiffness = APEX_TANGENT_FRACTION * Eelastic;
+                Stiffness = 0.5 * Eelastic;
 
             apex_return_applied = true;
             return true;
