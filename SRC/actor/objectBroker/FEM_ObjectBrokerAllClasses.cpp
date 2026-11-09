@@ -676,6 +676,8 @@
 #include "CollocationHSIncrLimit.h"
 #include "CollocationHSIncrReduct.h"
 #include "HHT.h"
+#include "LadrunoHHT.h"
+#include "LadrunoGeneralizedAlpha.h"
 #include "HHT_TP.h"
 #include "HHTExplicit.h"
 #include "HHTExplicit_TP.h"
@@ -3081,6 +3083,12 @@ FEM_ObjectBrokerAllClasses::getNewTransientIntegrator(int classTag)
 	case INTEGRATOR_TAGS_HHT:  
 	     return new HHT();
 
+	case INTEGRATOR_TAGS_LadrunoHHT:
+	     return new LadrunoHHT();      // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoGeneralizedAlpha:
+	     return new LadrunoGeneralizedAlpha();      // must recvSelf
+
 	case INTEGRATOR_TAGS_HHT_TP:  
 	     return new HHT_TP();
 
@@ -3180,6 +3188,12 @@ FEM_ObjectBrokerAllClasses::getNewIncrementalIntegrator(int classTag)
 	     
 	case INTEGRATOR_TAGS_Newmark:  
 	     return new Newmark();
+
+	case INTEGRATOR_TAGS_LadrunoHHT:
+	     return new LadrunoHHT();      // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoGeneralizedAlpha:
+	     return new LadrunoGeneralizedAlpha();      // must recvSelf
 
 #ifdef _PARALLEL_PROCESSING	     
 	case INTEGRATOR_TAGS_DistributedDisplacementControl:  

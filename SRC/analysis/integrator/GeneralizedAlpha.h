@@ -73,8 +73,16 @@ public:
     void Print(OPS_Stream &s, int flag = 0);        
     
 protected:
-    
-private:
+    // constructor with an explicit classTag, for subclasses that reuse the
+    // GeneralizedAlpha algorithm under their own tag (same pattern as Newmark)
+    GeneralizedAlpha(int classTag, double _alphaM, double _alphaF,
+                     double _beta, double _gamma)
+        : TransientIntegrator(classTag),
+          alphaM(_alphaM), alphaF(_alphaF), beta(_beta), gamma(_gamma),
+          deltaT(0.0), c1(0.0), c2(0.0), c3(0.0),
+          Ut(0), Utdot(0), Utdotdot(0), U(0), Udot(0), Udotdot(0),
+          Ualpha(0), Ualphadot(0), Ualphadotdot(0) {}
+
     double alphaM;
     double alphaF;
 
@@ -86,6 +94,8 @@ private:
     Vector *Ut, *Utdot, *Utdotdot;  // response quantities at time t
     Vector *U, *Udot, *Udotdot;     // response quantities at time t + deltaT
     Vector *Ualpha, *Ualphadot, *Ualphadotdot;   // response quantities at time t+alpha*deltaT
+
+private:
 };
 
 #endif
