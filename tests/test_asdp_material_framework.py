@@ -211,9 +211,12 @@ def test_mc_apex_then_shear():
     ops.algorithm('Newton')
     ops.integrator('LoadControl', 0.1)
     ops.analysis('Static')
+    # the apex tangent is E / 2 (the consistent one is zero), so steps with apex
+    # points converge linearly: 12-26 iterations to 1e-10 here. The limit catches
+    # a tangent ruined by the fallback (77 iterations before that was fixed).
     for _ in range(20):
         assert ops.analyze(1) == 0
-        assert ops.testIter() <= 10
+        assert ops.testIter() <= 30
 
 
 def test_dp_hardening_consistency():
