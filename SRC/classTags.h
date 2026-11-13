@@ -893,6 +893,7 @@
 #define ELE_TAG_IGAKLShell_BendingStrip   254 // IGA Shell by Felipe Elgueta and jaabell (UANDES) 216 because 208 was taken
 #define ELE_TAG_PFEMContact3D             255
 #define ELE_TAG_TenNodeTetrahedron        256 //by jaabell and j0selarenas (UANDES)
+#define ELE_TAG_BezierTet10               33001 // N. Mora-Bowen, P. Palacios (Ladruno): quadratic Bezier tetrahedron; same tag as in Ladruno
 #define ELE_TAG_E_SFI        			257 // C. N. Lopez
 #define ELE_TAG_TripleFrictionPendulumX               258
 #define ELE_TAG_E_SFI_MVLEM_3D	          259259 // Kristijan Kolozvari

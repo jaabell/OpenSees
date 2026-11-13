@@ -240,6 +240,7 @@ void* OPS_YamamotoBiaxialHDR();
 void* OPS_FourNodeTetrahedron();
 void* OPS_TenNodeTetrahedron();
 void* OPS_TenNodeTetrahedronStd();
+void* OPS_BezierTet10();
 void* OPS_CatenaryCableElement();
 void *OPS_ASDEmbeddedNodeElement(void);
 void* OPS_GradientInelasticBeamColumn2d();
@@ -818,6 +819,8 @@ namespace {
 	functionMap.insert(std::make_pair("FourNodeTetrahedron", &OPS_FourNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedron", &OPS_TenNodeTetrahedron));
 	functionMap.insert(std::make_pair("TenNodeTetrahedronStd", &OPS_TenNodeTetrahedronStd));
+	functionMap.insert(std::make_pair("BezierTet10", &OPS_BezierTet10));
+	functionMap.insert(std::make_pair("bezierTet10", &OPS_BezierTet10));
 	functionMap.insert(std::make_pair("CatenaryCable", &OPS_CatenaryCableElement));
 	functionMap.insert(std::make_pair("ASDEmbeddedNodeElement", &OPS_ASDEmbeddedNodeElement));
 	functionMap.insert(std::make_pair("gradientInelasticBeamColumn", &OPS_GradientInelasticBeamColumn));
