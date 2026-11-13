@@ -1007,10 +1007,12 @@ public:
             return 0;
         }
         else if (responseID == 22) { // updateMaterialStage -material: all instances of this tag
-            MaterialStage[ASDP_TAG] = (int)info.theDouble;
+            // MaterialStageParameter::update(int) fills theInt
+            MaterialStage[ASDP_TAG] = info.theInt;
             return 0;
         }
         else if (responseID == 23) { // materialState: this instance
+            // updateParameter (Tcl/Python) fills theDouble
             material_stage = (int)info.theDouble;
             return 0;
         }
