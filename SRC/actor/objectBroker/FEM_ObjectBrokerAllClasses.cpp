@@ -468,6 +468,7 @@
 #include "twoNodeLink/Inerter.h"
 #include "tetrahedron/FourNodeTetrahedron.h"
 #include "tetrahedron/TenNodeTetrahedron.h"
+#include "bezierTetrahedron/BezierTet10.h"
 
 #include "mvlem/MVLEM.h"		// Kristijan Kolozvari
 #include "mvlem/SFI_MVLEM.h"	// Kristijan Kolozvari
@@ -1064,6 +1065,9 @@ FEM_ObjectBrokerAllClasses::getNewElement(int classTag)
 
     case ELE_TAG_TenNodeTetrahedron:
       return new TenNodeTetrahedron();
+
+    case ELE_TAG_BezierTet10:
+      return new BezierTet10();
 	
 	case ELE_TAG_PML2D:
 	  return new PML2D();

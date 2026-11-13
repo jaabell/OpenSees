@@ -246,6 +246,7 @@ void* OPS_ThermalBoundaryTri6();
 void* OPS_ASDTet();
 void* OPS_ASDTet10();
 void* OPS_TenNodeTetrahedronStd();
+void* OPS_BezierTet10();
 void* OPS_CatenaryCableElement();
 void *OPS_ASDEmbeddedNodeElement(void);
 void *OPS_KinematicCoupling(void);
@@ -831,6 +832,8 @@ namespace {
 	functionMap.insert(std::make_pair("ASDTet", &OPS_ASDTet));
 	functionMap.insert(std::make_pair("ASDTet10", &OPS_ASDTet10));
 	functionMap.insert(std::make_pair("TenNodeTetrahedronStd", &OPS_TenNodeTetrahedronStd));
+	functionMap.insert(std::make_pair("BezierTet10", &OPS_BezierTet10));
+	functionMap.insert(std::make_pair("bezierTet10", &OPS_BezierTet10));
 	functionMap.insert(std::make_pair("CatenaryCable", &OPS_CatenaryCableElement));
 	functionMap.insert(std::make_pair("ASDEmbeddedNodeElement", &OPS_ASDEmbeddedNodeElement));
 	functionMap.insert(std::make_pair("KinematicCoupling", &OPS_KinematicCoupling));

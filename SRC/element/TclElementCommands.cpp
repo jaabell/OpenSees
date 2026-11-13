@@ -187,6 +187,7 @@ extern void *OPS_ASDTet10(void);
 extern void *OPS_TenNodeTetrahedronStd(void);
 extern void *OPS_TenNodeTetrahedronThermal(void);
 extern void *OPS_ThermalBoundaryTri6(void);
+extern void *OPS_BezierTet10(void);
 extern void *OPS_LysmerTriangle(void);
 extern void *OPS_ASDAbsorbingBoundary2D(void); // Massimo Petracca (ASDEA)
 extern void *OPS_ASDAbsorbingBoundary3D(void); // Massimo Petracca (ASDEA)
@@ -1575,6 +1576,17 @@ TclModelBuilderElementCommand(ClientData clientData, Tcl_Interp *interp,
     opserr<<"tclelementcommand -- unable to create element of type : "
     <<argv[1]<<endln;
     return TCL_ERROR;
+      }
+  }
+
+  else if (strcmp(argv[1], "BezierTet10") == 0 || strcmp(argv[1], "bezierTet10") == 0) {
+      void *theEle = OPS_BezierTet10();
+      if (theEle != 0)
+        theElement = (Element*)theEle;
+      else {
+        opserr<<"tclelementcommand -- unable to create element of type : "
+            <<argv[1]<<endln;
+        return TCL_ERROR;
       }
   }
 
