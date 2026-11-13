@@ -865,6 +865,12 @@ public:
             else if (strcmp(argv[0], "K03D") == 0) {
                 return param.addObject(8, this);
             }
+            // zeroShearStress: updateParameter $p 1 sets the shear stress
+            // components (committed and trial) to zero, e.g. after K03D on
+            // level ground; 0 does nothing.
+            else if (strcmp(argv[0], "zeroShearStress") == 0) {
+                return param.addObject(24, this);
+            }
             // Elastic stage switch (0 = elastic only, 1 = elastoplastic).
             // updateMaterialStage -material $tag (MaterialStageParameter passes
             // {"updateMaterialStage", "<matTag>"} and stops at the first element
@@ -1004,6 +1010,15 @@ public:
                 TrialStress = CommitStress;
                 stress_set_externally = true;
             // }
+            return 0;
+        }
+        else if (responseID == 24) { // zeroShearStress
+            if (info.theDouble != 0.0) {
+                for (int i = 3; i < 6; i++)
+                    CommitStress(i) = 0.0;
+                TrialStress = CommitStress;
+                stress_set_externally = true;
+            }
             return 0;
         }
         else if (responseID == 22) { // updateMaterialStage -material: all instances of this tag
