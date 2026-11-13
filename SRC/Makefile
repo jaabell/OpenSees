@@ -675,6 +675,9 @@ ELE_LIBS   =  $(FE)/element/Element.o \
 	$(FE)/element/tetrahedron/TenNodeTetrahedron.o \
 	$(FE)/element/tetrahedron/TenNodeTetrahedronThermal.o \
 	$(FE)/element/tetrahedron/ThermalBoundaryTri6.o \
+	$(FE)/element/bezierTetrahedron/BezierTet10.o \
+	$(FE)/element/bezierTetrahedron/OPS_BezierTet10.o \
+	$(FE)/element/solidTransformation/SolidTransformationLinear.o \
 	$(FE)/element/absorbentBoundaries/LysmerTriangle.o \
 	$(FE)/element/absorbentBoundaries/ASDAbsorbingBoundary2D.o \
 	$(FE)/element/absorbentBoundaries/ASDAbsorbingBoundary3D.o \

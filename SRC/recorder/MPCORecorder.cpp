@@ -4050,6 +4050,7 @@ namespace mpco {
 					// ./tetrahedron
 					elem_class_tag == ELE_TAG_TenNodeTetrahedron ||
 					elem_class_tag == ELE_TAG_TenNodeTetrahedronThermal
+					|| elem_class_tag == ELE_TAG_BezierTet10   // mid-edge nodes are Bernstein control points
 					)
 				{
 					geom_type = ElementGeometryType::Tetrahedron_10N;

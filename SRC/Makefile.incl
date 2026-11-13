@@ -104,6 +104,9 @@ FE_INCLUDES  = -I$(FE)/matrix \
                -I$(FE)/element/27nbrick \
                -I$(FE)/element/upU \
             -I$(FE)/element/tetrahedron \
+            -I$(FE)/element \
+            -I$(FE)/element/bezierTetrahedron \
+            -I$(FE)/element/solidTransformation \
             -I$(FE)/element/absorbentBoundaries \
             -I$(FE)/element/UP_ucdavis \
 	       -I$(FE)/element/surfaceLoad \
