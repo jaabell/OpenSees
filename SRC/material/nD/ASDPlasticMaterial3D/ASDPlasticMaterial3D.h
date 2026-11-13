@@ -236,6 +236,9 @@ public:
     int setTrialStrainIncr( const VoigtVector &strain_increment )
     {
 
+        if (getMaterialStage() == 0)
+            return this->Elastic_Stage(strain_increment);
+
         int exitflag = -1;
 
         switch (INT_OPT_constitutive_integration_method[ASDP_TAG])
@@ -792,6 +795,7 @@ public:
         newmaterial->iv_storage = this->iv_storage;
         newmaterial->parameters_storage = this->parameters_storage;
         newmaterial->stress_set_externally = this->stress_set_externally;
+        newmaterial->material_stage = this->material_stage;
         newmaterial->Stiffness = this->Stiffness;
 
         return newmaterial;
@@ -816,6 +820,7 @@ public:
             newmaterial->iv_storage = this->iv_storage;
             newmaterial->parameters_storage = this->parameters_storage;
             newmaterial->stress_set_externally = this->stress_set_externally;
+            newmaterial->material_stage = this->material_stage;
             newmaterial->Stiffness = this->Stiffness;
 
             return newmaterial;
@@ -855,12 +860,25 @@ public:
                 return param.addObject(6, this);
             }
             else if (strcmp(argv[0], "K02D") == 0) {
-                cout << "       ---->  K02D" << endl;
                 return param.addObject(7, this);
             }
             else if (strcmp(argv[0], "K03D") == 0) {
-                cout << "       ---->  K03D" << endl;
                 return param.addObject(8, this);
+            }
+            // Elastic stage switch (0 = elastic only, 1 = elastoplastic).
+            // updateMaterialStage -material $tag (MaterialStageParameter passes
+            // {"updateMaterialStage", "<matTag>"} and stops at the first element
+            // that accepts, so this stage is kept per material tag, as in PDMY).
+            else if (strcmp(argv[0], "updateMaterialStage") == 0 && argc > 1) {
+                if (atoi(argv[1]) != this->getTag())
+                    return -1;
+                return param.addObject(22, this);
+            }
+            // parameter / addToParameter element $ele materialState|updateMaterialStage:
+            // stage of this instance only, overrides the per-tag stage.
+            else if (strcmp(argv[0], "materialState") == 0 ||
+                     strcmp(argv[0], "updateMaterialStage") == 0) {
+                return param.addObject(23, this);
             }
             else if (strcmp(argv[0], "trialStressIncrement") == 0) {
                 return param.addObject(9, this);
@@ -973,6 +991,7 @@ public:
                 const double& K02D = info.theDouble;
                 CommitStress(0) = K02D * CommitStress(1);
                 CommitStress(2) = K02D * CommitStress(1);
+                TrialStress = CommitStress;
                 stress_set_externally = true;
             // }
             return 0;
@@ -982,8 +1001,19 @@ public:
                 const double& K03D = info.theDouble;
                 CommitStress(0) = K03D * CommitStress(2);
                 CommitStress(1) = K03D * CommitStress(2);
+                TrialStress = CommitStress;
                 stress_set_externally = true;
             // }
+            return 0;
+        }
+        else if (responseID == 22) { // updateMaterialStage -material: all instances of this tag
+            // MaterialStageParameter::update(int) fills theInt
+            MaterialStage[ASDP_TAG] = info.theInt;
+            return 0;
+        }
+        else if (responseID == 23) { // materialState: this instance
+            // updateParameter (Tcl/Python) fills theDouble
+            material_stage = (int)info.theDouble;
             return 0;
         }
         else if (responseID == 9) { // trialStressIncrement
@@ -1354,6 +1384,30 @@ protected:
 
 private:
 
+
+    // Stage 0: elastic only. The elastic law (evaluated at the committed
+    // stress) gives the stress; no yield check, plastic strain and internal
+    // variables keep their committed values.
+    int Elastic_Stage(const VoigtVector & strain_incr)
+    {
+        iv_storage.revert_all();
+        const VoigtMatrix Eelastic = et(CommitStress, parameters_storage);
+        TrialStress = CommitStress + Eelastic * strain_incr;
+        TrialStrain = CommitStrain + strain_incr;
+        TrialPlastic_Strain = CommitPlastic_Strain;
+        Stiffness = Eelastic;
+        return 0;
+    }
+
+    // Effective stage: the instance value when set (materialState), else the
+    // per-tag value (updateMaterialStage), else 1 (elastoplastic).
+    int getMaterialStage() const
+    {
+        if (material_stage >= 0)
+            return material_stage;
+        auto it = MaterialStage.find(ASDP_TAG);
+        return it == MaterialStage.end() ? 1 : it->second;
+    }
 
     int Forward_Euler(const VoigtVector & strain_incr)
     {
@@ -4394,6 +4448,8 @@ protected:
     static std::map<int, double> DBL_OPT_fd_perturbation;
     static std::map<int, int> FBE_fallbacks;
     static std::map<int, int> FBE_failures;
+    static std::map<int, int> MaterialStage;   // per tag, set by updateMaterialStage
+    int material_stage = -1;                   // per instance, set by materialState (-1: use MaterialStage)
 
     static std::map<int, int> GLOBAL_INT_max_iter; 
     static std::map<int, double> GLOBAL_DBL_max_error; 
@@ -4438,6 +4494,8 @@ template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::FBE_fallbacks;
 template < class E, class Y, class P, int tag>
 std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::FBE_failures;
+template < class E, class Y, class P, int tag>
+std::map<int, int> ASDPlasticMaterial3D< E,  Y,  P,  tag>::MaterialStage;
 
 template < class E, class Y, class P, int tag>
 std::map<int, double> ASDPlasticMaterial3D< E,  Y,  P,  tag>::GLOBAL_DBL_max_error;
