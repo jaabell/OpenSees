@@ -120,6 +120,10 @@ MPIDiagonalSOE::setSize(Graph &theGraph)
   // get the size of the local system
   size = theGraph.getNumVertex();
 
+  // A is reallocated below: a factorization of the previous system no longer
+  // applies (otherwise zeroA/addA keep skipping the new, uninitialized A)
+  isAfactored = false;
+
   if (size == 0) {
     opserr << "WARNING MPIDiagonalSOE::setSize - ZERO size\n";
     exit(-1);
