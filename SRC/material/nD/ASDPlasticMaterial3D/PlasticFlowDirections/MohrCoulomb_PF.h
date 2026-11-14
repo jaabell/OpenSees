@@ -56,6 +56,9 @@ public:
         double c = GET_PARAMETER_VALUE(MC_c);
         double ds = GET_PARAMETER_VALUE(MC_ds);
         double theta_T = GET_PARAMETER_VALUE(MC_theta_T);
+        // closed form; central differences where it is not defined
+        if (MohrCoulombUtils::gradient_closed_form(sigma, psi, theta_T, vv_out))
+            return vv_out;
         vv_out = MohrCoulombUtils::gradient(sigma, ds,
             [&](const VoigtVector& s) { return MohrCoulombUtils::function(s, psi, c, theta_T); });
         return vv_out;
