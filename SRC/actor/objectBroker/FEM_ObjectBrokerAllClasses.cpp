@@ -41,6 +41,7 @@
 
 // Convergence tests
 #include "convergenceTest/CTestNormUnbalance.h"
+#include "convergenceTest/LadrunoStabilizedUnbalance.h"
 #include "convergenceTest/CTestRelativeNormUnbalance.h"
 #include "convergenceTest/CTestNormDispIncr.h"
 #include "convergenceTest/CTestRelativeNormDispIncr.h"
@@ -657,6 +658,9 @@
 
 // integrator header files
 #include "ArcLength.h"
+#include "LadrunoArcLength.h"
+#include "LadrunoDynamicRelaxation.h"
+#include "LadrunoIndirectControl.h"
 #include "DisplacementControl.h"
 #ifdef _PARALLEL_PROCESSING
 #include "DistributedDisplacementControl.h"
@@ -2559,6 +2563,9 @@ FEM_ObjectBrokerAllClasses::getNewConvergenceTest(int classTag)
     switch(classTag) {
 	case CONVERGENCE_TEST_CTestNormUnbalance:  
 	     return new CTestNormUnbalance();
+
+	case CONVERGENCE_TEST_LadrunoStabilizedUnbalance:
+	     return new LadrunoStabilizedUnbalance();
 	     
 	case CONVERGENCE_TEST_CTestRelativeNormUnbalance:  
 	     return new CTestRelativeNormUnbalance();
@@ -3034,6 +3041,12 @@ FEM_ObjectBrokerAllClasses::getNewStaticIntegrator(int classTag)
 	case INTEGRATOR_TAGS_ArcLength:  
 	     return new ArcLength(1.0);      // must recvSelf
 
+	case INTEGRATOR_TAGS_LadrunoArcLength:
+	     return new LadrunoArcLength(1.0);    // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoIndirectControl:
+	     return new LadrunoIndirectControl();   // must recvSelf
+
 	     
 	default:
 	     opserr << "FEM_ObjectBrokerAllClasses::getNewStaticIntegrator - ";
@@ -3063,6 +3076,9 @@ FEM_ObjectBrokerAllClasses::getNewTransientIntegrator(int classTag)
 
 	case INTEGRATOR_TAGS_CentralDifference:  
 	     return new CentralDifference();      // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoDynamicRelaxation:
+	     return new LadrunoDynamicRelaxation();       // must recvSelf
 
 	case INTEGRATOR_TAGS_CentralDifferenceAlternative:  
 	     return new CentralDifferenceAlternative();      // must recvSelf
@@ -3180,6 +3196,12 @@ FEM_ObjectBrokerAllClasses::getNewIncrementalIntegrator(int classTag)
 	     
 	case INTEGRATOR_TAGS_ArcLength:  
 	     return new ArcLength(1.0);      // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoArcLength:
+	     return new LadrunoArcLength(1.0);    // must recvSelf
+
+	case INTEGRATOR_TAGS_LadrunoIndirectControl:
+	     return new LadrunoIndirectControl();   // must recvSelf
 	     	     
 	     
 	case INTEGRATOR_TAGS_Newmark:  
