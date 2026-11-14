@@ -277,6 +277,7 @@ int OPS_getCTestNorms();
 int OPS_getCTestIter();
 int OPS_LadrunoArcLengthCmd();
 int OPS_LadrunoDRCmd();
+int OPS_LadrunoSnapshotCmd();
 int OPS_Recorder();
 int OPS_eleForce();
 int OPS_eleDynamicalForce();

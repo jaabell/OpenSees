@@ -34,6 +34,7 @@ target_sources(OPS_Analysis
        LadrunoIndirectControl.h
        LadrunoFictitiousMass.h
        LadrunoSolverQuery.h
+       LadrunoSnapshot.h
        BackwardEuler.h
        CentralDifference.h
        IncrementalIntegrator.h

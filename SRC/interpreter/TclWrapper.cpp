@@ -675,6 +675,14 @@ static int Tcl_ops_ladrunoDR(ClientData clientData, Tcl_Interp *interp, int argc
     return TCL_OK;
 }
 
+static int Tcl_ops_ladrunoSnapshot(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
+    wrapper->resetCommandLine(argc, 1, argv);
+
+    if (OPS_LadrunoSnapshotCmd() < 0) return TCL_ERROR;
+
+    return TCL_OK;
+}
+
 static int Tcl_ops_recorder(ClientData clientData, Tcl_Interp *interp, int argc,   TCL_Char **argv) {
     wrapper->resetCommandLine(argc, 1, argv);
 
@@ -1823,6 +1831,7 @@ TclWrapper::addOpenSeesCommands(Tcl_Interp* interp)
     addCommand(interp,"getCTestIter", &Tcl_ops_getCTestIter);
     addCommand(interp,"ladrunoArcLength", &Tcl_ops_ladrunoArcLength);
     addCommand(interp,"ladrunoDR", &Tcl_ops_ladrunoDR);
+    addCommand(interp,"ladrunoSnapshot", &Tcl_ops_ladrunoSnapshot);
     addCommand(interp,"recorder", &Tcl_ops_recorder);
     addCommand(interp,"database", &Tcl_ops_database);
     addCommand(interp,"save", &Tcl_ops_save);
