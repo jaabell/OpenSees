@@ -59,14 +59,18 @@ public:
         return MohrCoulombUtils::function(sigma, phi, c, theta_T);
     }
 
-    // central differences of the yield function above (corners rounded, see
-    // MohrCoulomb_Utils.h), relative perturbation MC_ds
+    // gradient of the yield function above (corners rounded, see
+    // MohrCoulomb_Utils.h); central differences with relative perturbation
+    // MC_ds only where the closed form is not defined
     YIELD_FUNCTION_STRESS_DERIVATIVE
     {  
         double phi = GET_PARAMETER_VALUE(MC_phi)*M_PI/180;
         double c = GET_PARAMETER_VALUE(MC_c);
         double ds = GET_PARAMETER_VALUE(MC_ds);
         double theta_T = GET_PARAMETER_VALUE(MC_theta_T);
+        // closed form; central differences where it is not defined
+        if (MohrCoulombUtils::gradient_closed_form(sigma, phi, theta_T, vv_out))
+            return vv_out;
         vv_out = MohrCoulombUtils::gradient(sigma, ds,
             [&](const VoigtVector& s) { return MohrCoulombUtils::function(s, phi, c, theta_T); });
         return vv_out;
