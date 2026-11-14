@@ -66,8 +66,9 @@ MPIDiagonalSolver::setLinearSOE(MPIDiagonalSOE &theSetSOE)
 int 
 MPIDiagonalSolver::setSize(void)
 {
-  //int size = theSOE->size;
-  //int processID = theSOE->processID;
+  // the system was (re)sized: exchange the shared DOFs and invert A again
+  // at the next solve
+  notSet = true;
   return 0;
 }
 
@@ -84,8 +85,8 @@ MPIDiagonalSolver::solve(void)
   //MPI_Request requests[2*numNeighbours];
   //MPI_Status statuses[2*numNeighbours];
   bool debug_on = false;
-  static int size = theSOE->size;
-  static int numShared = theSOE->numShared;
+  int size = theSOE->size;
+  int numShared = theSOE->numShared;
   bool isAfactored = theSOE->isAfactored;
   ID &myDOFs = theSOE->myDOFs;
   ID &myDOFsShared = theSOE->myDOFsShared;
