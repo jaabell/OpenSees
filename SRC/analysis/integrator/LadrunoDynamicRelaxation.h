@@ -141,6 +141,8 @@ class LadrunoDynamicRelaxation : public TransientIntegrator
     // mass), and the fictitious kinetic energy 1/2 v^T M* v
     double getResidualNorm(void) const;
     double getKineticEnergy(void) const;
+    // max |u| over the equation DOFs (global in a parallel run)
+    double getMaxDisplacement(void) const;
 
     // largest (omega_max dt / 2)^2 = max_i (dt^2/4) sum_j |K_ij| / M*_i
     // measured since the last domainChanged(), with K the tangent at the

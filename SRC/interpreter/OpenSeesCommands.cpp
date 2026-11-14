@@ -84,6 +84,7 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include <ArpackSOE.h>
 #include <LoadControl.h>
 #include <LadrunoSolverQuery.h>
+#include <LadrunoSnapshot.h>
 #include <CTestPFEM.h>
 #include <PFEMIntegrator.h>
 #include <TransientIntegrator.h>
@@ -2798,7 +2799,14 @@ int OPS_LadrunoArcLengthCmd()
 int OPS_LadrunoDRCmd()
 {
     if (cmds == 0) return -1;
-    return Ladruno::drCommand(cmds->getTransientIntegrator());
+    return Ladruno::drCommand(cmds->getTransientIntegrator(), cmds->getTransientAnalysis());
+}
+
+// ladrunoSnapshot save|restore|clear: the dispatch is in LadrunoSnapshot.h
+int OPS_LadrunoSnapshotCmd()
+{
+    if (cmds == 0) return -1;
+    return Ladruno::snapshotCommand(cmds->getDomain());
 }
 
 int OPS_Database()

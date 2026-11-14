@@ -180,6 +180,7 @@ extern void* OPS_AutoConstraintHandler(void);
 #include <StagedLoadControl.h>
 #include <ArcLength.h>
 #include <LadrunoSolverQuery.h>
+#include <LadrunoSnapshot.h>
 #include <ArcLength1.h>
 #include <HSConstraint.h>
 #include <MinUnbalDispNorm.h>
@@ -918,6 +919,8 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
     Tcl_CreateCommand(interp, "ladrunoArcLength", &ladrunoArcLength,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
     Tcl_CreateCommand(interp, "ladrunoDR", &ladrunoDR,
+		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
+    Tcl_CreateCommand(interp, "ladrunoSnapshot", &ladrunoSnapshot,
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);
 
     Tcl_CreateCommand(interp, "integrator", &specifyIntegrator, 
@@ -6649,7 +6652,18 @@ int
 ladrunoDR(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
   OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
-  if (Ladruno::drCommand(theTransientIntegrator) < 0)
+  if (Ladruno::drCommand(theTransientIntegrator, theTransientAnalysis) < 0)
+    return TCL_ERROR;
+  return TCL_OK;
+}
+
+// ladrunoSnapshot save|restore|clear: in-memory copy of the committed state
+// (LadrunoSnapshot.h)
+int
+ladrunoSnapshot(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
+{
+  OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+  if (Ladruno::snapshotCommand(&theDomain) < 0)
     return TCL_ERROR;
   return TCL_OK;
 }
