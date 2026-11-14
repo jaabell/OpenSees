@@ -624,12 +624,11 @@ LadrunoDynamicRelaxation::update(const Vector &U)
         prevKE = kineticEnergy;      // viscous: velocities are never zeroed
     }
 
-    // push the (possibly damped) full-step snapshot to the nodes
+    // push the (possibly damped) full-step velocity and acceleration to the
+    // nodes. The displacements are those of newStep(), whose updateDomain()
+    // already brought the elements to them, so the elements are not updated
+    // again (that would integrate every material point a second time).
     theModel->setResponse(*Ut, *Vfull, aWork);
-    if (theModel->updateDomain() < 0) {
-        opserr << "LadrunoDynamicRelaxation::update() - failed to update domain\n";
-        return -6;
-    }
 
     if (divergenceFactor > 0.0 && prevKE > 0.0) {
         if (kineticEnergy > divergenceFactor * prevKE) {
@@ -747,6 +746,12 @@ double LadrunoDynamicRelaxation::getResidualNorm(void) const
 double LadrunoDynamicRelaxation::getKineticEnergy(void) const
 {
     return kineticEnergy;
+}
+
+double LadrunoDynamicRelaxation::getMaxDisplacement(void) const
+{
+    double m = (Ut != 0) ? Ut->pNorm(0) : 0.0;
+    return Ladruno::drAllreduceMax(m);
 }
 
 // see the header; -2 when the probe is off
