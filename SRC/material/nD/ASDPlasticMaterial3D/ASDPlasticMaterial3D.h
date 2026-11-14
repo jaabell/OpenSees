@@ -55,7 +55,8 @@
 // for print p, q, theta
 #include <tuple>
 #include <utility> // For std::pair
-#include <map> // For std::pair
+#include <map>
+#include <memory> // For std::pair
 #include <limits>
 #include <type_traits>
 
@@ -871,6 +872,14 @@ public:
             else if (strcmp(argv[0], "zeroShearStress") == 0) {
                 return param.addObject(24, this);
             }
+            // ladrunoSaveState / ladrunoRestoreState (ladrunoSnapshot): keep an
+            // in-memory copy of the committed state, and return to it later
+            else if (strcmp(argv[0], "ladrunoSaveState") == 0) {
+                return param.addObject(25, this);
+            }
+            else if (strcmp(argv[0], "ladrunoRestoreState") == 0) {
+                return param.addObject(26, this);
+            }
             // Elastic stage switch (0 = elastic only, 1 = elastoplastic).
             // updateMaterialStage -material $tag (MaterialStageParameter passes
             // {"updateMaterialStage", "<matTag>"} and stops at the first element
@@ -1019,6 +1028,33 @@ public:
                 TrialStress = CommitStress;
                 stress_set_externally = true;
             }
+            return 0;
+        }
+        else if (responseID == 25) { // ladrunoSaveState: copy of the committed state
+            if (!saved_state)
+                saved_state.reset(new SavedState);
+            saved_state->stress = CommitStress;
+            saved_state->strain = CommitStrain;
+            saved_state->plastic_strain = CommitPlastic_Strain;
+            saved_state->stiffness = Stiffness;
+            saved_state->iv = iv_storage;
+            saved_state->first_step = first_step;
+            saved_state->stress_set_externally = stress_set_externally;
+            return 0;
+        }
+        else if (responseID == 26) { // ladrunoRestoreState: back to the copy
+            if (!saved_state) {
+                opserr << "ASDPlasticMaterial3D (tag " << ASDP_TAG << ") ladrunoRestoreState: no saved state\n";
+                return -1;
+            }
+            CommitStress = TrialStress = saved_state->stress;
+            CommitStrain = TrialStrain = saved_state->strain;
+            CommitPlastic_Strain = TrialPlastic_Strain = saved_state->plastic_strain;
+            Stiffness = saved_state->stiffness;
+            iv_storage = saved_state->iv;
+            iv_storage.revert_all();
+            first_step = saved_state->first_step;
+            stress_set_externally = saved_state->stress_set_externally;
             return 0;
         }
         else if (responseID == 22) { // updateMaterialStage -material: all instances of this tag
@@ -4448,6 +4484,15 @@ protected:
     parameters_storage_t parameters_storage;
 
     std::string current_parameter_name; // Stores the most recent parameter name from setParameter
+
+    // committed state kept by ladrunoSaveState (allocated on first use)
+    struct SavedState {
+        VoigtVector stress, strain, plastic_strain;
+        VoigtMatrix stiffness;
+        iv_storage_t iv;
+        bool first_step, stress_set_externally;
+    };
+    std::unique_ptr<SavedState> saved_state;
 
 protected:
 
