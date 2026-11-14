@@ -41,6 +41,12 @@
 #include <string.h>
 #include <cmath>
 
+namespace Ladruno {
+static double drIdentity(double x) { return x; }
+double (*drAllreduceSum)(double) = drIdentity;
+double (*drAllreduceMax)(double) = drIdentity;
+}
+
 // true when every entry is finite. Vector::pNorm(0) skips NaN entries in its
 // max comparison, so it cannot detect a NaN.
 static bool
@@ -437,6 +443,28 @@ LadrunoDynamicRelaxation::domainChanged(void)
     haveBuiltOnce = false;
     marginCount = 0;
 
+    // parallel run (OpenSeesMP): the interface DOFs need the system that adds
+    // the A and B contributions of the neighbouring processes (MPIDiagonal);
+    // it inverts A at the first solve and keeps it, so M* is not rebuilt
+    if (Ladruno::drAllreduceSum(1.0) > 1.5) {
+        if (theLinSOE->getClassTag() != LinSOE_TAGS_MPIDiagonalSOE) {
+            opserr << "LadrunoDynamicRelaxation::domainChanged - in a parallel run use "
+                      "`system MPIDiagonal` (the interface DOFs need the contributions of "
+                      "the neighbouring processes)\n";
+            return -1;
+        }
+        if (autoRefresh || recomputeEvery > 0) {
+            static bool noted = false;
+            if (!noted) {
+                noted = true;
+                opserr << "LadrunoDynamicRelaxation: parallel run, MPIDiagonal keeps the first "
+                          "M*: -noAutoRefresh and no -recompute are used\n";
+            }
+            autoRefresh = false;
+            recomputeEvery = 0;
+        }
+    }
+
     if (this->buildFictitiousMass() < 0) {
         opserr << "LadrunoDynamicRelaxation::domainChanged - failed to build fictitious mass\n";
         return -1;
@@ -543,12 +571,19 @@ LadrunoDynamicRelaxation::update(const Vector &U)
         return -5;
     }
 
-    // static unbalance ||f_ext - f_int||_inf = ||M* a||_inf, before damping
+    // static unbalance ||f_ext - f_int||_inf, before damping: the B of the
+    // solve (= M* a). In a parallel run B holds the contributions of the
+    // neighbouring processes at the interface DOFs; the maximum is global.
     residualNorm = 0.0;
-    for (int i = 0; i < size; i++) {
-        double r = fabs((*Mstar)(i) * U(i));
-        if (r > residualNorm) residualNorm = r;
+    {
+        LinearSOE *theLinSOE = this->getLinearSOE();
+        const Vector &B = theLinSOE->getB();
+        for (int i = 0; i < size; i++) {
+            double r = fabs(B(i));
+            if (r > residualNorm) residualNorm = r;
+        }
     }
+    residualNorm = Ladruno::drAllreduceMax(residualNorm);
 
     // viscous damping: force -cVisc M* v_{n+1/2} at the known half-step
     // velocity, so the step stays explicit: a_work = a - cVisc v_{n+1/2}
@@ -566,7 +601,10 @@ LadrunoDynamicRelaxation::update(const Vector &U)
         double vi = (*Vfull)(i);
         kineticEnergy += (*Mstar)(i) * vi * vi;
     }
-    kineticEnergy *= 0.5;
+    // global: every process zeroes its velocities at the same peaks. M* of a
+    // process holds its own elements' row sums, so the shares of an interface
+    // DOF add up to its mass.
+    kineticEnergy = 0.5 * Ladruno::drAllreduceSum(kineticEnergy);
 
     if (dampMode == 0) {
         // kinetic damping (Cundall 1976): zero all velocities at each peak

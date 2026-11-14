@@ -139,6 +139,7 @@ extern "C" int         OPS_ResetInputNoBuilder(ClientData clientData, Tcl_Interp
 // convergence tests
 #include <CTestNormUnbalance.h>
 #include <LadrunoStabilizedUnbalance.h>
+#include <LadrunoDynamicRelaxation.h>   // Ladruno::drAllreduceSum/Max
 #include <CTestNormDispIncr.h>
 #include <CTestEnergyIncr.h>
 #include <CTestRelativeNormUnbalance.h>
@@ -5750,6 +5751,11 @@ specifyIntegratorImpl(ClientData clientData, Tcl_Interp *interp, int argc,
   }
 
   else if (strcmp(argv[1],"LadrunoDynamicRelaxation") == 0) {
+#ifdef _PARALLEL_INTERPRETERS
+    // global kinetic energy and residual over the processes
+    Ladruno::drAllreduceSum = [](double x) { double y = 0.0; MPI_Allreduce(&x, &y, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD); return y; };
+    Ladruno::drAllreduceMax = [](double x) { double y = 0.0; MPI_Allreduce(&x, &y, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD); return y; };
+#endif
     theTransientIntegrator = (TransientIntegrator *)OPS_LadrunoDynamicRelaxation();
     if (theTransientIntegrator != 0 && theTransientAnalysis != 0)
       setIntegratorIfAny(theTransientAnalysis, theTransientIntegrator);

@@ -97,6 +97,15 @@ class Vector;
 // pass every N steps, without replacing M*); 0 switches the probe off
 #define LADRUNO_DR_DEFAULT_MARGIN_EVERY 500
 
+namespace Ladruno {
+// Global reductions over the processes of a parallel run. The library is
+// compiled once for every target, without MPI; the OpenSeesMP interpreter
+// (tcl/commands.cpp, built with _PARALLEL_INTERPRETERS) points these at
+// MPI_Allreduce when the integrator is created. Identity by default.
+extern double (*drAllreduceSum)(double);
+extern double (*drAllreduceMax)(double);
+}
+
 class LadrunoDynamicRelaxation : public TransientIntegrator
 {
   public:
