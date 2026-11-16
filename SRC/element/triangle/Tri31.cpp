@@ -405,6 +405,12 @@ Tri31::Tri31(int tag, int nd1, int nd2, int nd3,
 	b[0] = b1;
 	b[1] = b2;
 
+	// no body load from a load pattern until zeroLoad()/addLoad(); without
+	// this getResistingForce() before the first analysis step read garbage
+	applyLoad = 0;
+	appliedB[0] = 0.0;
+	appliedB[1] = 0.0;
+
     // Allocate arrays of pointers to NDMaterials
     theMaterial = new NDMaterial *[numgp];
     
@@ -447,6 +453,12 @@ Tri31::Tri31()
 	pts[0][1] = 0.333333333333333;
 
 	wts[0] = 0.5;
+
+	b[0] = 0.0;
+	b[1] = 0.0;
+	applyLoad = 0;
+	appliedB[0] = 0.0;
+	appliedB[1] = 0.0;
 
     for (int i=0; i<numnodes; i++) theNodes[i] = 0;
 
