@@ -1211,7 +1211,7 @@ Tri31::setResponse(const char **argv, int argc, OPS_Stream &output)
 
     char dataOut[10];
     if (strcmp(argv[0],"force") == 0 || strcmp(argv[0],"forces") == 0) {
-		for (int i=1; i<=numgp; i++) {
+		for (int i=1; i<=numnodes; i++) {
 			sprintf(dataOut,"P1_%d",i);
             output.tag("ResponseType",dataOut);
             sprintf(dataOut,"P2_%d",i);
