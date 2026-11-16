@@ -1783,7 +1783,7 @@ sensLambda(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv 
   //double factor = theIntegrator->dLambdadh(gradIndex);
   double factor = thePattern->getLoadFactorSensitivity(gradIndex);
 
-  char buffer[40];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
   sprintf(buffer,"%35.20f",factor);
   
   Tcl_SetResult(interp, buffer, TCL_VOLATILE);
@@ -6386,7 +6386,7 @@ eleForce(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 	Tcl_SetResult(interp, buffer, TCL_VOLATILE);	
 
       } else {
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 	for (int i=0; i<size; i++) {
 	  sprintf(buffer,"%35.20f",(*force)(i));
 	  Tcl_AppendResult(interp, buffer, NULL);
@@ -6455,7 +6455,7 @@ localForce(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 	Tcl_SetResult(interp, buffer, TCL_VOLATILE);
 	
       } else {
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 	for (int i=0; i<size; i++) {
 	  sprintf(buffer,"%35.20f",(*force)(i));
 	  Tcl_AppendResult(interp, buffer, NULL);
@@ -6512,7 +6512,7 @@ eleDynamicalForce(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char 
       Tcl_SetResult(interp, buffer, TCL_VOLATILE);
 
     } else {
-      char buffer[40];
+      char buffer[400];  // fixed-point %f of a double can take ~330 characters
       for (int i=0; i<size; i++) {
 	sprintf(buffer,"%35.20f",force(i));
 	Tcl_AppendResult(interp, buffer, NULL);
@@ -6563,7 +6563,7 @@ eleResponse(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv
     const Vector *data = theDomain.getElementResponse(tag, argv+2, argc-2);
     if (data != 0) {
       int size = data->Size();
-      char buffer[40];
+      char buffer[400];  // fixed-point %f of a double can take ~330 characters
       for (int i=0; i<size; i++) {
 	sprintf(buffer,"%35.20f",(*data)(i));
 	Tcl_AppendResult(interp, buffer, NULL);
@@ -6658,7 +6658,7 @@ nodeCoord(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   
   int size = coords.Size();
   if (dim == -1) {
-    char buffer[40];
+    char buffer[400];  // fixed-point %f of a double can take ~330 characters
     for (int i=0; i<size; i++) {
       sprintf(buffer,"%35.20f",coords(i));
       Tcl_AppendResult(interp, buffer, NULL);
@@ -7217,7 +7217,7 @@ nodeMass(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       return TCL_ERROR;	        
     }    
   
-  char buffer[40];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
   Node *theNode = theDomain.getNode(tag);
   if (theNode == 0) {
@@ -7274,7 +7274,7 @@ nodePressure(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **arg
         //     }
         // }
     }
-    char buffer[80];
+    char buffer[400];  // fixed-point %f of a double can take ~330 characters
     sprintf(buffer, "%35.20f", pressure);
     Tcl_SetResult(interp, buffer, TCL_VOLATILE);
 
@@ -7355,7 +7355,7 @@ nodeVel(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 
     } else {
 
-      char buffer[40];
+      char buffer[400];  // fixed-point %f of a double can take ~330 characters
       for (int i=0; i<size; i++) {
 	sprintf(buffer,"%35.20f",(*nodalResponse)(i));
 	Tcl_AppendResult(interp, buffer, NULL);
@@ -7566,7 +7566,7 @@ nodeAccel(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
       Tcl_SetResult(interp, buffer, TCL_VOLATILE);
 
     } else {
-      char buffer[40];
+      char buffer[400];  // fixed-point %f of a double can take ~330 characters
       for (int i=0; i<size; i++) {
 	sprintf(buffer,"%35.20f",(*nodalResponse)(i));
 	Tcl_AppendResult(interp, buffer, NULL);
@@ -7685,7 +7685,7 @@ sensNodeDisp(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **arg
 
      double value = theNode->getDispSensitivity(dof,gradIndex);
 
-     char buffer[40];
+     char buffer[400];  // fixed-point %f of a double can take ~330 characters
      sprintf(buffer,"%35.20f",value);
      Tcl_SetResult(interp, buffer, TCL_VOLATILE);
 
@@ -7733,7 +7733,7 @@ sensNodeDisp(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **arg
 
      double value = theNode->getVelSensitivity(dof,gradIndex);
 
-     char buffer[40];
+     char buffer[400];  // fixed-point %f of a double can take ~330 characters
      sprintf(buffer,"%35.20f",value);
 
      Tcl_SetResult(interp, buffer, TCL_VOLATILE);
@@ -7782,7 +7782,7 @@ sensNodeDisp(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **arg
     
     double value = theNode->getAccSensitivity(dof,gradIndex);
     
-    char buffer[40];
+    char buffer[400];  // fixed-point %f of a double can take ~330 characters
     sprintf(buffer,"%35.20f",value);
 
     Tcl_SetResult(interp, buffer, TCL_VOLATILE);
@@ -7830,7 +7830,7 @@ sensNodePressure(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char *
         }
     }
     
-    char buffer[40];
+    char buffer[400];  // fixed-point %f of a double can take ~330 characters
     sprintf(buffer,"%35.20f",dp);
 
     Tcl_SetResult(interp, buffer, TCL_VOLATILE);
@@ -8320,7 +8320,7 @@ basicDeformation(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char *
   const Vector &theVec = *(info.theVector);
   int nbf = theVec.Size();
 
-  char buffer[200];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
   for (int i = 0; i < nbf; i++) {
     sprintf(buffer, "%12.8f ", theVec(i));
     Tcl_AppendResult(interp, buffer, NULL);
@@ -8384,7 +8384,7 @@ basicForce(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
   const Vector &theVec = *(info.theVector);
   int nbf = theVec.Size();
 
-  char buffer[200];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
   for (int i = 0; i < nbf; i++) {
     sprintf(buffer, "%12.8f ", theVec(i));
     Tcl_AppendResult(interp, buffer, NULL);
@@ -8448,7 +8448,7 @@ basicStiffness(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **a
   const Matrix &theMatrix = *(info.theMatrix);
   int nbf = theMatrix.noCols();
 
-  char buffer[200];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
   for (int i = 0; i < nbf; i++) {
     for (int j = 0; j < nbf; j++) {
       sprintf(buffer, "%12.8f ", theMatrix(i,j));
@@ -9001,7 +9001,7 @@ getEleLoadData(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **a
 	LoadPattern *thePattern;
 	LoadPatternIter &thePatterns = theDomain.getLoadPatterns();
 
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 	int typeEL;
 
 	while ((thePattern = thePatterns()) != 0) {
@@ -9038,7 +9038,7 @@ getEleLoadData(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **a
 	ElementalLoad* theLoad;
 
 	int typeEL;
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
 	while ((theLoad = theEleLoads()) != 0) {
 		const Vector &eleLoadData = theLoad->getData(typeEL, 1.0);
@@ -9119,7 +9119,7 @@ getNodeLoadData(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **
 	LoadPattern *thePattern;
 	LoadPatternIter &thePatterns = theDomain.getLoadPatterns();
 
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 	int typeEL;
 
 	while ((thePattern = thePatterns()) != 0) {
@@ -9156,7 +9156,7 @@ getNodeLoadData(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **
 	NodalLoad* theNodLoad;
 
 	int typeEL;
-	char buffer[40];
+	char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
 	while ((theNodLoad = theNodeLoads()) != 0) {
 		const Vector &eleLoadData = theNodLoad->getData(typeEL);
@@ -9258,7 +9258,7 @@ getParamValue(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **ar
 
   Parameter *theEle = theDomain.getParameter(paramTag);
 
-  char buffer[40];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
   sprintf(buffer, "%35.20f", theEle->getValue());
   Tcl_SetResult(interp, buffer, TCL_VOLATILE);
@@ -9901,7 +9901,7 @@ peerNGA(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 int
 totalCPU(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
-  char buffer[20];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
   if (theAlgorithm == 0)
     return TCL_ERROR;
@@ -9915,7 +9915,7 @@ totalCPU(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 int
 solveCPU(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
-  char buffer[20];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
   if (theAlgorithm == 0)
     return TCL_ERROR;
@@ -9929,7 +9929,7 @@ solveCPU(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 int
 accelCPU(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv)
 {
-  char buffer[20];
+  char buffer[400];  // fixed-point %f of a double can take ~330 characters
 
   if (theAlgorithm == 0)
     return TCL_ERROR;
