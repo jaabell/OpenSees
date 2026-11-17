@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cmath>
+#include <algorithm>
 #include <string>
 #include <limits>
 #include <vector>
@@ -47,6 +48,13 @@
 // anonymous namespace for utilities
 namespace
 {
+
+    // send/recv layout, sized for the largest host (hexa27: 28 nodes)
+    constexpr int SR_MAX_NODES = 28;
+    constexpr int SR_NODES = 11;
+    constexpr int SR_MAP = SR_NODES + SR_MAX_NODES;
+    constexpr int SR_INT_SIZE = SR_MAP + SR_MAX_NODES * 3;
+    constexpr int SR_DBL_SIZE = 2 + SR_MAX_NODES * 6;
 
     double det2(const Matrix& J) {
         return J(0, 0) * J(1, 1) - J(0, 1) * J(1, 0);
@@ -221,6 +229,287 @@ namespace
 
     }
 
+    // Whole-host families tied through the isoparametric map: the embedded
+    // node C at natural coordinates xi* of the host follows the host's own
+    // field, u_C = sum_a N_a(xi*) u_a, over ALL host nodes. Node orders are
+    // STKO / MpcCore's (checked on elements meshed in STKO):
+    //   tri6   1 2 3, 4=(1,2) 5=(2,3) 6=(3,1)
+    //   quad4/8/9  corners counter-clockwise from (-1,-1), 5=(1,2) 6=(2,3)
+    //          7=(3,4) 8=(4,1), 9 = centre
+    //   hexa8  stdBrick: bottom face 1-4 counter-clockwise, top face 5-8
+    //   hexa20 + 9-12 bottom edges, 13-16 vertical edges, 17-20 top edges
+    //   hexa27 + 21 zeta-, 22 eta-, 23 xi+, 24 eta+, 25 xi-, 26 zeta+, 27 centre
+    // tri/quad hosts work in 2D and as faces in 3D (then xi* is the closest
+    // point of the face, found by Gauss-Newton on |x(xi) - X_C|^2).
+    namespace host {
+
+        enum Family {
+            None = 0, Tri6 = 1, Quad4 = 2, Quad8 = 3, Quad9 = 4,
+            Hexa8 = 5, Hexa20 = 6, Hexa27 = 7
+        };
+
+        int numNodes(int f) {
+            switch (f) {
+            case Tri6: return 6;
+            case Quad4: return 4;
+            case Quad8: return 8;
+            case Quad9: return 9;
+            case Hexa8: return 8;
+            case Hexa20: return 20;
+            case Hexa27: return 27;
+            default: return 0;
+            }
+        }
+
+        // natural dimension of the host (2 = triangle/quadrilateral, 3 = hexahedron)
+        int natDim(int f) {
+            return (f == Hexa8 || f == Hexa20 || f == Hexa27) ? 3 : 2;
+        }
+
+        const char* name(int f) {
+            switch (f) {
+            case Tri6: return "6-node triangle";
+            case Quad4: return "4-node quadrilateral";
+            case Quad8: return "8-node quadrilateral";
+            case Quad9: return "9-node quadrilateral";
+            case Hexa8: return "8-node hexahedron";
+            case Hexa20: return "20-node hexahedron";
+            case Hexa27: return "27-node hexahedron";
+            default: return "unknown host";
+            }
+        }
+
+        // natural coordinates of the quadrilateral nodes
+        const double QX[9] = { -1, 1, 1, -1, 0, 1, 0, -1, 0 };
+        const double QY[9] = { -1, -1, 1, 1, -1, 0, 1, 0, 0 };
+        // natural coordinates of the hexahedron nodes
+        const double HX[27] = { -1, 1, 1, -1, -1, 1, 1, -1,  0, 1, 0, -1,  -1, 1, 1, -1,  0, 1, 0, -1,  0, 0, 1, 0, -1, 0, 0 };
+        const double HY[27] = { -1, -1, 1, 1, -1, -1, 1, 1,  -1, 0, 1, 0,  -1, -1, 1, 1,  -1, 0, 1, 0,  0, -1, 0, 1, 0, 0, 0 };
+        const double HZ[27] = { -1, -1, -1, -1, 1, 1, 1, 1,  -1, -1, -1, -1,  0, 0, 0, 0,  1, 1, 1, 1,  -1, 0, 0, 0, 0, 1, 0 };
+
+        // 1D quadratic Lagrange polynomial for the node at a = -1, 0 or +1
+        double lag(double x, double a) {
+            if (a < -0.5) return 0.5 * x * (x - 1.0);
+            if (a > 0.5) return 0.5 * x * (x + 1.0);
+            return 1.0 - x * x;
+        }
+
+        // shape functions of family f at natural coordinates xi (size natDim)
+        void shapeFun(int f, const double* xi, double* N) {
+            const double x = xi[0], y = xi[1];
+            switch (f) {
+            case Tri6: {
+                const double L1 = 1.0 - x - y, L2 = x, L3 = y;
+                N[0] = L1 * (2.0 * L1 - 1.0);
+                N[1] = L2 * (2.0 * L2 - 1.0);
+                N[2] = L3 * (2.0 * L3 - 1.0);
+                N[3] = 4.0 * L1 * L2;
+                N[4] = 4.0 * L2 * L3;
+                N[5] = 4.0 * L3 * L1;
+                break;
+            }
+            case Quad4:
+                for (int a = 0; a < 4; ++a)
+                    N[a] = 0.25 * (1.0 + QX[a] * x) * (1.0 + QY[a] * y);
+                break;
+            case Quad8:
+                for (int a = 0; a < 4; ++a)
+                    N[a] = 0.25 * (1.0 + QX[a] * x) * (1.0 + QY[a] * y) * (QX[a] * x + QY[a] * y - 1.0);
+                for (int a = 4; a < 8; ++a) {
+                    if (QX[a] == 0.0)
+                        N[a] = 0.5 * (1.0 - x * x) * (1.0 + QY[a] * y);
+                    else
+                        N[a] = 0.5 * (1.0 + QX[a] * x) * (1.0 - y * y);
+                }
+                break;
+            case Quad9:
+                for (int a = 0; a < 9; ++a)
+                    N[a] = lag(x, QX[a]) * lag(y, QY[a]);
+                break;
+            case Hexa8: {
+                const double z = xi[2];
+                for (int a = 0; a < 8; ++a)
+                    N[a] = 0.125 * (1.0 + HX[a] * x) * (1.0 + HY[a] * y) * (1.0 + HZ[a] * z);
+                break;
+            }
+            case Hexa20: {
+                const double z = xi[2];
+                for (int a = 0; a < 8; ++a)
+                    N[a] = 0.125 * (1.0 + HX[a] * x) * (1.0 + HY[a] * y) * (1.0 + HZ[a] * z)
+                        * (HX[a] * x + HY[a] * y + HZ[a] * z - 2.0);
+                for (int a = 8; a < 20; ++a) {
+                    if (HX[a] == 0.0)
+                        N[a] = 0.25 * (1.0 - x * x) * (1.0 + HY[a] * y) * (1.0 + HZ[a] * z);
+                    else if (HY[a] == 0.0)
+                        N[a] = 0.25 * (1.0 + HX[a] * x) * (1.0 - y * y) * (1.0 + HZ[a] * z);
+                    else
+                        N[a] = 0.25 * (1.0 + HX[a] * x) * (1.0 + HY[a] * y) * (1.0 - z * z);
+                }
+                break;
+            }
+            case Hexa27: {
+                const double z = xi[2];
+                for (int a = 0; a < 27; ++a)
+                    N[a] = lag(x, HX[a]) * lag(y, HY[a]) * lag(z, HZ[a]);
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        // dN/dxi by central differences (only used to invert the map and to
+        // measure the host size: xi* itself satisfies x(xi*) = X_C to the
+        // Newton tolerance whatever the accuracy of the derivatives)
+        void shapeFunDer(int f, const double* xi, double dN[27][3]) {
+            const int n = numNodes(f), d = natDim(f);
+            const double h = 1.0e-6;
+            double xp[3], xm[3], Np[27], Nm[27];
+            for (int k = 0; k < d; ++k) {
+                for (int j = 0; j < d; ++j) { xp[j] = xi[j]; xm[j] = xi[j]; }
+                xp[k] += h;
+                xm[k] -= h;
+                shapeFun(f, xp, Np);
+                shapeFun(f, xm, Nm);
+                for (int a = 0; a < n; ++a)
+                    dN[a][k] = (Np[a] - Nm[a]) / (2.0 * h);
+            }
+        }
+
+        // the host Jacobian dx/dxi (ndm x natDim) at xi, X = node coordinates (ndm x n)
+        void jacobian(int f, int ndm, const Matrix& X, const double* xi, double J[3][3]) {
+            const int n = numNodes(f), d = natDim(f);
+            double dN[27][3];
+            shapeFunDer(f, xi, dN);
+            for (int i = 0; i < ndm; ++i)
+                for (int k = 0; k < d; ++k) {
+                    double s = 0.0;
+                    for (int a = 0; a < n; ++a)
+                        s += X(i, a) * dN[a][k];
+                    J[i][k] = s;
+                }
+        }
+
+        double det3(double A[3][3]) {
+            return A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1])
+                - A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0])
+                + A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]);
+        }
+
+        // solve the d x d system A dx = b (d = 2 or 3), false if singular
+        bool solveSmall(int d, double A[3][3], const double* b, double* dx) {
+            if (d == 2) {
+                const double det = A[0][0] * A[1][1] - A[0][1] * A[1][0];
+                if (std::abs(det) < 1.0e-300) return false;
+                dx[0] = (A[1][1] * b[0] - A[0][1] * b[1]) / det;
+                dx[1] = (A[0][0] * b[1] - A[1][0] * b[0]) / det;
+                return true;
+            }
+            const double det = det3(A);
+            if (std::abs(det) < 1.0e-300) return false;
+            for (int c = 0; c < 3; ++c) {
+                double M[3][3];
+                for (int i = 0; i < 3; ++i)
+                    for (int j = 0; j < 3; ++j)
+                        M[i][j] = (j == c) ? b[i] : A[i][j];
+                dx[c] = det3(M) / det;
+            }
+            return true;
+        }
+
+        // natural coordinates of point P in host family f with node
+        // coordinates X (ndm x n): Gauss-Newton on |x(xi) - P|^2, which is
+        // Newton when natDim == ndm. Returns false if it does not converge.
+        bool inverseMap(int f, int ndm, const Matrix& X, const double* P, double* xi) {
+            const int n = numNodes(f), d = natDim(f);
+            if (f == Tri6) { xi[0] = xi[1] = 1.0 / 3.0; }
+            else { for (int k = 0; k < d; ++k) xi[k] = 0.0; }
+            double N[27];
+            for (int iter = 0; iter < 50; ++iter) {
+                shapeFun(f, xi, N);
+                double r[3] = { 0.0, 0.0, 0.0 };
+                for (int i = 0; i < ndm; ++i) {
+                    double xv = 0.0;
+                    for (int a = 0; a < n; ++a)
+                        xv += N[a] * X(i, a);
+                    r[i] = P[i] - xv;
+                }
+                double J[3][3];
+                jacobian(f, ndm, X, xi, J);
+                // normal equations (J^T J) dxi = J^T r
+                double A[3][3], b[3], dxi[3];
+                for (int k = 0; k < d; ++k) {
+                    b[k] = 0.0;
+                    for (int i = 0; i < ndm; ++i)
+                        b[k] += J[i][k] * r[i];
+                    for (int l = 0; l < d; ++l) {
+                        A[k][l] = 0.0;
+                        for (int i = 0; i < ndm; ++i)
+                            A[k][l] += J[i][k] * J[i][l];
+                    }
+                }
+                if (!solveSmall(d, A, b, dxi))
+                    return false;
+                double step = 0.0;
+                for (int k = 0; k < d; ++k) {
+                    xi[k] += dxi[k];
+                    step = std::max(step, std::abs(dxi[k]));
+                }
+                if (step < 1.0e-12)
+                    return true;
+            }
+            return false;
+        }
+
+        // the "is the point inside" distance in natural coordinates: 0 inside
+        double outside(int f, const double* xi) {
+            if (f == Tri6)
+                return std::max(0.0, std::max(-xi[0], std::max(-xi[1], xi[0] + xi[1] - 1.0)));
+            double e = 0.0;
+            for (int k = 0; k < natDim(f); ++k)
+                e = std::max(e, std::abs(xi[k]) - 1.0);
+            return e;
+        }
+
+        // |dx/dxi| for natDim 2 (area density, also of a face in 3D) or 3
+        double jacMeasure(int f, int ndm, double J[3][3]) {
+            if (natDim(f) == 3)
+                return std::abs(det3(J));
+            if (ndm == 2)
+                return std::abs(J[0][0] * J[1][1] - J[0][1] * J[1][0]);
+            const double cx = J[1][0] * J[2][1] - J[2][0] * J[1][1];
+            const double cy = J[2][0] * J[0][1] - J[0][0] * J[2][1];
+            const double cz = J[0][0] * J[1][1] - J[1][0] * J[0][1];
+            return std::sqrt(cx * cx + cy * cy + cz * cz);
+        }
+
+        // area (natDim 2) or volume (natDim 3) of the host
+        double measure(int f, int ndm, const Matrix& X) {
+            double J[3][3];
+            double total = 0.0;
+            if (f == Tri6) {
+                const double tp[3][2] = { { 1.0 / 6.0, 1.0 / 6.0 }, { 2.0 / 3.0, 1.0 / 6.0 }, { 1.0 / 6.0, 2.0 / 3.0 } };
+                for (int q = 0; q < 3; ++q) {
+                    jacobian(f, ndm, X, tp[q], J);
+                    total += jacMeasure(f, ndm, J) / 6.0;
+                }
+                return total;
+            }
+            const int d = natDim(f);
+            const double g = std::sqrt(0.6);
+            const double pg[3] = { -g, 0.0, g }, wg[3] = { 5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0 };
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                    for (int k = 0; k < (d == 3 ? 3 : 1); ++k) {
+                        const double xi[3] = { pg[i], pg[j], d == 3 ? pg[k] : 0.0 };
+                        jacobian(f, ndm, X, xi, J);
+                        total += jacMeasure(f, ndm, J) * wg[i] * wg[j] * (d == 3 ? wg[k] : 1.0);
+                    }
+            return total;
+        }
+
+    }
+
 }
 
 void *
@@ -232,9 +521,9 @@ OPS_ASDEmbeddedNodeElement(void)
         first_done = true;
     }
 
-    const char* descr = "Want: element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 $Rnode2 $Rnode3 <$Rnode4> <-rot> <-p> <-K $K> <-KP $KP> <-shape $shape>\n"
-        "  or:  element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 ... $Rnode10 <-K $K> <-KP $KP> <-shape tet>\n"
-        "       (10 retained nodes in STKO order: mid-edge nodes 5=(1,2) 6=(2,3) 7=(3,1) 8=(1,4) 9=(2,4) 10=(3,4))\n";
+    const char* descr = "Want: element ASDEmbeddedNodeElement $tag $Cnode $Rnode1 $Rnode2 $Rnode3 <$Rnode4 ... $RnodeN> <-rot> <-p> <-K $K> <-KP $KP> <-shape tri|quad|tet|hexa>\n"
+        "  hosts (retained nodes in STKO / MpcCore order): tri 3/6, quad 4/8/9 (2D, or a face in 3D), tet 4/10, hexa 8/20/27\n"
+        "  -rot and -p only with the 3-node triangle and the 4-node tetrahedron; 4 nodes in 3D are a tetrahedron unless -shape quad\n";
 
     int numArgs = OPS_GetNumRemainingInputArgs();
     if (numArgs < 5) {
@@ -329,19 +618,76 @@ OPS_ASDEmbeddedNodeElement(void)
         return 0;
     }
 
-    // the retained node count fixes the host; -shape only has to agree with it
+    // the host: the retained node count with -shape tri|quad|tet|hexa. Without
+    // -shape the count decides, and the two ambiguous counts read as before in
+    // 3D (4 = tetrahedron, 8 = hexahedron) and as quadrilaterals in 2D.
     int num_retained = 3 + (int)extra_nodes.size();
-    if (num_retained != 3 && num_retained != 4 && num_retained != 10) {
-        opserr << "ASDEmbeddedNodeElement ERROR: " << num_retained << " retained nodes given, 3, 4 or 10 are supported.\n" << descr;
-        return 0;
-    }
+    int ndm = OPS_GetNDM();
+    std::string shp;
     if (shape != nullptr) {
-        const char* expected = (num_retained == 3) ? "tri" : "tet";
-        if (strcmp(shape, expected) != 0) {
-            opserr << "ASDEmbeddedNodeElement ERROR: -shape " << shape << " is not supported with " << num_retained
-                << " retained nodes (use -shape " << expected << ").\n" << descr;
+        shp = shape;
+        if (shp == "hex")
+            shp = "hexa";
+        if (shp != "tri" && shp != "quad" && shp != "tet" && shp != "hexa") {
+            opserr << "ASDEmbeddedNodeElement ERROR: unknown -shape " << shape << " (use tri, quad, tet or hexa).\n" << descr;
             return 0;
         }
+    }
+    else {
+        switch (num_retained) {
+        case 3: case 6: shp = "tri"; break;
+        case 9: shp = "quad"; break;
+        case 10: shp = "tet"; break;
+        case 20: case 27: shp = "hexa"; break;
+        case 4: shp = (ndm == 2) ? "quad" : "tet"; break;
+        case 8: shp = (ndm == 2) ? "quad" : "hexa"; break;
+        default:
+            opserr << "ASDEmbeddedNodeElement ERROR: " << num_retained << " retained nodes given; supported hosts are "
+                "tri 3/6, quad 4/8/9, tet 4/10 and hexa 8/20/27.\n" << descr;
+            return 0;
+        }
+    }
+    int family = host::None;   // None = the triangle / tetrahedron hosts with their own kernels
+    bool ok = false;
+    if (shp == "tri") {
+        ok = (num_retained == 3 || num_retained == 6);
+        if (num_retained == 6) family = host::Tri6;
+    }
+    else if (shp == "quad") {
+        ok = (num_retained == 4 || num_retained == 8 || num_retained == 9);
+        family = num_retained == 4 ? host::Quad4 : (num_retained == 8 ? host::Quad8 : host::Quad9);
+    }
+    else if (shp == "tet") {
+        ok = (num_retained == 4 || num_retained == 10);
+    }
+    else {
+        ok = (num_retained == 8 || num_retained == 20 || num_retained == 27);
+        family = num_retained == 8 ? host::Hexa8 : (num_retained == 20 ? host::Hexa20 : host::Hexa27);
+    }
+    if (!ok) {
+        opserr << "ASDEmbeddedNodeElement ERROR: -shape " << shp.c_str() << " is not supported with " << num_retained
+            << " retained nodes (tri 3/6, quad 4/8/9, tet 4/10, hexa 8/20/27).\n" << descr;
+        return 0;
+    }
+    if ((shp == "tet" || shp == "hexa") && ndm != 3) {
+        opserr << "ASDEmbeddedNodeElement ERROR: a " << shp.c_str() << " host needs a 3D model (ndm 3).\n" << descr;
+        return 0;
+    }
+
+    // whole-host families: the inverse isoparametric map
+    if (family != host::None) {
+        if (rot || pressure) {
+            opserr << "ASDEmbeddedNodeElement ERROR: -rot and -p are not supported with a " << host::name(family)
+                << " host (translational tie only).\n" << descr;
+            return 0;
+        }
+        ID rNodes(num_retained);
+        rNodes(0) = iData[2];
+        rNodes(1) = iData[3];
+        rNodes(2) = iData[4];
+        for (int i = 0; i < num_retained - 3; ++i)
+            rNodes(3 + i) = extra_nodes[i];
+        return new ASDEmbeddedNodeElement(iData[0], iData[1], rNodes, family, K);
     }
 
     // done
@@ -368,6 +714,7 @@ OPS_ASDEmbeddedNodeElement(void)
     else
         return new ASDEmbeddedNodeElement(iData[0], iData[1], iData[2], iData[3], iData[4], rot, pressure, K, KP);
 }
+
 
 // Separate command (same pattern as TenNodeTetrahedron / TenNodeTetrahedronStd
 // being two commands rather than a flag) so the mandatory-argument count
@@ -499,6 +846,24 @@ ASDEmbeddedNodeElement::ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNo
     for (int i = 0; i < 10; ++i)
         m_node_ids(1 + i) = rNodesTet10(i);
     m_nodes.resize(11, nullptr);
+}
+
+ASDEmbeddedNodeElement::ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNodes, int hostFamily, double K)
+    : Element(tag, ELE_TAG_ASDEmbeddedNodeElement)
+    , m_K(K)
+    , m_KP(K)
+    , m_host(hostFamily)
+{
+    if (rNodes.Size() != host::numNodes(hostFamily)) {
+        opserr << "ASDEmbeddedNodeElement Error: a " << host::name(hostFamily) << " host needs "
+            << host::numNodes(hostFamily) << " retained node ids, got " << rNodes.Size() << "\n";
+        exit(-1);
+    }
+    m_node_ids.resize(1 + rNodes.Size());
+    m_node_ids(0) = cNode;
+    for (int i = 0; i < rNodes.Size(); ++i)
+        m_node_ids(1 + i) = rNodes(i);
+    m_nodes.resize(static_cast<std::size_t>(1 + rNodes.Size()), nullptr);
 }
 
 ASDEmbeddedNodeElement::~ASDEmbeddedNodeElement( )
@@ -645,6 +1010,9 @@ void ASDEmbeddedNodeElement::setDomain(Domain* theDomain)
         }
     }
 
+    // the whole-host weights are computed at the first stiffness request
+    m_host_ready = false;
+
     // compute initial displacement vector
     if (!m_U0_computed) {
         m_U0.resize(m_num_dofs);
@@ -715,6 +1083,10 @@ const Matrix& ASDEmbeddedNodeElement::getTangentStiff()
 {
     // compute stiffness matrix in reduced local dofset
     auto compute_local = [this]() -> const Matrix& {
+        if (m_host != 0) {
+            // whole-host family (translational tie through the inverse map)
+            return HOST_U();
+        }
         if (m_nodes.size() == 4) {
             // support shape is a triangle ...
             if (m_ndm == 2) {
@@ -851,46 +1223,35 @@ int ASDEmbeddedNodeElement::sendSelf(int commitTag, Channel& theChannel)
     // object - don't want to have to do the check if sending data
     int dataTag = this->getDbTag();
 
-    // INT data
-    // tag
-    // number of nodes
-    // up to 11 nodal ids (1 constrained + up to 10 retained; unused slots left 0)
-    // ndm
-    // num_dofs
-    // rot_c_flag
-    // rot_c
-    // p_flag
-    // up
-    // U0_computed
-    // number of local dofs
-    // mapping of local dofs
-    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
+    // INT data, fixed size for the largest host (hexa27: 28 nodes, 84 local dofs)
+    // 0 tag, 1 number of nodes, 2 ndm, 3 num_dofs, 4 rot_c_flag, 5 rot_c,
+    // 6 p_flag, 7 up, 8 U0_computed, 9 number of local dofs, 10 host family,
+    // then the node ids (11 ...) and the local dof mapping (11 + MAX_NODES ...)
+    static ID idData(SR_INT_SIZE);
     idData.Zero();
     idData(0) = getTag();
     idData(1) = m_node_ids.Size();
+    idData(2) = m_ndm;
+    idData(3) = m_num_dofs;
+    idData(4) = m_rot_c_flag ? 1 : 0;
+    idData(5) = m_rot_c ? 1 : 0;
+    idData(6) = m_p_flag ? 1 : 0;
+    idData(7) = m_up ? 1 : 0;
+    idData(8) = m_U0_computed ? 1 : 0;
+    idData(9) = m_mapping.Size();
+    idData(10) = m_host;
     for (int i = 0; i < m_node_ids.Size(); ++i)
-        idData(2 + i) = m_node_ids(i);
-    idData(13) = m_ndm;
-    idData(14) = m_num_dofs;
-    idData(15) = m_rot_c_flag ? 1 : 0;
-    idData(16) = m_rot_c ? 1 : 0;
-    idData(17) = m_p_flag ? 1 : 0;
-    idData(18) = m_up ? 1 : 0;
-    idData(19) = m_U0_computed ? 1 : 0;
-    idData(20) = m_mapping.Size();
+        idData(SR_NODES + i) = m_node_ids(i);
     for (int i = 0; i < m_mapping.Size(); ++i)
-        idData(21 + i) = m_mapping(i);
+        idData(SR_MAP + i) = m_mapping(i);
     res += theChannel.sendID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::sendSelf() - " << this->getTag() << " failed to send ID\n";
         return res;
     }
 
-    // DOUBLE data
-    // K
-    // KP
-    // initial displacement (at most 11 nodes x 6 dofs = 66)
-    static Vector vectData(2 + 66);
+    // DOUBLE data: K, KP, initial displacement (at most 28 nodes x 6 dofs)
+    static Vector vectData(SR_DBL_SIZE);
     vectData.Zero();
     vectData(0) = m_K;
     vectData(1) = m_KP;
@@ -913,7 +1274,7 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
     int dataTag = this->getDbTag();
 
     // INT data: see sendSelf() for the layout
-    static ID idData(21 + 33); // 21 header slots + at most 33 local dofs (11 nodes x 3, tet10 host)
+    static ID idData(SR_INT_SIZE);
     res += theChannel.recvID(dataTag, commitTag, idData);
     if (res < 0) {
         opserr << "WARNING ASDEmbeddedNodeElement::recvSelf() - " << this->getTag() << " failed to receive ID\n";
@@ -922,29 +1283,29 @@ int ASDEmbeddedNodeElement::recvSelf(int commitTag, Channel& theChannel, FEM_Obj
 
     setTag(idData(0));
     int num_nodes = idData(1);
+    m_ndm = idData(2);
+    m_num_dofs = idData(3);
+    m_rot_c_flag = idData(4) == 1;
+    m_rot_c = idData(5) == 1;
+    m_p_flag = idData(6) == 1;
+    m_up = idData(7) == 1;
+    m_U0_computed = idData(8) == 1;
+    int num_local_dofs = idData(9);
+    m_host = idData(10);
+    m_host_ready = false;
     m_node_ids.resize(num_nodes);
     m_nodes.resize(static_cast<std::size_t>(num_nodes), nullptr);
     for (int i = 0; i < num_nodes; ++i)
-        m_node_ids(i) = idData(2 + i);
-    m_ndm = idData(13);
-    m_num_dofs = idData(14);
-    m_rot_c_flag = idData(15) == 1;
-    m_rot_c = idData(16) == 1;
-    m_p_flag = idData(17) == 1;
-    m_up = idData(18) == 1;
-    m_U0_computed = idData(19) == 1;
-    int num_local_dofs = idData(20);
+        m_node_ids(i) = idData(SR_NODES + i);
     m_mapping.resize(num_local_dofs);
     for (int i = 0; i < m_mapping.Size(); ++i)
-        m_mapping(i) = idData(21 + i);
+        m_mapping(i) = idData(SR_MAP + i);
 
     // DOUBLE data
-    // K
-    // KP
-    static Vector vectData(2 + 66);
+    static Vector vectData(SR_DBL_SIZE);
     res += theChannel.recvVector(dataTag, commitTag, vectData);
     if (res < 0) {
-        opserr << "WARNING ASDEmbeddedNodeElement::sendSelf() - " << this->getTag() << " failed to receive Vector\n";
+        opserr << "WARNING ASDEmbeddedNodeElement::recvSelf() - " << this->getTag() << " failed to receive Vector\n";
         return res;
     }
     m_K = vectData(0);
@@ -1679,5 +2040,70 @@ const Matrix& ASDEmbeddedNodeElement::TET10_3D_U()
     K.addMatrixTransposeProduct(0.0, B, B, iK);
 
     // done
+    return K;
+}
+
+int ASDEmbeddedNodeElement::computeHostWeights()
+{
+    // host node coordinates (ndm x n) and the constrained node
+    const int n = host::numNodes(m_host);
+    Matrix X(m_ndm, n);
+    for (int a = 0; a < n; ++a) {
+        const Vector& xa = m_nodes[static_cast<std::size_t>(1 + a)]->getCrds();
+        for (int i = 0; i < m_ndm; ++i)
+            X(i, a) = xa(i);
+    }
+    const Vector& xc = m_nodes[0]->getCrds();
+    double P[3] = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < m_ndm; ++i)
+        P[i] = xc(i);
+
+    // natural coordinates of the constrained node
+    double xi[3] = { 0.0, 0.0, 0.0 };
+    if (!host::inverseMap(m_host, m_ndm, X, P, xi)) {
+        opserr << "ASDEmbeddedNodeElement " << getTag() << " Error: the inverse map of the "
+            << host::name(m_host) << " host did not converge for node " << m_node_ids(0)
+            << " (distorted or degenerate host?)\n";
+        return -1;
+    }
+    double out = host::outside(m_host, xi);
+    if (out > 1.0e-3)
+        opserr << "ASDEmbeddedNodeElement " << getTag() << " Warning: node " << m_node_ids(0)
+            << " lies outside its " << host::name(m_host) << " host (natural distance " << out
+            << "); the host field is extrapolated\n";
+
+    // shape functions of the host at the constrained node
+    double N[27];
+    host::shapeFun(m_host, xi, N);
+    m_host_N.resize(n);
+    for (int a = 0; a < n; ++a)
+        m_host_N(a) = N[a];
+
+    // penalty scaled as for the other hosts: sqrt(area), cbrt(volume)
+    double V = host::measure(m_host, m_ndm, X);
+    m_host_K = m_K * (host::natDim(m_host) == 3 ? std::cbrt(V) : std::sqrt(V));
+    m_host_ready = true;
+    return 0;
+}
+
+const Matrix& ASDEmbeddedNodeElement::HOST_U()
+{
+    // u_C = sum_a N_a(xi*) u_a over all host nodes, translational DOFs only:
+    // B = [-I, N_1 I, ..., N_n I], K = k B^T B
+    static Matrix K;
+    if (!m_host_ready && computeHostWeights() < 0)
+        exit(-1);
+    const int n = host::numNodes(m_host);
+    const int nd = m_ndm * (1 + n);
+    static Matrix B;
+    B.resize(m_ndm, nd);
+    B.Zero();
+    for (int i = 0; i < m_ndm; ++i)
+        B(i, i) = -1.0;
+    for (int a = 0; a < n; ++a)
+        for (int i = 0; i < m_ndm; ++i)
+            B(i, m_ndm * (1 + a) + i) = m_host_N(a);
+    K.resize(nd, nd);
+    K.addMatrixTransposeProduct(0.0, B, B, m_host_K);
     return K;
 }
