@@ -54,6 +54,11 @@ public:
     // node without the degenerate-tet misparse a plain 4-R-node line would
     // produce if fed 10 integers.
     ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNodesTet10, bool rot_flag, bool p_flag, double K, double KP);
+    // whole-host families tied through the inverse isoparametric map
+    // (tri6, quad4/8/9 in 2D or as a face in 3D, hexa8/20/27), node order of
+    // STKO / MpcCore; hostFamily is one of the host:: families in the .cpp.
+    // Translational DOFs only (no -rot, no -p).
+    ASDEmbeddedNodeElement(int tag, int cNode, const ID& rNodes, int hostFamily, double K);
     virtual ~ASDEmbeddedNodeElement();
 
     // domain
@@ -103,12 +108,15 @@ private:
     const Matrix& TET_3D_UR();
     const Matrix& TET_3D_UP();
     const Matrix& TET10_3D_U();
+    const Matrix& HOST_U();
+    int computeHostWeights();
 
 private:
 
-    // the nodal ids, the first one is the constrained node,
-    // the other 3 (triangle in 2D or shell triangle in 3D) or 4 (tetrahedron in 3D)
-    // are the retained nodes
+    // the nodal ids, the first one is the constrained node, the others are
+    // the retained nodes: 3 (triangle in 2D or shell triangle in 3D), 4
+    // (tetrahedron), 10 (quadratic tetrahedron) or a whole-host family
+    // (m_host)
     ID m_node_ids;
     // the nodes
     std::vector<Node*> m_nodes;
@@ -135,6 +143,14 @@ private:
     // initial displacements
     Vector m_U0;
     bool m_U0_computed = false;
+    // whole-host family (0 = the triangle / tetrahedron hosts above), and
+    // for it the shape functions of the host at the constrained node and the
+    // penalty scaled by the host size, computed once from the initial
+    // coordinates
+    int m_host = 0;
+    Vector m_host_N;
+    double m_host_K = 0.0;
+    bool m_host_ready = false;
 
 };
 
