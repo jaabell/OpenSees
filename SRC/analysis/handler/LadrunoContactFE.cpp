@@ -33,6 +33,7 @@
 #include <LadrunoContactProjection.h>
 #include <LadrunoFrictionKernel.h>
 #include <LadrunoMortarKernel.h>
+#include <LadrunoEdgeKernel.h>
 
 // penalty normal traction tn = kn <-gap>+ (Macaulay bracket): zero for gap >= 0,
 // so the contact never pulls.
@@ -53,8 +54,9 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, int ndm_,
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
     isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
     gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
-    smoothBand(0.0), smoothSlip(0.0)
+    smoothBand(0.0), smoothSlip(0.0), edgeAlm(false)
 {
+    for (int i = 0; i < 4; i++) edgeNode[i] = 0;
     // Connectivity = the slave node's DOF_Group; setID() fills myID with its
     // first ndm equation numbers (the translations), as for PenaltySP_FE.
     if (slaveNode != 0) {
@@ -81,8 +83,9 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node *slaveNode, Node **segNodes,
     muc(muc_ > 0.0 ? muc_ : 0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2),
     isTie(false), masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0),
     gapShiftAdjust(false), gapShiftAdjTol(0.0), gapShiftRefReady(false),
-    smoothBand(0.0), smoothSlip(0.0)
+    smoothBand(0.0), smoothSlip(0.0), edgeAlm(false)
 {
+    for (int i = 0; i < 4; i++) edgeNode[i] = 0;
     // Connectivity = slave DOF_Group + each segment-node DOF_Group; setID() fills
     // myID = [slave xyz | seg_1 xyz | ... | seg_nps xyz], the layout B assumes.
     if (slaveNode != 0) {
@@ -118,8 +121,9 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
     muc(0.0), npsS(nps_s), npsM(nps_m), slaveFacetIndex(slaveFacetIndex_),
     mortarOrder(ngp_ >= 1 ? ngp_ : 2), isTie(isTie_), masterFacetIndex(masterFacetIndex_),
     hasGapShift(false), gapShiftOffset(0.0), gapShiftAdjust(false), gapShiftAdjTol(0.0),
-    gapShiftRefReady(false), smoothBand(0.0), smoothSlip(0.0)
+    gapShiftRefReady(false), smoothBand(0.0), smoothSlip(0.0), edgeAlm(false)
 {
+    for (int i = 0; i < 4; i++) edgeNode[i] = 0;
     for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
     // Connectivity = each slave facet DOF_Group, then each master facet
     // DOF_Group; setID() fills myID = [slave_0 xyz | ... | master_0 xyz | ...],
@@ -141,6 +145,34 @@ LadrunoContactFE::LadrunoContactFE(int tag, Node **slaveNodes, int nps_s,
     for (int i = nps_s; i < 4; i++) mortarSlave[i] = 0;
     for (int i = nps_m; i < 4; i++) mortarMaster[i] = 0;
     for (int i = 0; i < 4; i++) segNode[i] = 0;
+    for (int d = 0; d < 3; d++) { orientDir[d] = odir[d]; planeP0[d] = 0.0; planeN[d] = 0.0; }
+}
+
+LadrunoContactFE::LadrunoContactFE(int tag, Node *sNodeA, Node *sNodeB, Node *mNodeA,
+                                   Node *mNodeB, double epsN, const double odir[3],
+                                   int contactTag_, Domain *dom, double mu_, double kt_,
+                                   double cohesion_, double tauMax_, bool consistentTan_,
+                                   bool edgeAlm_)
+  : FE_Element(tag, /*numDOF_Group=*/4, /*ndof=*/12),
+    resid(12), tang(12, 12),
+    mode(EDGE_EDGE), theSlave(0), ndm(3), kn(epsN), nps(0),
+    theDomain(dom), contactTag(contactTag_), segIndex(0), consistentNormal(false),
+    kt(kt_), mu(mu_), cohesion(cohesion_), tauMax(tauMax_), consistentTan(consistentTan_),
+    muc(0.0), npsS(0), npsM(0), slaveFacetIndex(0), mortarOrder(2), isTie(false),
+    masterFacetIndex(0), hasGapShift(false), gapShiftOffset(0.0), gapShiftAdjust(false),
+    gapShiftAdjTol(0.0), gapShiftRefReady(false), smoothBand(0.0), smoothSlip(0.0),
+    edgeAlm(edgeAlm_)
+{
+    // Connectivity = the four edge-node DOF_Groups; setID() fills
+    // myID = [sa xyz | sb xyz | ma xyz | mb xyz], the layout of edgeGeom()
+    edgeNode[0] = sNodeA; edgeNode[1] = sNodeB; edgeNode[2] = mNodeA; edgeNode[3] = mNodeB;
+    for (int i = 0; i < 4; i++)
+        if (edgeNode[i] != 0) {
+            DOF_Group *dg = edgeNode[i]->getDOF_GroupPtr();
+            if (dg != 0) myDOF_Groups(i) = dg->getTag();
+        }
+    for (int i = 0; i < 4; i++) { segNode[i] = 0; mortarSlave[i] = 0; mortarMaster[i] = 0; }
+    for (int i = 0; i < 4; i++) gapShiftRef[i] = 0.0;
     for (int d = 0; d < 3; d++) { orientDir[d] = odir[d]; planeP0[d] = 0.0; planeN[d] = 0.0; }
 }
 
@@ -201,6 +233,9 @@ LadrunoContactFE::setID(void)
     case MORTAR:
         for (int i = 0; i < npsS; i++) nodes[nn++] = mortarSlave[i];
         for (int i = 0; i < npsM; i++) nodes[nn++] = mortarMaster[i];
+        break;
+    case EDGE_EDGE:
+        for (int i = 0; i < 4; i++) nodes[nn++] = edgeNode[i];
         break;
     default:
         return FE_Element::setID();
@@ -727,6 +762,64 @@ LadrunoContactFE::getResidual(Integrator *theIntegrator)
                     cd->accumulateMortarGap(contactTag, mortarSlave[I]->getTag(), this->getTag(),
                                             0.0, 0.0, kn);
         }
+    } else if (mode == EDGE_EDGE) {
+        // Edge-to-edge penalty: f = tN B, tN = -p, p = min(0, lambdaN + epsN gN)
+        // (lambdaN = 0 without -edgeAlm, the penalty tN = epsN <-gN>+), with the
+        // body-fixed sign of the pair. The master edge takes the opposite
+        // reaction (the rows of B sum to zero).
+        LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+        LadrunoContactDomain::EdgeEdgeState *st = 0;
+        int committedSign = 0;
+        if (cd != 0) {
+            st = &cd->getOrCreateEdgeEdgeState(contactTag, edgeNode[0]->getTag(),
+                                               edgeNode[1]->getTag(), edgeNode[2]->getTag(),
+                                               edgeNode[3]->getTag());
+            committedSign = st->signN;
+        }
+        double gN, n[3], s, t, B[4][3]; int usedSign = 0;
+        if (edgeGeom(gN, n, s, t, B, committedSign, &usedSign)) {
+            // the sign is captured once, at the first engagement, and then kept
+            if (st != 0 && st->signN == 0) st->signN = usedSign;
+            double lambdaN = (edgeAlm && st != 0) ? st->lambdaN : 0.0;
+            double pAug = lambdaN + kn * gN;
+            if (edgeAlm && st != 0) { st->gN = gN; st->epsN = kn; }
+            if (pAug < 0.0) {
+                double tN = -pAug;
+                for (int i = 0; i < 4; i++)
+                    for (int d = 0; d < 3; d++)
+                        resid(3 * i + d) = tN * B[i][d];
+
+                // Coulomb/Tresca friction on the slip of the closest points; a
+                // frictionless pair touches no state
+                if (st != 0 && hasFriction()) {
+                    double gTvec[3]; edgeSlip(s, t, n, gTvec);
+                    // the origin is captured at the first engagement, so a
+                    // tangential drift before contact does not become a stick traction
+                    if (!st->engaged) {
+                        for (int d = 0; d < 3; d++) st->gT0[d] = gTvec[d];
+                        st->engaged = true;
+                    }
+                    double gTeff[3];
+                    for (int d = 0; d < 3; d++) gTeff[d] = gTvec[d] - st->gT0[d];
+                    double tFric[3], gpTtrial[3];
+                    LadrunoFrictionKernel::frictionReturnMap(gTeff, st->gpT, tN, kt, mu, tFric,
+                                                             gpTtrial, cohesion, tauMax);
+                    for (int d = 0; d < 3; d++) st->gpTtrial[d] = gpTtrial[d];
+                    // scattered with the weights of the normal force
+                    double w[4] = { 1.0 - s, s, -(1.0 - t), -t };
+                    for (int i = 0; i < 4; i++)
+                        for (int d = 0; d < 3; d++)
+                            resid(3 * i + d) += w[i] * tFric[d];
+                }
+            }
+        } else if (edgeAlm && st != 0) {
+            // no longer a crossing (the pair slid past an end of an edge or
+            // turned parallel): drop the gap so that the next commit does not
+            // augment from it and the penetration query ignores the pair;
+            // lambdaN is kept until the pair crosses again
+            st->gN = 0.0;
+            st->epsN = 0.0;
+        }
     }
     return resid;
 }
@@ -853,6 +946,116 @@ LadrunoContactFE::addMortarTieForce(const double D[4][4], const double M[4][4],
         }
 }
 
+bool
+LadrunoContactFE::edgeGeom(double &gN, double n[3], double &s, double &t, double B[4][3],
+                           int committedSign, int *outSign) const
+{
+    if (mode != EDGE_EDGE) return false;
+    double X[4][3];
+    for (int i = 0; i < 4; i++) {
+        if (edgeNode[i] == 0) return false;
+        const Vector &Xi = edgeNode[i]->getCrds();
+        const Vector &ui = edgeNode[i]->getTrialDisp();
+        for (int d = 0; d < 3; d++) X[i][d] = Xi(d) + ui(d);
+    }
+    LadrunoEdgeKernel::ClosestResult cr =
+        LadrunoEdgeKernel::closestPtSegSeg(X[0], X[1], X[2], X[3]);
+    // only a well-conditioned crossing strictly inside both edges is an
+    // edge-to-edge contact, where |gN| is the distance of the closest points
+    if (cr.status != LadrunoEdgeKernel::EE_OK || !cr.interior) return false;
+    s = cr.s; t = cr.t;
+    double d1[3], d2[3];
+    for (int d = 0; d < 3; d++) { d1[d] = X[1][d] - X[0][d]; d2[d] = X[3][d] - X[2][d]; }
+    // A first capture with orientDir perpendicular to n cannot decide the sign
+    // (it would be fixed by round-off for the life of the pair): the capture is
+    // deferred and the evaluation is treated as no contact. On a symmetric
+    // configuration that can last, so it is reported once per contact.
+    int chosen = 0;
+    gN = LadrunoEdgeKernel::edgeGap(cr.c1, cr.c2, d1, d2, committedSign, orientDir, n, &chosen);
+    if (chosen == 0) {
+        LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+        if (cd != 0 && cd->warnOnce(contactTag, LadrunoContactDomain::WARN_EDGE_SIGN_DEFER))
+            opserr << "WARNING LadrunoContactFE - contact " << contactTag << ": the sign of an "
+                      "edge-to-edge pair is not decided yet (the orientation reference is "
+                      "perpendicular to the common normal of the edges); the pair carries no "
+                      "force until the geometry decides it. Give -outward with a component "
+                      "along the expected contact normal.\n";
+        return false;
+    }
+    if (outSign != 0) *outSign = chosen;
+    LadrunoEdgeKernel::bOperator(n, s, t, B);
+    return true;
+}
+
+void
+LadrunoContactFE::edgeSlip(double s, double t, const double n[3], double gT[3]) const
+{
+    const Vector &ua0 = edgeNode[0]->getTrialDisp();
+    const Vector &ua1 = edgeNode[1]->getTrialDisp();
+    const Vector &ub0 = edgeNode[2]->getTrialDisp();
+    const Vector &ub1 = edgeNode[3]->getTrialDisp();
+    double drel[3];
+    for (int d = 0; d < 3; d++)
+        drel[d] = ((1.0 - s) * ua0(d) + s * ua1(d)) - ((1.0 - t) * ub0(d) + t * ub1(d));
+    LadrunoFrictionKernel::tangentPart(drel, n, gT);
+}
+
+void
+LadrunoContactFE::addEdgeTang(double fact, bool initialStiff)
+{
+    // K = epsN B^T B on the active set of the residual (symmetric, rank one,
+    // positive semidefinite) with the normal, s and t frozen. The geometric
+    // part (the variation of n, s and t with the displacements) is not
+    // included: it vanishes for a pair that does not rotate or slide, and
+    // Newton converges linearly otherwise. The active set uses the augmented
+    // pressure lambdaN + epsN gN of the residual (lambdaN is constant within
+    // the iterations of a step).
+    LadrunoContactDomain *cd = (theDomain != 0) ? theDomain->getLadrunoContactDomain() : 0;
+    LadrunoContactDomain::EdgeEdgeState *st = 0;
+    int committedSign = 0;
+    if (cd != 0) {
+        st = &cd->getOrCreateEdgeEdgeState(contactTag, edgeNode[0]->getTag(),
+                                           edgeNode[1]->getTag(), edgeNode[2]->getTag(),
+                                           edgeNode[3]->getTag());
+        committedSign = st->signN;
+    }
+    double lambdaN = (edgeAlm && st != 0) ? st->lambdaN : 0.0;
+    double gN, n[3], s, t, B[4][3]; int usedSign = 0;
+    if (!edgeGeom(gN, n, s, t, B, committedSign, &usedSign) || lambdaN + kn * gN >= 0.0)
+        return;
+    for (int i = 0; i < 4; i++)
+        for (int di = 0; di < 3; di++)
+            for (int j = 0; j < 4; j++)
+                for (int dj = 0; dj < 3; dj++)
+                    tang(3 * i + di, 3 * j + dj) += fact * kn * B[i][di] * B[j][dj];
+    if (!hasFriction() || (!initialStiff && st == 0))
+        return;                       // no engine: the residual carries no friction either
+    // friction block w_A w_B K_ss, w = [(1-s), s, -(1-t), -t], at the slip and
+    // committed state of the residual; the initial-stiffness path uses the
+    // stick block (gTeff = gpT = 0), positive semidefinite and engine-free
+    double tN = -(lambdaN + kn * gN);
+    double Kss[3][3];
+    if (initialStiff) {
+        double zero[3] = {0.0, 0.0, 0.0};
+        LadrunoFrictionKernel::frictionTangentBlock(zero, zero, n, tN, kn, kt, mu, false, Kss,
+                                                    cohesion, tauMax);
+    } else {
+        double gTvec[3]; edgeSlip(s, t, n, gTvec);
+        double gTeff[3];
+        for (int d = 0; d < 3; d++) gTeff[d] = st->engaged ? (gTvec[d] - st->gT0[d]) : 0.0;
+        LadrunoFrictionKernel::frictionTangentBlock(gTeff, st->gpT, n, tN, kn, kt, mu,
+                                                    consistentTan, Kss, cohesion, tauMax);
+    }
+    double w[4] = { 1.0 - s, s, -(1.0 - t), -t };
+    for (int A = 0; A < 4; A++)
+        for (int Bn = 0; Bn < 4; Bn++) {
+            double wab = fact * w[A] * w[Bn];
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                    tang(3 * A + i, 3 * Bn + j) += wab * Kss[i][j];
+        }
+}
+
 const Matrix &
 LadrunoContactFE::getTangent(Integrator *theIntegrator)
 {
@@ -908,6 +1111,8 @@ LadrunoContactFE::addKtToTang(double fact)
         }
     } else if (mode == MORTAR) {
         addMortarTang(fact);
+    } else if (mode == EDGE_EDGE) {
+        addEdgeTang(fact, /*initialStiff=*/false);
     }
 }
 
@@ -941,6 +1146,9 @@ LadrunoContactFE::addKiToTang(double fact)
         // the penalty part equals the current tangent (variation of D, M and n
         // not included)
         addMortarTang(fact, /*initialStiff=*/true);
+    } else if (mode == EDGE_EDGE) {
+        // the penalty part equals the current tangent; friction uses the stick block
+        addEdgeTang(fact, /*initialStiff=*/true);
     }
 }
 
