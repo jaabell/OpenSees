@@ -1166,12 +1166,22 @@ int OPS_peerNGA()
     return 0;
 }
 
+// a user `domainChange` (openseespy / the TclWrapper) is a stage barrier for
+// recorder ladruno (counter defined in recorder/LadrunoRecorder.cpp, built
+// only with HDF5); internal Domain::domainChange() calls do not bump it
+#ifdef _HDF5
+extern void ladrunoNoteUserStageBarrier(void);
+#endif
+
 int OPS_domainChange()
 {
     Domain* theDomain = OPS_GetDomain();
     if (theDomain == 0) return -1;
 
     theDomain->domainChange();
+#ifdef _HDF5
+    ladrunoNoteUserStageBarrier();
+#endif
 
     return 0;
 }
