@@ -1904,6 +1904,9 @@ int OPS_Integrator()
     } else if (strcmp(type,"CentralDifferenceLadruno") == 0) {
 	ti = (TransientIntegrator*)OPS_CentralDifferenceLadruno();
 
+    } else if (strcmp(type,"ExplicitBathe") == 0) {
+	ti = (TransientIntegrator*)OPS_ExplicitBathe();
+
     } else if (strcmp(type,"CentralDifferenceAlternative") == 0) {
 	ti = (TransientIntegrator*)OPS_CentralDifferenceAlternative();
 

@@ -592,6 +592,7 @@ void* OPS_CollocationHSFixedNumIter();
 void* OPS_Newmark1();
 void* OPS_WilsonTheta();
 void* OPS_CentralDifferenceLadruno();
+void* OPS_ExplicitBathe();
 void* OPS_CentralDifference();
 void* OPS_CentralDifferenceAlternative();
 void* OPS_CentralDifferenceNoDamping();
