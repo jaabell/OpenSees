@@ -31,6 +31,7 @@
 #include <LadrunoContactBucketSort.h>
 #include <LadrunoMortarKernel.h>
 #include <LadrunoEdgeKernel.h>
+#include <LadrunoContact2DKernel.h>
 #include <Matrix.h>
 #include <Domain.h>
 #include <AnalysisModel.h>
@@ -66,13 +67,15 @@ ladrunoContactFatal(void)
     return -1;
 }
 
-// Pre-flight one contact surface: every node must exist and carry 3D
-// coordinates (getCrds()(2) is unchecked in release builds, so a 2D node would
-// read out of bounds).
+// Pre-flight one contact surface: every node must exist and the surface must
+// be 2D or 3D as a whole (getCrds()(2) is unchecked in release builds, so a 2D
+// node in a 3D lane would read out of bounds). The dimension is returned in
+// *dimOut (0 for an empty surface).
 static bool
-ladrunoSurfaceNodesOk(Domain *dom, int ctag, const LadrunoContactSurface *s)
+ladrunoSurfaceNodesOk(Domain *dom, int ctag, const LadrunoContactSurface *s, int *dimOut = 0)
 {
     const ID &tags = s->getNodeTags();
+    int dim = 0;
     for (int i = 0; i < tags.Size(); i++) {
         Node *n = dom->getNode(tags(i));
         if (n == 0) {
@@ -82,13 +85,190 @@ ladrunoSurfaceNodesOk(Domain *dom, int ctag, const LadrunoContactSurface *s)
             return false;
         }
         int nd = n->getCrds().Size();
-        if (nd != 3) {
+        if (nd != 2 && nd != 3) {
             opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
                    << ": node " << tags(i) << " of contactSurface " << s->getTag()
-                   << " has " << nd << "D coordinates; surface contact needs 3D nodes\n";
+                   << " has " << nd << "D coordinates; contact needs 2D or 3D nodes\n";
+            return false;
+        }
+        if (dim == 0) {
+            dim = nd;
+        } else if (nd != dim) {
+            opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
+                   << ": contactSurface " << s->getTag() << " mixes 2D and 3D nodes (node "
+                   << tags(i) << ")\n";
             return false;
         }
     }
+    if (dimOut != 0) *dimOut = dim;
+    return true;
+}
+
+// Both surfaces of one contact must have the same dimension; returns it in
+// *dimOut (2 or 3).
+static bool
+ladrunoContactPairDim(Domain *dom, int ctag, const LadrunoContactSurface *ms,
+                      const LadrunoContactSurface *ss, int *dimOut)
+{
+    int mdim = 0, sdim = 0;
+    if (!ladrunoSurfaceNodesOk(dom, ctag, ms, &mdim) ||
+        !ladrunoSurfaceNodesOk(dom, ctag, ss, &sdim))
+        return false;
+    if (mdim != 0 && sdim != 0 && mdim != sdim) {
+        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
+               << ": the master surface " << ms->getTag() << " is " << mdim
+               << "D and the slave surface " << ss->getTag() << " is " << sdim
+               << "D; both surfaces of a contact must have one dimension\n";
+        return false;
+    }
+    *dimOut = (mdim == 2 || sdim == 2) ? 2 : 3;
+    return true;
+}
+
+// Minimum initial length of the 2-node segments of a 2D surface (the
+// relative gauge of LadrunoContact2DKernel); <= 0 with a message when a
+// segment has zero length or the surface has none.
+static double
+ladrunoMinSegLength2D(Domain *dom, int ctag, const LadrunoContactSurface *s)
+{
+    const ID &tags = s->getNodeTags();
+    int nSeg = tags.Size() / 2;
+    double Lref = 0.0;
+    for (int seg = 0; seg < nSeg; seg++) {
+        const Vector &A = dom->getNode(tags(2 * seg))->getCrds();
+        const Vector &B = dom->getNode(tags(2 * seg + 1))->getCrds();
+        double dx = B(0) - A(0), dy = B(1) - A(1);
+        double L = std::sqrt(dx * dx + dy * dy);
+        if (!(L > 0.0)) {
+            opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
+                   << ": segment " << seg << " of 2D contactSurface " << s->getTag()
+                   << " has zero length\n";
+            return -1.0;
+        }
+        if (Lref <= 0.0 || L < Lref) Lref = L;
+    }
+    if (nSeg <= 0) {
+        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
+               << ": 2D contactSurface " << s->getTag() << " has no segment\n";
+        return -1.0;
+    }
+    return Lref;
+}
+
+// Automatic penalty of a 2D master segment: the 2D form of
+// ladrunoResolveAutoKn, kn = 0.10 mean over the two nodes of n^T K_node n
+// from the initial stiffness of the first 2-DOF-per-node element that holds
+// both nodes, n the reference normal sigma perp(t)/|t|.
+static double
+ladrunoResolveAutoKn2D(Domain *theDomain, Node **segNodes, double sigma)
+{
+    const double F_SI = 0.10;
+    if (segNodes[0] == 0 || segNodes[1] == 0) return -1.0;
+    const Vector &XA = segNodes[0]->getCrds();
+    const Vector &XB = segNodes[1]->getCrds();
+    const double t[2] = { XB(0) - XA(0), XB(1) - XA(1) };
+    const double L = std::sqrt(t[0]*t[0] + t[1]*t[1]);
+    if (!(L > 0.0)) return -1.0;
+    double p[2];
+    LadrunoContact2DKernel::perp2(t, p);
+    const double n[2] = { sigma * p[0] / L, sigma * p[1] / L };
+    int segTags[2] = { segNodes[0]->getTag(), segNodes[1]->getTag() };
+    ElementIter &theEle = theDomain->getElements();
+    Element *e;
+    while ((e = theEle()) != 0) {
+        const ID &en = e->getExternalNodes();
+        int nn = en.Size();
+        if (nn <= 0 || e->getNumDOF() != 2 * nn) continue;   // not a 2-DOF/node solid
+        int loc[2]; bool allIn = true;
+        for (int k = 0; k < 2; k++) {
+            loc[k] = en.getLocation(segTags[k]);
+            if (loc[k] < 0) { allIn = false; break; }
+        }
+        if (!allIn) continue;
+        const Matrix &K = e->getInitialStiff();
+        if (K.noRows() != 2 * nn || K.noCols() != 2 * nn) return -1.0;
+        double acc = 0.0;
+        for (int k = 0; k < 2; k++) {
+            int c = 2 * loc[k];
+            double Kn0 = K(c + 0, c + 0) * n[0] + K(c + 0, c + 1) * n[1];
+            double Kn1 = K(c + 1, c + 0) * n[0] + K(c + 1, c + 1) * n[1];
+            acc += n[0] * Kn0 + n[1] * Kn1;
+        }
+        double kn = F_SI * acc / 2.0;
+        return (kn > 0.0) ? kn : -1.0;
+    }
+    return -1.0;
+}
+
+// Orientation of a 2D interface, one sign for the whole master surface: the
+// direction toward the slave side is -outward when given, else the slave
+// centroid minus the master centroid (each node counted once), and every
+// master segment votes sign(perp(t).refDir). The interface is refused when
+// the reference is degenerate (a flush interface with coincident centroids,
+// or a direction tangent to every segment) or when the segments disagree (a
+// strongly curved or inconsistently wound master), instead of guessing a
+// per-segment sign.
+static bool
+ladruno2DOrientationVote(Domain *theDomain, int ctag, bool hasOutward, const double outward[3],
+                         const ID &mTags, int nSeg, const ID &sTags, double Lref,
+                         double &sigmaOut)
+{
+    double refDir[2] = { 0.0, 0.0 };
+    if (hasOutward) {
+        refDir[0] = outward[0]; refDir[1] = outward[1];
+    } else {
+        double mc2[2] = { 0.0, 0.0 }; int mcn = 0;
+        std::set<int> mseen;
+        for (int i = 0; i < mTags.Size(); i++) {
+            if (!mseen.insert(mTags(i)).second) continue;
+            const Vector &X = theDomain->getNode(mTags(i))->getCrds();
+            mc2[0] += X(0); mc2[1] += X(1); mcn++;
+        }
+        double sc2[2] = { 0.0, 0.0 }; int scn = 0;
+        std::set<int> sseen;
+        for (int i = 0; i < sTags.Size(); i++) {
+            if (!sseen.insert(sTags(i)).second) continue;
+            const Vector &X = theDomain->getNode(sTags(i))->getCrds();
+            sc2[0] += X(0); sc2[1] += X(1); scn++;
+        }
+        if (mcn > 0 && scn > 0) {
+            refDir[0] = sc2[0] / scn - mc2[0] / mcn;
+            refDir[1] = sc2[1] / scn - mc2[1] / mcn;
+        }
+    }
+    // a centroid offset below 1e-6 Lref is a flush interface
+    bool voteMagOk = true;
+    if (!hasOutward) {
+        const double magFloor = 1.0e-6 * Lref;
+        voteMagOk = (refDir[0] * refDir[0] + refDir[1] * refDir[1] > magFloor * magFloor);
+    }
+    int votePlus = 0, voteMinus = 0;
+    for (int seg = 0; seg < nSeg; seg++) {
+        const Vector &A = theDomain->getNode(mTags(2 * seg))->getCrds();
+        const Vector &B = theDomain->getNode(mTags(2 * seg + 1))->getCrds();
+        const double t[2] = { B(0) - A(0), B(1) - A(1) };
+        double sg = LadrunoContact2DKernel::sigmaFromRef2D(t, refDir);
+        if (sg > 0.0) votePlus++;
+        else if (sg < 0.0) voteMinus++;
+    }
+    if ((votePlus == 0 && voteMinus == 0) || !voteMagOk) {
+        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag << ": the "
+               << (hasOutward ? "given -outward direction is zero or tangent to the master "
+                                "segments"
+                              : "slave and master centroids nearly coincide (a flush "
+                                "interface)")
+               << ", so the side of the 2D interface cannot be decided; give -outward ox oy"
+                  " (or -outward winding for node-to-segment contact)\n";
+        return false;
+    }
+    if (votePlus > 0 && voteMinus > 0) {
+        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag << ": the "
+                  "segments of the 2D master surface disagree on the side of the slave ("
+               << votePlus << " against " << voteMinus << "; a strongly curved, closed or "
+                  "inconsistently wound master); split the contact or give -outward winding\n";
+        return false;
+    }
+    sigmaOut = (votePlus > 0) ? 1.0 : -1.0;
     return true;
 }
 
@@ -438,6 +618,7 @@ LadrunoContactHandler::handle(const ID *nodesLast)
     if (cd != 0) {
         cd->clearNtsForce();     // the force readout keys are rebuilt below
         cd->frictionGCBegin();   // friction slots of pairs not rebuilt below are collected
+        cd->clearVtx2DSide();    // 2D vertex side signs are captured again in each pairing
 
         // A slave node in the slave sets of two contacts gets two adapters and
         // the tractions add up; report it.
@@ -477,10 +658,229 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                        << ": needs a -master segment surface and a -slave node surface\n";
                 return ladrunoContactFatal();
             }
-            if (!ladrunoSurfaceNodesOk(theDomain, ct.tag, ms) ||
-                !ladrunoSurfaceNodesOk(theDomain, ct.tag, ss))
+            int pairDim = 3;
+            if (!ladrunoContactPairDim(theDomain, ct.tag, ms, ss, &pairDim))
                 return ladrunoContactFatal();
             int nps = ms->getNodesPerSeg();
+            if (pairDim == 2) {
+                // ---- 2D node-to-segment contact (LadrunoContact2DKernel) ----
+                if (nps != 2) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - contact " << ct.tag
+                           << ": a 2D master surface needs nodesPerSeg 2 (got " << nps << ")\n";
+                    return ladrunoContactFatal();
+                }
+                if (ct.consistentNormal &&
+                    cd->warnOnce(ct.tag, LadrunoContactDomain::WARN_2D_GEOMTAN_NOOP))
+                    opserr << "WARNING LadrunoContactHandler::handle() - contact " << ct.tag
+                           << ": -geomtan has no effect on a 2D contact (the curvature term "
+                              "of the 2D segment tangent is not implemented)\n";
+                if (!ct.knAuto && ct.kn <= 0.0) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - contact " << ct.tag
+                           << ": segment contact needs kn > 0 or kn auto (got " << ct.kn << ")\n";
+                    return ladrunoContactFatal();
+                }
+                const ID &mTags = ms->getNodeTags();
+                const ID &sTags = ss->getNodeTags();
+                int nSeg = mTags.Size() / 2;
+                double Lref = ladrunoMinSegLength2D(theDomain, ct.tag, ms);
+                if (!(Lref > 0.0))
+                    return ladrunoContactFatal();
+                // Chain integrity: the surface order is the adjacency of the
+                // ownership rule and of the vertex pairs, so a node shared by two
+                // segments must be the end of segment k and the start of segment
+                // k + 1 (a closed loop wraps from the last to the first); a
+                // permuted, reversed or forked listing is refused.
+                {
+                    std::map<int, std::vector<std::pair<int, int> > > occ;
+                    for (int seg = 0; seg < nSeg; seg++) {
+                        occ[mTags(2 * seg)].push_back(std::make_pair(seg, 0));
+                        occ[mTags(2 * seg + 1)].push_back(std::make_pair(seg, 1));
+                    }
+                    for (std::map<int, std::vector<std::pair<int, int> > >::const_iterator
+                             it = occ.begin(); it != occ.end(); ++it) {
+                        const std::vector<std::pair<int, int> > &v = it->second;
+                        if (v.size() <= 1) continue;
+                        bool okLink = false;
+                        if (v.size() == 2 && v[0].second != v[1].second) {
+                            int tailSeg = (v[0].second == 1) ? v[0].first : v[1].first;
+                            int headSeg = (v[0].second == 1) ? v[1].first : v[0].first;
+                            if (nSeg > 1 && headSeg == (tailSeg + 1) % nSeg)
+                                okLink = true;
+                        }
+                        if (!okLink) {
+                            opserr << "FATAL LadrunoContactHandler::handle() - contact "
+                                   << ct.tag << ": node " << it->first << " of 2D master "
+                                      "surface " << ct.masterSurfTag << " is shared by "
+                                      "segments " << v[0].first << " and " << v[1].first
+                                   << " that are not consecutive head to tail; list the "
+                                      "segments as n0 n1 n1 n2 ... in chain order\n";
+                            return ladrunoContactFatal();
+                        }
+                    }
+                }
+                // -outward winding replaces the vote, so a second run wound the
+                // other way would not be caught: the master must be one chain
+                if (ct.outwardWinding) {
+                    for (int seg = 0; seg + 1 < nSeg; seg++) {
+                        if (mTags(2 * seg + 1) == mTags(2 * seg + 2)) continue;
+                        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ct.tag
+                               << ": -outward winding needs 2D master surface "
+                               << ct.masterSurfTag << " to be one connected chain, but "
+                                  "segment " << seg << " ends at node " << mTags(2 * seg + 1)
+                               << " and segment " << seg + 1 << " starts at node "
+                               << mTags(2 * seg + 2) << "; declare one contact per chain\n";
+                        return ladrunoContactFatal();
+                    }
+                }
+                double sigma = 0.0;
+                if (ct.outwardWinding)
+                    sigma = 1.0;     // the slave is to the left of the traversal
+                else if (!ladruno2DOrientationVote(theDomain, ct.tag, ct.hasOutward, ct.outward,
+                                                   mTags, nSeg, sTags, Lref, sigma))
+                    return ladrunoContactFatal();
+                // concave corners (turn > 0 seen from the contact side), the only
+                // vertices whose pair can carry force
+                struct LadrunoVtx2D { int segPrev, segNext; Node *prevFar, *vtx, *nextFar; };
+                std::vector<LadrunoVtx2D> vtx2d;
+                for (int seg = 0; nSeg >= 2 && seg < nSeg; seg++) {
+                    int nxt = (seg + 1) % nSeg;
+                    if (mTags(2 * seg + 1) != mTags(2 * nxt)) continue;
+                    Node *pF = theDomain->getNode(mTags(2 * seg));
+                    Node *vN = theDomain->getNode(mTags(2 * seg + 1));
+                    Node *nF = theDomain->getNode(mTags(2 * nxt + 1));
+                    const Vector &XP = pF->getCrds();
+                    const Vector &XV = vN->getCrds();
+                    const Vector &XN = nF->getCrds();
+                    const double tPrev[2] = { XV(0) - XP(0), XV(1) - XP(1) };
+                    const double tNext[2] = { XN(0) - XV(0), XN(1) - XV(1) };
+                    double turn = sigma * (tPrev[0] * tNext[1] - tPrev[1] * tNext[0]);
+                    if (turn > 0.0) {
+                        LadrunoVtx2D v;
+                        v.segPrev = seg; v.segNext = nxt;
+                        v.prevFar = pF; v.vtx = vN; v.nextFar = nF;
+                        vtx2d.push_back(v);
+                    }
+                }
+                // broad phase in the plane z = 0
+                std::vector<double> segCoords((size_t)nSeg * 2 * 3, 0.0);
+                for (int seg = 0; seg < nSeg; seg++) {
+                    double *S = &segCoords[(size_t)seg * 2 * 3];
+                    for (int k = 0; k < 2; k++) {
+                        const Vector &X = theDomain->getNode(mTags(seg * 2 + k))->getCrds();
+                        S[k * 3 + 0] = X(0); S[k * 3 + 1] = X(1); S[k * 3 + 2] = 0.0;
+                    }
+                }
+                LadrunoContactBucketSort::Grid grid(nSeg, 2, segCoords.data(), ct.cellFrac, 1.0);
+                std::vector<int> cand(nSeg);
+                for (int si = 0; si < sTags.Size(); si++) {
+                    Node *sn = theDomain->getNode(sTags(si));
+                    // the first two DOFs are the translations; more DOFs (a
+                    // rotation, a pressure) are carried along and not coupled
+                    if (sn == 0 || sn->getNumberDOF() < 2) {
+                        opserr << "FATAL LadrunoContactHandler::handle() - contact " << ct.tag
+                               << " slave node " << sTags(si) << " ndf="
+                               << (sn != 0 ? sn->getNumberDOF() : 0) << " < 2\n";
+                        return ladrunoContactFatal();
+                    }
+                    const Vector &Xs0 = sn->getCrds();
+                    double slavePt[3] = { Xs0(0), Xs0(1), 0.0 };
+                    int nCand = grid.candidates(slavePt, cand.data());
+                    for (int ci = 0; ci < nCand; ci++) {
+                        int seg = cand[ci];
+                        Node *segNodes[2];
+                        for (int k = 0; k < 2; k++) {
+                            Node *mn = theDomain->getNode(mTags(seg * 2 + k));
+                            if (mn == 0 || mn->getNumberDOF() < 2) {
+                                opserr << "FATAL LadrunoContactHandler::handle() - contact "
+                                       << ct.tag << " master segment " << seg << " node "
+                                       << mTags(seg * 2 + k) << ": ndf < 2 (or node absent)\n";
+                                return ladrunoContactFatal();
+                            }
+                            segNodes[k] = mn;
+                        }
+                        double knUse = ct.kn;
+                        if (ct.knAuto) {
+                            knUse = ladrunoResolveAutoKn2D(theDomain, segNodes, sigma);
+                            if (knUse <= 0.0) {
+                                opserr << "FATAL LadrunoContactHandler::handle() - contact "
+                                       << ct.tag << " slave node " << sTags(si) << " segment "
+                                       << seg << ": kn auto could not size a penalty (no "
+                                          "owning element with 2 DOFs per node). Give an "
+                                          "explicit kn.\n";
+                                return ladrunoContactFatal();
+                            }
+                        }
+                        // neighbours in surface order (null at an open end)
+                        Node *prevFar = 0, *nextFar = 0;
+                        if (nSeg > 1) {
+                            int prv = (seg + nSeg - 1) % nSeg;
+                            if (prv != seg && mTags(2 * prv + 1) == mTags(2 * seg))
+                                prevFar = theDomain->getNode(mTags(2 * prv));
+                            int nx2 = (seg + 1) % nSeg;
+                            if (nx2 != seg && mTags(2 * seg + 1) == mTags(2 * nx2))
+                                nextFar = theDomain->getNode(mTags(2 * nx2 + 1));
+                        }
+                        LadrunoContactFE *fe = new LadrunoContactFE(
+                            numFe++, sn, segNodes, /*nps=*/2, /*ndm2=*/2, knUse, sigma, Lref,
+                            prevFar, nextFar, ct.kt, ct.mu, ct.consistentTan, ct.muc,
+                            theDomain, ct.tag, seg, ct.cohesion, ct.tauMax);
+                        if (fe == 0) return -5;
+                        theModel->addFE_Element(fe);
+                        if (ct.hasFriction())
+                            cd->frictionGCMark(ct.tag, sTags(si), seg);
+                        // an end cap at each open end of the chain (pair keys
+                        // 2 nSeg + seg and 3 nSeg + seg, apart from the segments
+                        // and the concave vertices)
+                        for (int end = 0; end < 2; end++) {
+                            if ((end == 0 && prevFar != 0) || (end == 1 && nextFar != 0))
+                                continue;
+                            Node *capNodes[1] = { segNodes[end] };
+                            int capIndex = (end == 0 ? 2 : 3) * nSeg + seg;
+                            LadrunoContactFE *feCap = new LadrunoContactFE(
+                                numFe++, sn, capNodes, /*nps=*/1, /*ndm2=*/2, knUse, sigma,
+                                Lref, end == 0 ? 0 : segNodes[0], end == 0 ? segNodes[1] : 0,
+                                ct.kt, ct.mu, ct.consistentTan, ct.muc, theDomain, ct.tag,
+                                capIndex, ct.cohesion, ct.tauMax);
+                            if (feCap == 0) return -5;
+                            theModel->addFE_Element(feCap);
+                            if (ct.hasFriction())
+                                cd->frictionGCMark(ct.tag, sTags(si), capIndex);
+                        }
+                    }
+                    // concave vertex pairs next to the candidate segments (pair
+                    // key nSeg + segPrev)
+                    for (size_t vi = 0; vi < vtx2d.size(); vi++) {
+                        const LadrunoVtx2D &v = vtx2d[vi];
+                        bool nearV = false;
+                        for (int ci = 0; ci < nCand && !nearV; ci++)
+                            if (cand[ci] == v.segPrev || cand[ci] == v.segNext)
+                                nearV = true;
+                        if (!nearV) continue;
+                        double knV = ct.kn;
+                        if (ct.knAuto) {
+                            Node *prevSeg[2] = { v.prevFar, v.vtx };
+                            knV = ladrunoResolveAutoKn2D(theDomain, prevSeg, sigma);
+                            if (knV <= 0.0) {
+                                opserr << "FATAL LadrunoContactHandler::handle() - contact "
+                                       << ct.tag << " vertex " << v.vtx->getTag()
+                                       << ": kn auto could not size a penalty. Give an "
+                                          "explicit kn.\n";
+                                return ladrunoContactFatal();
+                            }
+                        }
+                        Node *vNodes[1] = { v.vtx };
+                        LadrunoContactFE *fe = new LadrunoContactFE(
+                            numFe++, sn, vNodes, /*nps=*/1, /*ndm2=*/2, knV, sigma, Lref,
+                            v.prevFar, v.nextFar, ct.kt, ct.mu, ct.consistentTan, ct.muc,
+                            theDomain, ct.tag, nSeg + v.segPrev, ct.cohesion, ct.tauMax);
+                        if (fe == 0) return -5;
+                        theModel->addFE_Element(fe);
+                        if (ct.hasFriction())
+                            cd->frictionGCMark(ct.tag, sTags(si), nSeg + v.segPrev);
+                    }
+                }
+                continue;
+            }
             if (nps < 3 || nps > 4) {
                 opserr << "FATAL LadrunoContactHandler::handle() - contact " << ct.tag
                        << ": nodesPerSeg " << nps << " unsupported (need 3 or 4)\n";
@@ -628,12 +1028,12 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                     return ladrunoContactFatal();
                 }
                 int nd = sn->getCrds().Size();
-                if (nd != 3 || sn->getNumberDOF() < nd) {
+                if ((nd != 2 && nd != 3) || sn->getNumberDOF() < nd) {
                     // the adapter couples the first nd translational DOFs; fewer
                     // DOFs than coordinates would leave myID slots unset
                     opserr << "FATAL LadrunoContactHandler::handle() - rigid-plane slave node "
                            << nodeTags(k) << " has ndm=" << nd << ", ndf=" << sn->getNumberDOF()
-                           << " (needs 3D coordinates and ndf >= 3)\n";
+                           << " (needs 2D or 3D coordinates and ndf >= ndm)\n";
                     return ladrunoContactFatal();
                 }
                 LadrunoContactFE *fe = new LadrunoContactFE(numFe++, sn, nd, rp.p0, rp.n, rp.kn,
@@ -679,10 +1079,156 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                        << ": needs a -master facet surface and a -slave-segments facet surface\n";
                 return ladrunoContactFatal();
             }
-            if (!ladrunoSurfaceNodesOk(theDomain, mc.tag, ms) ||
-                !ladrunoSurfaceNodesOk(theDomain, mc.tag, ss))
+            int pairDim = 3;
+            if (!ladrunoContactPairDim(theDomain, mc.tag, ms, ss, &pairDim))
                 return ladrunoContactFatal();
             int npsM = ms->getNodesPerSeg(), npsS = ss->getNodesPerSeg();
+            if (pairDim == 3 && mc.hThickness != 1.0) {
+                opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                       << ": -thickness is a 2D option\n";
+                return ladrunoContactFatal();
+            }
+            if (pairDim == 2) {
+                // ---- 2D mortar contact (LadrunoContact2DKernel) ----
+                if (npsM != 2 || npsS != 2) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                           << ": 2D surfaces need nodesPerSeg 2\n";
+                    return ladrunoContactFatal();
+                }
+                if (mc.smoothN > 0.0 || mc.smoothT > 0.0 || mc.maxGap > 0.0 ||
+                    mc.gapOffset != 0.0 || mc.adjust || mc.edgeEdge) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                           << ": -smoothN, -smoothT, -maxGap, -gapOffset, -adjust and "
+                              "-edgeedge are 3D options (a 2D interface has no edge-to-edge "
+                              "primitive)\n";
+                    return ladrunoContactFatal();
+                }
+                if (mc.ngp != 2 && cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_2D_NGP_NOOP))
+                    opserr << "WARNING LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                           << ": -ngp has no effect on a 2D mortar contact (2-point Gauss on "
+                              "the clipped interval)\n";
+                const ID &mTags2 = ms->getNodeTags();
+                const ID &sTags2 = ss->getNodeTags();
+                int nSegM = mTags2.Size() / 2;
+                int nSegS = sTags2.Size() / 2;
+                double LrefM = ladrunoMinSegLength2D(theDomain, mc.tag, ms);
+                double LrefS = ladrunoMinSegLength2D(theDomain, mc.tag, ss);
+                if (!(LrefM > 0.0) || !(LrefS > 0.0))
+                    return ladrunoContactFatal();
+                double Lref = (LrefM < LrefS) ? LrefM : LrefS;   // both surfaces are integrated
+                double sigma = 0.0;
+                if (!ladruno2DOrientationVote(theDomain, mc.tag, mc.hasOutward, mc.outward,
+                                              mTags2, nSegM, sTags2, Lref, sigma))
+                    return ladrunoContactFatal();
+                // slave nodes covered by a node-to-segment contact on the same
+                // master (by node set): a nearly perpendicular pair is then
+                // left to it silently
+                std::set<int> mcMasterNodes;
+                for (int ti = 0; ti < mTags2.Size(); ti++) mcMasterNodes.insert(mTags2(ti));
+                std::set<int> ntsSlaveUnion;
+                for (int ci = 0; ci < cd->getNumContacts(); ci++) {
+                    const LadrunoContactDomain::Contact &ntsCt = cd->getContact(ci);
+                    if (ntsCt.retired) continue;
+                    LadrunoContactSurface *ntsMaster = cd->getSurface(ntsCt.masterSurfTag);
+                    LadrunoContactSurface *ntsSlave = cd->getSurface(ntsCt.slaveSurfTag);
+                    if (ntsMaster == 0 || ntsSlave == 0) continue;
+                    std::set<int> mset;
+                    const ID &nm = ntsMaster->getNodeTags();
+                    for (int ti = 0; ti < nm.Size(); ti++) mset.insert(nm(ti));
+                    if (mset != mcMasterNodes) continue;
+                    const ID &ntsSlaveTags = ntsSlave->getNodeTags();
+                    for (int ti = 0; ti < ntsSlaveTags.Size(); ti++)
+                        ntsSlaveUnion.insert(ntsSlaveTags(ti));
+                }
+                bool epsAuto = mc.epsNAuto || mc.knAuto;
+                double epsFixed = (mc.epsN > 0.0) ? mc.epsN : mc.kn;
+                if (!epsAuto && epsFixed <= 0.0) {
+                    opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                           << ": needs a penalty (-epsN value, -epsN auto, or kn > 0)\n";
+                    return ladrunoContactFatal();
+                }
+                std::vector<double> epsAutoPerSeg;
+                if (epsAuto) epsAutoPerSeg.assign(nSegM, -1.0);
+                double h = mc.hThickness;
+                for (int sf = 0; sf < nSegS; sf++) {
+                    Node *sNodes[2];
+                    for (int k = 0; k < 2; k++) {
+                        Node *sn = theDomain->getNode(sTags2(sf * 2 + k));
+                        if (sn == 0 || sn->getNumberDOF() < 2) {
+                            opserr << "FATAL LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << " slave node " << sTags2(sf * 2 + k)
+                                   << ": ndf < 2 (or node absent)\n";
+                            return ladrunoContactFatal();
+                        }
+                        sNodes[k] = sn;
+                    }
+                    bool ntsCoDeclared = (ntsSlaveUnion.count(sNodes[0]->getTag()) > 0 &&
+                                          ntsSlaveUnion.count(sNodes[1]->getTag()) > 0);
+                    for (int seg = 0; seg < nSegM; seg++) {
+                        Node *mNodes[2];
+                        for (int k = 0; k < 2; k++) {
+                            Node *mn = theDomain->getNode(mTags2(seg * 2 + k));
+                            if (mn == 0 || mn->getNumberDOF() < 2) {
+                                opserr << "FATAL LadrunoContactHandler::handle() - mortar "
+                                          "contact " << mc.tag << " master segment " << seg
+                                       << " node " << mTags2(seg * 2 + k)
+                                       << ": ndf < 2 (or node absent)\n";
+                                return ladrunoContactFatal();
+                            }
+                            mNodes[k] = mn;
+                        }
+                        double epsUse = epsFixed;
+                        if (epsAuto) {
+                            if (epsAutoPerSeg[seg] < 0.0)
+                                epsAutoPerSeg[seg] = ladrunoResolveAutoKn2D(theDomain, mNodes, sigma);
+                            epsUse = epsAutoPerSeg[seg];
+                            if (epsUse <= 0.0) {
+                                opserr << "FATAL LadrunoContactHandler::handle() - mortar "
+                                          "contact " << mc.tag << " master segment " << seg
+                                       << ": the automatic penalty could not be sized (no "
+                                          "owning element with 2 DOFs per node). Give an "
+                                          "explicit -epsN.\n";
+                                return ladrunoContactFatal();
+                            }
+                        }
+                        bool wantFric = mc.hasFriction();
+                        bool epsTFromEpsN = mc.epsTAuto;
+                        double epsTuse = mc.epsTAuto ? epsUse : mc.epsT;
+                        if (wantFric && epsTuse <= 0.0) {
+                            epsTuse = epsUse;
+                            epsTFromEpsN = true;
+                            if (cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_EPST))
+                                opserr << "WARNING LadrunoContactHandler::handle() - mortar "
+                                          "contact " << mc.tag << ": friction without -epsT; "
+                                          "the tangential penalty is the normal penalty\n";
+                        }
+                        if (wantFric && mc.consistentTan &&
+                            cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_CSL))
+                            opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << ": -consistanttan (non-symmetric friction "
+                                      "tangent) needs a non-symmetric solver\n";
+                        // the one place the thickness enters: penalties and the
+                        // cohesion and shear cap are per unit area, the 2D
+                        // integrals per unit thickness; an automatic penalty
+                        // already carries the element thickness
+                        double epsUseH  = epsAuto ? epsUse : epsUse * h;
+                        double epsTuseH = epsTFromEpsN ? epsUseH : epsTuse * h;
+                        LadrunoContactFE *fe = new LadrunoContactFE(
+                            numFe++, sNodes, /*npsS=*/2, mNodes, /*npsM=*/2, /*ndm2=*/2,
+                            epsUseH, sigma, Lref, mc.tag, sf, theDomain, mc.isTie, mc.mu,
+                            epsTuseH, mc.cohesion * h, mc.tauMax * h, mc.consistentTan, seg,
+                            ntsCoDeclared);
+                        if (fe == 0) return -5;
+                        theModel->addFE_Element(fe);
+                        for (int k = 0; k < 2; k++) {
+                            cd->mortarNormalGCMark(mc.tag, sNodes[k]->getTag());
+                            if (wantFric)
+                                cd->mortarFrictionGCMark(mc.tag, sNodes[k]->getTag(), sf, seg);
+                        }
+                    }
+                }
+                continue;
+            }
             if (npsM < 3 || npsM > 4 || npsS < 3 || npsS > 4) {
                 opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
                        << ": nodesPerSeg " << npsM << "/" << npsS << " unsupported (need 3 or 4)\n";

@@ -27,6 +27,8 @@
 //   contactSurface tag -slave nodeTag...
 //   contactSurface tag -master nodesPerSeg nodeTag...
 //   contactSurface tag -slave-segments nodesPerSeg nodeTag...
+//     (nodesPerSeg 3 or 4 on 3D nodes, 2 on 2D nodes: a 2D surface lists its
+//     line segments as consecutive pairs chained head to tail, n0 n1 n1 n2 ...)
 //   contact tag masterSurfTag slaveSurfTag <kn | kn kt mu | auto <kt mu>> <options>
 //     options: -outward ox oy oz, -cell frac, -geomtan, -mu mu, -cohesion c,
 //              -tauMax tau, -consistanttan, -visc muc
@@ -39,7 +41,9 @@
 //              -edgeMu mu, -edgeKt kt, -edgeCohesion c, -edgeTauMax tau,
 //              -edgeConsistentTan, -edgeAlm, -edgeAugTol tol
 //     -consistentTan is accepted as an alias of -consistanttan.
+//     2D: -outward ox oy | -outward winding (node-to-segment), -thickness h (mortar)
 //   contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
+//   contactPlane tag slaveSurfTag nx ny px py kn <-visc muc>        (2D slave nodes)
 //   ladrunoContactInfo            -> numContacts numCommits numReverts numMortarContacts
 //   ladrunoContactForce slaveTag  -> summed normal contact force on the node
 //   ladrunoMortarPenetration      -> max mortar penetration on the active set
@@ -121,18 +125,18 @@ int OPS_LadrunoContactSurface()
     } else if (strcmp(kindStr, "-master") == 0) {
         kind = LadrunoContactSurface::MASTER_SEGMENTS;
         n = 1;
-        if (OPS_GetIntInput(&n, &nodesPerSeg) < 0 || nodesPerSeg < 3 || nodesPerSeg > 4) {
-            opserr << "WARNING contactSurface -master - need nodesPerSeg (3 for a triangle, "
-                      "4 for a quadrilateral facet)\n";
+        if (OPS_GetIntInput(&n, &nodesPerSeg) < 0 || nodesPerSeg < 2 || nodesPerSeg > 4) {
+            opserr << "WARNING contactSurface -master - need nodesPerSeg (2 for a 2D line, 3 "
+                      "for a triangle, 4 for a quadrilateral facet)\n";
             return -1;
         }
     } else if (strcmp(kindStr, "-slave-segments") == 0) {
         // a faceted slave surface, for mortar contact
         kind = LadrunoContactSurface::SLAVE_SEGMENTS;
         n = 1;
-        if (OPS_GetIntInput(&n, &nodesPerSeg) < 0 || nodesPerSeg < 3 || nodesPerSeg > 4) {
-            opserr << "WARNING contactSurface -slave-segments - need nodesPerSeg (3 for a "
-                      "triangle, 4 for a quadrilateral facet)\n";
+        if (OPS_GetIntInput(&n, &nodesPerSeg) < 0 || nodesPerSeg < 2 || nodesPerSeg > 4) {
+            opserr << "WARNING contactSurface -slave-segments - need nodesPerSeg (2 for a 2D "
+                      "line, 3 for a triangle, 4 for a quadrilateral facet)\n";
             return -1;
         }
     } else {
@@ -161,6 +165,9 @@ int OPS_LadrunoContactSurface()
         opserr << "WARNING contactSurface - no Domain\n";
         return -1;
     }
+    // A surface is 2D or 3D as a whole: a 2D node fed to a 3D lane would be
+    // read out of bounds, so mixed dimensions are refused here.
+    int surfDim = 0;
     for (int i = 0; i < nodeTags.Size(); i++) {
         Node *nd = theDomain->getNode(nodeTags(i));
         if (nd == 0) {
@@ -168,12 +175,30 @@ int OPS_LadrunoContactSurface()
                    << " does not exist. Define every node before the surface.\n";
             return -1;
         }
-        if (nd->getCrds().Size() != 3) {
+        int di = nd->getCrds().Size();
+        if (di != 2 && di != 3) {
             opserr << "WARNING contactSurface " << tag << " - node " << nodeTags(i)
-                   << " has " << nd->getCrds().Size() << " coordinates; contact surfaces "
-                      "need 3D nodes\n";
+                   << " has " << di << " coordinates; contact surfaces need 2D or 3D nodes\n";
             return -1;
         }
+        if (surfDim == 0) {
+            surfDim = di;
+        } else if (di != surfDim) {
+            opserr << "WARNING contactSurface " << tag << " - node " << nodeTags(i)
+                   << " has " << di << " coordinates but an earlier node of the surface has "
+                   << surfDim << "; a contact surface must have one dimension\n";
+            return -1;
+        }
+    }
+    if (nodesPerSeg == 2 && surfDim != 2) {
+        opserr << "WARNING contactSurface " << tag << " - nodesPerSeg 2 declares 2D line "
+                  "segments, but the nodes have " << surfDim << " coordinates\n";
+        return -1;
+    }
+    if (nodesPerSeg >= 3 && surfDim == 2) {
+        opserr << "WARNING contactSurface " << tag << " - nodesPerSeg " << nodesPerSeg
+               << " declares 3D facets, but the nodes are 2D (use nodesPerSeg 2)\n";
+        return -1;
     }
 
     LadrunoContactDomain *cd = ladrunoGetOrCreateContactDomain();
@@ -267,6 +292,32 @@ int OPS_LadrunoContact()
     bool   hasEdgeOpt = false;     // an -edge* option other than -edgeedge was given
     double edgeKn = 0.0, edgeBand = 0.0, edgeMu = 0.0, edgeKt = 0.0;
     double edgeCohesion = 0.0, edgeTauMax = 0.0, edgeAugTol = 0.0;
+    // 2D options
+    bool   outwardWinding = false;  // -outward winding
+    bool   hasThickness = false;    // -thickness h (mortar)
+    double hThickness = 1.0;
+    // -outward takes two components when every node of the referenced
+    // surfaces is 2D, else three
+    int outwardDim = 3;
+    {
+        Domain *dPeek = OPS_GetDomain();
+        LadrunoContactDomain *cdPeek = (dPeek != 0) ? dPeek->getLadrunoContactDomain() : 0;
+        bool haveSurf = false, all2d = true;
+        for (int k = 1; k < 3; k++) {
+            LadrunoContactSurface *spk = (cdPeek != 0) ? cdPeek->getSurface(idata[k]) : 0;
+            if (spk == 0) continue;
+            const ID &stg = spk->getNodeTags();
+            for (int i = 0; i < stg.Size(); i++) {
+                Node *nd = dPeek->getNode(stg(i));
+                if (nd != 0) {
+                    haveSurf = true;
+                    if (nd->getCrds().Size() != 2) all2d = false;
+                    break;
+                }
+            }
+        }
+        if (haveSurf && all2d) outwardDim = 2;
+    }
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();
         if (opt != 0 && strcmp(opt, "-mortar") == 0) {
@@ -436,14 +487,42 @@ int OPS_LadrunoContact()
             else                             ngp = v[0];
             hasMortarOpt = true;
         } else if (opt != 0 && strcmp(opt, "-outward") == 0) {
-            // direction toward the slave's allowed half-space
-            double o[3]; int m = 3;
-            if (OPS_GetDoubleInput(&m, o) < 0) {
-                opserr << "WARNING contact -outward - need ox oy oz\n";
+            // direction toward the slave's allowed half-space (ox oy in 2D, ox oy
+            // oz in 3D), or, in 2D, the word winding
+            bool isWinding = false;
+            if (OPS_GetNumRemainingInputArgs() > 0) {
+                const char *wtok = OPS_GetString();
+                isWinding = (wtok != 0 && strcmp(wtok, "winding") == 0);
+                if (!isWinding)
+                    OPS_ResetCurrentInputArg(-1);
+            }
+            if (isWinding) {
+                if (outwardDim != 2) {
+                    opserr << "WARNING contact -outward winding is a 2D option (the surfaces "
+                              "of this contact are 3D); give -outward ox oy oz\n";
+                    return -1;
+                }
+                outwardWinding = true;
+            } else {
+                double o[3] = {0.0, 0.0, 0.0}; int m = outwardDim;
+                if (OPS_GetDoubleInput(&m, o) < 0) {
+                    opserr << (outwardDim == 2 ? "WARNING contact -outward - need ox oy (the "
+                                                 "surfaces are 2D) or winding\n"
+                                               : "WARNING contact -outward - need ox oy oz\n");
+                    return -1;
+                }
+                outward[0] = o[0]; outward[1] = o[1]; outward[2] = o[2];
+                hasOutward = true;
+            }
+        } else if (opt != 0 && strcmp(opt, "-thickness") == 0) {
+            // plane-model thickness of a 2D mortar contact
+            double v[1]; int m = 1;
+            if (OPS_GetDoubleInput(&m, v) < 0 || !(v[0] > 0.0)) {
+                opserr << "WARNING contact -thickness - need h > 0\n";
                 return -1;
             }
-            outward[0] = o[0]; outward[1] = o[1]; outward[2] = o[2];
-            hasOutward = true;
+            hThickness = v[0];
+            hasThickness = true;
         } else if (opt != 0 && strcmp(opt, "-cell") == 0) {
             // broad-phase cell size as a multiple of the median segment diagonal;
             // a huge value gives one bucket, i.e. brute force
@@ -499,8 +578,8 @@ int OPS_LadrunoContact()
                       "-consistanttan, -visc, -mortar, -tie, -epsN, -epsTie, -epsT, -augTol, "
                       "-maxAug, -ngp, -augment, -maxGap, -gapOffset, -adjust, -smoothN, "
                       "-smoothT, -edgeedge, -edgeKn, -edgeBand, -edgeMu, -edgeKt, "
-                      "-edgeCohesion, -edgeTauMax, -edgeConsistentTan, -edgeAlm, -edgeAugTol "
-                      "or end of arguments)\n";
+                      "-edgeCohesion, -edgeTauMax, -edgeConsistentTan, -edgeAlm, -edgeAugTol, "
+                      "-thickness or end of arguments)\n";
             return -1;
         }
     }
@@ -523,6 +602,26 @@ int OPS_LadrunoContact()
     }
     if (isTie && !isMortar) {
         opserr << "WARNING contact -tie requires -mortar (mesh tying is a mortar formulation)\n";
+        return -1;
+    }
+    if (hasThickness && !isMortar) {
+        opserr << "WARNING contact -thickness is a -mortar option (the node-to-segment "
+                  "penalty kn is a force per length, not a pressure)\n";
+        return -1;
+    }
+    if (hasThickness && outwardDim != 2) {
+        opserr << "WARNING contact -thickness is a 2D option (a 3D mortar integral is "
+                  "already over an area)\n";
+        return -1;
+    }
+    if (outwardWinding && hasOutward) {
+        opserr << "WARNING contact -outward winding and -outward ox oy declare the same side "
+                  "twice; give one of them\n";
+        return -1;
+    }
+    if (outwardWinding && isMortar) {
+        opserr << "WARNING contact -outward winding is a node-to-segment option; a 2D mortar "
+                  "contact is oriented by -outward ox oy or by the orientation vote\n";
         return -1;
     }
     if (edgeEdge && !isMortar) {
@@ -615,15 +714,20 @@ int OPS_LadrunoContact()
                                                adjust, adjustTol);
         if (mres == 0 && (smoothN > 0.0 || smoothT > 0.0))
             mres = cd->setMortarSmoothing(idata[0], smoothN, smoothT);
+        if (mres == 0 && hasThickness)
+            mres = cd->setMortarThickness(idata[0], hThickness);
         if (mres == 0 && edgeEdge)
             mres = cd->setMortarEdgeEdge(idata[0], edgeKn, edgeKnAuto, edgeBand, edgeMu, edgeKt,
                                          edgeCohesion, edgeTauMax, edgeConsistentTan, edgeAlm,
                                          edgeAugTol);
         return mres;
     }
-    return cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
-                          hasOutward ? outward : 0, knAuto, cellFrac, consistentTan,
-                          consistentNormal, cohesion, tauMax, muc);
+    int cres = cd->addContact(idata[0], idata[1], idata[2], kn, kt, mu,
+                              hasOutward ? outward : 0, knAuto, cellFrac, consistentTan,
+                              consistentNormal, cohesion, tauMax, muc);
+    if (cres == 0 && outwardWinding)
+        cres = cd->setContactOutwardWinding(idata[0]);
+    return cres;
 }
 
 // contactPlane tag slaveSurfTag nx ny nz px py pz kn <-visc muc>
@@ -631,8 +735,10 @@ int OPS_LadrunoContact()
 // (nx, ny, nz) against the slave node set.
 int OPS_LadrunoContactPlane()
 {
-    if (OPS_GetNumRemainingInputArgs() < 9) {
-        opserr << "WARNING want - contactPlane tag slaveSurfTag nx ny nz px py pz kn\n";
+    const int nrem0 = OPS_GetNumRemainingInputArgs();
+    if (nrem0 < 7) {
+        opserr << "WARNING want - contactPlane tag slaveSurfTag nx ny nz px py pz kn "
+                  "(3D) or nx ny px py kn (2D)\n";
         return -1;
     }
     int idata[2], ni = 2;
@@ -640,15 +746,67 @@ int OPS_LadrunoContactPlane()
         opserr << "WARNING contactPlane - could not read tag/slaveSurfTag\n";
         return -1;
     }
-    double d[7];
-    int nd = 7;
-    if (OPS_GetDoubleInput(&nd, d) < 0) {
-        opserr << "WARNING contactPlane - could not read nx ny nz px py pz kn\n";
-        return -1;
+    // the arity follows the dimension of the slave nodes
+    int planeDim = 3;
+    {
+        Domain *dPeek = OPS_GetDomain();
+        LadrunoContactDomain *cdPeek = (dPeek != 0) ? dPeek->getLadrunoContactDomain() : 0;
+        LadrunoContactSurface *ssPeek = (cdPeek != 0) ? cdPeek->getSurface(idata[1]) : 0;
+        if (ssPeek != 0) {
+            const ID &st = ssPeek->getNodeTags();
+            for (int i = 0; i < st.Size(); i++) {
+                Node *sn = dPeek->getNode(st(i));
+                if (sn != 0) { planeDim = sn->getCrds().Size(); break; }
+            }
+        }
     }
-    double n[3]  = { d[0], d[1], d[2] };
-    double p0[3] = { d[3], d[4], d[5] };
-    double kn = d[6];
+    double d[7];
+    double n[3] = {0.0, 0.0, 0.0}, p0[3] = {0.0, 0.0, 0.0}, kn = 0.0;
+    if (planeDim == 2) {
+        // nx ny px py kn, or the 3D form with nz = pz = 0
+        int nnum = ladrunoCountLeadingNumbers(7);
+        if (nnum == 5) {
+            int nd = 5;
+            if (OPS_GetDoubleInput(&nd, d) < 0) {
+                opserr << "WARNING contactPlane - could not read nx ny px py kn\n";
+                return -1;
+            }
+            n[0] = d[0]; n[1] = d[1];
+            p0[0] = d[2]; p0[1] = d[3];
+            kn = d[4];
+        } else if (nnum == 7) {
+            int nd = 7;
+            if (OPS_GetDoubleInput(&nd, d) < 0) {
+                opserr << "WARNING contactPlane - could not read nx ny nz px py pz kn\n";
+                return -1;
+            }
+            if (d[2] != 0.0 || d[5] != 0.0) {
+                opserr << "WARNING contactPlane " << idata[0] << " - the slave nodes are 2D; "
+                          "nz and pz must be 0 (or give nx ny px py kn)\n";
+                return -1;
+            }
+            n[0] = d[0]; n[1] = d[1];
+            p0[0] = d[3]; p0[1] = d[4];
+            kn = d[6];
+        } else {
+            opserr << "WARNING contactPlane " << idata[0] << " - the slave nodes are 2D: give "
+                      "nx ny px py kn\n";
+            return -1;
+        }
+    } else {
+        if (nrem0 < 9) {
+            opserr << "WARNING want - contactPlane tag slaveSurfTag nx ny nz px py pz kn\n";
+            return -1;
+        }
+        int nd = 7;
+        if (OPS_GetDoubleInput(&nd, d) < 0) {
+            opserr << "WARNING contactPlane - could not read nx ny nz px py pz kn\n";
+            return -1;
+        }
+        n[0] = d[0]; n[1] = d[1]; n[2] = d[2];
+        p0[0] = d[3]; p0[1] = d[4]; p0[2] = d[5];
+        kn = d[6];
+    }
     double muc = 0.0;
     while (OPS_GetNumRemainingInputArgs() > 0) {
         const char *opt = OPS_GetString();

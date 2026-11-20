@@ -21,8 +21,9 @@
 // Developed by: N. Mora Bowen, P. Palacios, J.A. Abell (Ladruño project)
 //
 // Description: LadrunoContactSurface, the topology of one contact surface: a
-// slave node set, or a master surface of tri3/quad4 segments stored as flat
-// connectivity. Owned by LadrunoContactDomain.
+// slave node set, or a master surface of segments stored as flat
+// connectivity (tri3/quad4 facets in 3D, 2-node lines in 2D). Owned by
+// LadrunoContactDomain.
 
 #ifndef LadrunoContactSurface_h
 #define LadrunoContactSurface_h
@@ -38,7 +39,10 @@ class LadrunoContactSurface
 
     // SLAVE_NODES: nodeTags are the slave nodes.
     // MASTER_SEGMENTS: nodeTags is the flat connectivity and nodesPerSeg the
-    //   stride (3 = tri, 4 = quad); segment s spans nodeTags[s*nodesPerSeg .. +stride).
+    //   stride (2 = 2D line, 3 = tri, 4 = quad); segment s spans
+    //   nodeTags[s*nodesPerSeg .. +stride). A 2D surface lists its segments as
+    //   consecutive pairs, chained head to tail (n0 n1 n1 n2 ...); the order is
+    //   the adjacency the vertex pairs are built from.
     // SLAVE_SEGMENTS: a faceted slave surface with the MASTER_SEGMENTS layout. The
     //   mortar formulation integrates the slave matrix D over these facets; a node
     //   set carries no facet and cannot give D.

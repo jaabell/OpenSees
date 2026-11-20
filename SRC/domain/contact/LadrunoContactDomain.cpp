@@ -60,10 +60,10 @@ LadrunoContactDomain::addSurface(LadrunoContactSurface *surf)
     if (surf->getKind() != LadrunoContactSurface::SLAVE_NODES) {
         int nps = surf->getNodesPerSeg();
         int n   = surf->getNodeTags().Size();
-        if (nps < 3 || nps > 4 || (n % nps) != 0) {
+        if (nps < 2 || nps > 4 || (n % nps) != 0) {
             opserr << "WARNING LadrunoContactDomain::addSurface() - surface tag "
                    << surf->getTag() << ": " << n << " connectivity entries is not a whole "
-                      "number of " << nps << "-node segments (nodesPerSeg must be 3 or 4)\n";
+                      "number of " << nps << "-node segments (nodesPerSeg must be 2, 3 or 4)\n";
             return -1;
         }
     }
@@ -253,6 +253,58 @@ LadrunoContactDomain::setMortarSmoothing(int tag, double smoothN, double smoothT
     m->smoothN = smoothN;
     m->smoothT = smoothT;
     return 0;
+}
+
+int
+LadrunoContactDomain::setContactOutwardWinding(int tag)
+{
+    for (size_t i = 0; i < theContacts.size(); i++)
+        if (theContacts[i].tag == tag) {
+            theContacts[i].outwardWinding = true;
+            return 0;
+        }
+    opserr << "WARNING LadrunoContactDomain::setContactOutwardWinding() - contact " << tag
+           << " is not a node-to-segment contact\n";
+    return -1;
+}
+
+int
+LadrunoContactDomain::setMortarThickness(int tag, double h)
+{
+    if (!(h > 0.0)) {
+        opserr << "WARNING LadrunoContactDomain::setMortarThickness() - contact " << tag
+               << ": the thickness must be > 0 (got " << h << ")\n";
+        return -1;
+    }
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) {
+            theMortarContacts[i].hThickness = h;
+            return 0;
+        }
+    opserr << "WARNING LadrunoContactDomain::setMortarThickness() - contact " << tag
+           << " is not a -mortar contact\n";
+    return -1;
+}
+
+double
+LadrunoContactDomain::getVtx2DSide(int contactTag, int slaveTag, int vtxNodeTag) const
+{
+    PairKey k; k.c = contactTag; k.s = slaveTag; k.g = vtxNodeTag;
+    std::map<PairKey, double>::const_iterator it = theVtx2DSide.find(k);
+    return (it != theVtx2DSide.end()) ? it->second : 0.0;
+}
+
+void
+LadrunoContactDomain::setVtx2DSide(int contactTag, int slaveTag, int vtxNodeTag, double side)
+{
+    PairKey k; k.c = contactTag; k.s = slaveTag; k.g = vtxNodeTag;
+    theVtx2DSide[k] = side;
+}
+
+void
+LadrunoContactDomain::clearVtx2DSide(void)
+{
+    theVtx2DSide.clear();
 }
 
 int
@@ -815,6 +867,7 @@ LadrunoContactDomain::revertToStart(void)
     theMortarFacetContribs.clear();
     theMortarFrictionStates.clear();
     theEdgeEdgeStates.clear();
+    theVtx2DSide.clear();
     return 0;
 }
 
