@@ -2213,7 +2213,7 @@ Domain::commit(void)
     // commit the path-dependent contact pair state with the model, whatever
     // the integrator (the constraint handler is not called at commit)
     if (theContactDomain != 0)
-      theContactDomain->commit(contactAugmenting);
+      theContactDomain->commit(contactAugmenting, dT);
 
     // set the new committed time in the domain
     committedTime = currentTime;

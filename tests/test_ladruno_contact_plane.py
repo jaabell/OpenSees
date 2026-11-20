@@ -12,7 +12,6 @@ Checks:
 - A model whose only finite element is the contact runs twice in one process
   and tears down cleanly.
 - A contact tag already used by contact is refused by contactPlane.
-- contactPlane -soft is refused.
 """
 import math
 
@@ -165,17 +164,3 @@ def test_duplicate_tag_refused_across_contact_and_plane():
     with pytest.raises(ops.OpenSeesError):
         ops.contactPlane(7, 2, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, KN)
     ops.contactPlane(8, 2, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, KN)
-
-
-def test_soft_option_refused():
-    ops.wipe()
-    ops.model("basic", "-ndm", 3, "-ndf", 3)
-    ops.node(1, 0.0, 0.0, 1.0e-4)
-    ops.mass(1, 1.0, 1.0, 1.0)
-    ops.contactSurface(1, "-slave", 1)
-    try:
-        ops.contactPlane(1, 1, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, KN, "-soft", 0.1)
-    except Exception:
-        return
-    _explicit()
-    assert ops.analyze(1, 1.0e-4) != 0

@@ -24,7 +24,7 @@ Checks:
   (ratio > 10); a reversed load lifts the bar off and the query returns 0; the first solve with
   -edgeAlm is bitwise equal to the one without.
 - Refusals: -edgeedge without -mortar, edge options without -edgeedge, -edgeedge with -tie,
-  -edgeTauMax without -edgeMu or -edgeCohesion, and -edgeSoft.
+  and -edgeTauMax without -edgeMu or -edgeCohesion.
 
 Every test fails on the base with an unknown command.
 """
@@ -368,7 +368,6 @@ def test_edge_penetration_is_zero_without_edgealm():
     (1, 1, 2, "-mortar", "-epsN", EPS, "-edgeKn", EPS),            # edge option, no -edgeedge
     (1, 1, 2, "-mortar", "-epsN", EPS, "-tie", "-edgeedge"),       # tie
     (1, 1, 2, "-mortar", "-epsN", EPS, "-edgeedge", "-edgeTauMax", 5.0),
-    (1, 1, 2, "-mortar", "-epsN", EPS, "-edgeedge", "-edgeSoft", 0.1),
 ])
 def test_refusals(args):
     ops.wipe()

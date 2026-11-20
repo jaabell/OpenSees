@@ -124,6 +124,9 @@ class LadrunoContactDomain
         // traversal of the master chain (sigma = +1) instead of the orientation
         // vote; the master must then form one connected chain
         bool outwardWinding = false;
+        // -soft s: the soft-constraint penalty of explicit analysis (see
+        // setSoftScale); 0: off
+        double softScale = 0.0;
         bool hasFriction(void) const { return mu > 0.0 || cohesion > 0.0 || tauMax > 0.0; }
     };
     const Contact &getContact(int i) const { return theContacts[i]; }
@@ -138,6 +141,7 @@ class LadrunoContactDomain
         double p0[3], n[3];     // n stored normalized
         double kn;
         double muc;             // viscous normal stabilization coefficient (0: none)
+        double softScale = 0.0; // -soft s (0: off)
     };
     int addRigidPlane(int tag, int slaveSurfTag,
                       const double p0[3], const double n[3], double kn, double muc = 0.0);
@@ -240,6 +244,9 @@ class LadrunoContactDomain
         // automatic penalty (sized from the element stiffness, which carries
         // the thickness) is not either
         double hThickness = 1.0;
+        // -soft s on the facet pairs and -edgeSoft s on the edge pairs (0: off)
+        double softScale     = 0.0;
+        double edgeSoftScale = 0.0;
     };
     enum { AUG_COMMIT = 0, AUG_REQUEST = 1, AUG_NEVER = 2 };
     // set the controls of an existing mortar contact; < 0 if the tag is not a
@@ -252,6 +259,16 @@ class LadrunoContactDomain
     int setMortarSmoothing(int tag, double smoothN, double smoothT);
     // set -thickness on an existing mortar contact (h > 0)
     int setMortarThickness(int tag, double h);
+    // Soft-constraint penalty (-soft s; -edgeSoft s with edge = true on the
+    // edge pairs of a mortar contact): under an integrator whose element
+    // tangent assembles no stiffness (an explicit one), the penalty of a pair
+    // is replaced at every evaluation by k = s 4 m_eff / dt^2, m_eff the
+    // effective mass of its gap mode and dt the step size, so that the contact
+    // mode satisfies omega dt = 2 sqrt(s) and does not reduce the critical
+    // step (Hallquist 2006, Section 26, the SOFT = 1 and SOFT = 2 options).
+    // Under any other integrator the configured penalty is used. s > 0.
+    int setSoftScale(int tag, double s, bool edge = false);
+    bool hasSoftContact(void) const;
     // enable edge-to-edge contact on an existing mortar contact; < 0 with a
     // message on a tie or a value out of range
     int setMortarEdgeEdge(int tag, double edgeKn, bool edgeKnAuto, double edgeBand,
@@ -396,6 +413,18 @@ class LadrunoContactDomain
     void   setVtx2DSide(int contactTag, int slaveTag, int vtxNodeTag, double side);
     void   clearVtx2DSide(void);
 
+    // --- assembled nodal masses of the soft penalty: the nodal mass plus the
+    //     diagonal of the element mass matrices (what a lumped explicit
+    //     integrator inverts), translational components only. Built by the
+    //     handler at every handle() when a soft contact exists. ---
+    void   clearNodalMass(void);
+    void   setNodalMass(int nodeTag, const double m[3]);
+    bool   getNodalMass(int nodeTag, double m[3]) const;   // false: not cached
+    // the size of the last committed step (> 0), recorded by commit(); the
+    // step size of the soft penalty for an integrator that evaluates the
+    // residual at the committed time (Domain::getDT() is 0 there)
+    double getLastStepSize(void) const { return lastStepSize; }
+
     // --- node-to-segment normal force readout (ladrunoContactForce) ---
     // Each segment adapter writes its normal penalty force tn = kn <-gap>+ into a
     // (contactTag, slaveTag, segIndex) slot at every residual evaluation, and
@@ -444,7 +473,9 @@ class LadrunoContactDomain
     // (ladrunoBeginAugment / ladrunoEndAugment). A commit performs one Uzawa
     // update of the mortar multipliers of every contact whose augmentMode
     // allows it (AUG_REQUEST: only while augmenting).
-    int commit(bool augmenting = false);
+    // stepSize: the size of the step being committed (Domain::getDT()),
+    // recorded when positive
+    int commit(bool augmenting = false, double stepSize = 0.0);
     int revertToLastCommit(void);
     // Drop all path-dependent state so that Domain::revertToStart() returns
     // contact to the state of a fresh run; the definitions are kept.
@@ -467,7 +498,8 @@ class LadrunoContactDomain
         WARN_VTX2D_SIDE_FLIP,       // 2D committed side sign differs from the live one
         WARN_2D_GEOMTAN_NOOP,       // -geomtan has no effect on a 2D contact
         WARN_2D_PERP_NO_NTS,        // 2D mortar pair nearly perpendicular, not integrated
-        WARN_2D_NGP_NOOP            // -ngp has no effect on a 2D mortar contact
+        WARN_2D_NGP_NOOP,           // -ngp has no effect on a 2D mortar contact
+        WARN_SOFT_NOMASS            // -soft / -edgeSoft could not size (no step size or no mass)
     };
     bool warnOnce(int contactTag, int topic);
 
@@ -481,6 +513,9 @@ class LadrunoContactDomain
     bool contactTagInUse(int tag) const;
     int numCommits;
     int numReverts;
+    double lastStepSize;
+    struct NodeMass { double m[3]; };
+    std::map<int, NodeMass> theNodalMass;
 
     // (contactTag, slaveTag, segIndex) key of the pair state stores.
     struct PairKey {
