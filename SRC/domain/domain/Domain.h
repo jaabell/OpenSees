@@ -248,8 +248,9 @@ class Domain
     void setLadrunoContactDomain(LadrunoContactDomain *cd);
     LadrunoContactDomain *getLadrunoContactDomain(void) const { return theContactDomain; }
 
-    // Within-step contact augmentation flag, passed to the contact engine on
-    // commit(); reset by clearAll().
+    // Within-step contact augmentation flag (ladrunoBeginAugment): passed to the
+    // contact engine on commit(), and while on commit() takes no recorder
+    // sample and keeps the commitTag; reset by clearAll().
     void setContactAugmenting(bool on) { contactAugmenting = on; }
     bool isContactAugmenting(void) const { return contactAugmenting; }
 

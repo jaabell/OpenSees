@@ -93,7 +93,307 @@ LadrunoContactDomain::contactTagInUse(int tag) const
         if (theContacts[i].tag == tag) return true;
     for (size_t i = 0; i < theRigidPlanes.size(); i++)
         if (theRigidPlanes[i].tag == tag) return true;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) return true;
     return false;
+}
+
+int
+LadrunoContactDomain::addMortarContact(int tag, int masterSurfTag, int slaveSurfTag,
+                                       double kn, bool knAuto, double epsN, bool epsNAuto,
+                                       double augTol, int maxAug, int ngp,
+                                       const double *outward, bool isTie, double mu,
+                                       double epsT, bool epsTAuto, double cohesion,
+                                       double tauMax, bool consistentTan)
+{
+    LadrunoContactSurface *ms = getSurface(masterSurfTag);
+    LadrunoContactSurface *ss = getSurface(slaveSurfTag);
+    if (ms == 0 || ss == 0) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - master/slave surface "
+                  "not defined (master " << masterSurfTag << ", slave " << slaveSurfTag << ")\n";
+        return -1;
+    }
+    if (contactTagInUse(tag)) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - contact tag " << tag
+               << " already exists (contact tags key the pair state)\n";
+        return -1;
+    }
+    // D is integrated over slave facets and M against master facets, so both
+    // surfaces must be faceted
+    if (ms->getKind() != LadrunoContactSurface::MASTER_SEGMENTS) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - master surface "
+               << masterSurfTag << " must be a -master facet surface\n";
+        return -1;
+    }
+    if (ss->getKind() != LadrunoContactSurface::SLAVE_SEGMENTS) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - slave surface "
+               << slaveSurfTag << " must be a -slave-segments facet surface; a -slave node "
+                  "set carries no facet, so it cannot give the mortar matrix D\n";
+        return -1;
+    }
+    if (kn < 0.0 || epsN < 0.0) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - kn and epsN must be >= 0 "
+                  "(got kn " << kn << ", epsN " << epsN << ")\n";
+        return -1;
+    }
+    if (mu < 0.0 || cohesion < 0.0 || epsT < 0.0) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - mu, cohesion and epsT "
+                  "must be >= 0\n";
+        return -1;
+    }
+    if (isTie && (mu > 0.0 || cohesion > 0.0 || tauMax > 0.0)) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - a mesh tie has no "
+                  "friction cone; -mu/-cohesion/-tauMax are not allowed with -tie\n";
+        return -1;
+    }
+    if (tauMax > 0.0 && mu <= 0.0 && cohesion <= 0.0) {
+        opserr << "WARNING LadrunoContactDomain::addMortarContact() - -tauMax without -mu or "
+                  "-cohesion gives the cone min(mu*N + c, tauMax) = 0 (free slip); for a "
+                  "shear-capped bond use -cohesion <c>, optionally with -tauMax\n";
+        return -1;
+    }
+    MortarContact m;
+    m.tag = tag; m.masterSurfTag = masterSurfTag; m.slaveSurfTag = slaveSurfTag;
+    m.kn = kn; m.knAuto = knAuto;
+    m.epsN = epsN; m.epsNAuto = epsNAuto;
+    m.augTol = (augTol > 0.0) ? augTol : 1e-8;
+    m.maxAug = (maxAug > 0) ? maxAug : 20;
+    m.ngp = (ngp >= 1) ? ngp : 2;
+    m.hasOutward = (outward != 0);
+    for (int d = 0; d < 3; d++) m.outward[d] = (outward != 0) ? outward[d] : 0.0;
+    m.isTie = isTie;
+    m.mu = mu;
+    m.epsT = epsT; m.epsTAuto = epsTAuto;
+    m.cohesion = cohesion;
+    m.tauMax = (tauMax > 0.0) ? tauMax : 0.0;
+    m.consistentTan = consistentTan;
+    theMortarContacts.push_back(m);
+    return 0;
+}
+
+int
+LadrunoContactDomain::setMortarContactOptions(int tag, int augmentMode, double maxGap,
+                                              double gapOffset, bool adjust, double adjustTol)
+{
+    MortarContact *m = 0;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) { m = &theMortarContacts[i]; break; }
+    if (m == 0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << " is not a -mortar contact\n";
+        return -1;
+    }
+    if (augmentMode < AUG_COMMIT || augmentMode > AUG_NEVER) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": bad augment mode " << augmentMode << "\n";
+        return -1;
+    }
+    if (maxGap < 0.0 || adjustTol < 0.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": -maxGap and the -adjust tolerance must be >= 0\n";
+        return -1;
+    }
+    if (m->isTie && (gapOffset != 0.0 || adjust)) {
+        // a tie bonds the relative displacement, never the gap, so the gap as
+        // meshed is already stress-free
+        opserr << "WARNING LadrunoContactDomain::setMortarContactOptions() - contact " << tag
+               << ": -gapOffset/-adjust do not apply to -tie (a tie bonds the relative "
+                  "displacement, so the as-meshed gap is already strain-free)\n";
+        return -1;
+    }
+    m->augmentMode = augmentMode;
+    m->maxGap = maxGap;
+    m->gapOffset = gapOffset;
+    m->adjust = adjust;
+    m->adjustTol = adjustTol;
+    return 0;
+}
+
+int
+LadrunoContactDomain::setMortarSmoothing(int tag, double smoothN, double smoothT)
+{
+    MortarContact *m = 0;
+    for (size_t i = 0; i < theMortarContacts.size(); i++)
+        if (theMortarContacts[i].tag == tag) { m = &theMortarContacts[i]; break; }
+    if (m == 0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << " is not a -mortar contact\n";
+        return -1;
+    }
+    if (smoothN < 0.0 || smoothT < 0.0 || smoothT >= 1.0) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN needs a band g0 > 0 and -smoothT a ratio 0 < r < 1\n";
+        return -1;
+    }
+    if (smoothN == 0.0 && smoothT == 0.0) {
+        m->smoothN = 0.0; m->smoothT = 0.0;
+        return 0;
+    }
+    if (m->isTie) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN/-smoothT do not apply to -tie (a bond has no active set and no "
+                  "stick/slip switch to smooth)\n";
+        return -1;
+    }
+    if (m->augmentMode != AUG_NEVER) {
+        // With the Uzawa update lambda <- -P(x), the fixed point of a node whose
+        // pressure is below epsN g0 is an open gap held by a positive pressure:
+        // the smoothing would not vanish as the multiplier converges.
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothN/-smoothT are pure-penalty laws; add -augment never (the Uzawa "
+                  "update is not defined for the smoothed law)\n";
+        return -1;
+    }
+    if (smoothT > 0.0 && !m->hasFriction()) {
+        opserr << "WARNING LadrunoContactDomain::setMortarSmoothing() - contact " << tag
+               << ": -smoothT smooths the stick/slip corner, but this contact has no friction "
+                  "(-mu/-cohesion); remove -smoothT\n";
+        return -1;
+    }
+    m->smoothN = smoothN;
+    m->smoothT = smoothT;
+    return 0;
+}
+
+LadrunoContactDomain::MortarNormalState &
+LadrunoContactDomain::getOrCreateMortarNormalState(int contactTag, int slaveNodeTag)
+{
+    NodeKey k; k.c = contactTag; k.n = slaveNodeTag;
+    return theMortarNormalStates[k];      // created zeroed (lambdaN = 0) when absent
+}
+
+LadrunoContactDomain::MortarFrictionState &
+LadrunoContactDomain::getOrCreateMortarFrictionState(int contactTag, int slaveNodeTag,
+                                                     int slaveFacet, int masterFacet)
+{
+    MortarPairKey k; k.c = contactTag; k.n = slaveNodeTag; k.sf = slaveFacet; k.mf = masterFacet;
+    return theMortarFrictionStates[k];    // created zeroed (engaged = false) when absent
+}
+
+void
+LadrunoContactDomain::mortarFrictionGCMark(int contactTag, int slaveNodeTag, int slaveFacet,
+                                           int masterFacet)
+{
+    MortarPairKey k; k.c = contactTag; k.n = slaveNodeTag; k.sf = slaveFacet; k.mf = masterFacet;
+    liveMortarPairKeys.insert(k);
+}
+
+void
+LadrunoContactDomain::accumulateMortarGap(int contactTag, int slaveNodeTag, int feTag,
+                                          double gtFacet, double aFacet, double epsN)
+{
+    // replace this adapter's earlier contribution, so the residual may be formed
+    // any number of times per iteration
+    PairKey fk; fk.c = contactTag; fk.s = slaveNodeTag; fk.g = feTag;
+    FacetContrib &fc = theMortarFacetContribs[fk];
+    NodeKey nk; nk.c = contactTag; nk.n = slaveNodeTag;
+    MortarNormalState &st = theMortarNormalStates[nk];
+    st.gtGlobal += gtFacet - fc.gt;
+    st.aGlobal += aFacet - fc.a;
+    // An automatic epsN is sized per master facet, so a shared slave node sees
+    // several values; the largest is kept, which does not depend on the order
+    // in which the adapters are evaluated. Reset at every handle().
+    if (epsN > st.epsN) st.epsN = epsN;
+    fc.gt = gtFacet; fc.a = aFacet;
+}
+
+double
+LadrunoContactDomain::getMaxMortarPenetration(void) const
+{
+    double pen = 0.0;
+    for (std::map<NodeKey, MortarNormalState>::const_iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ++it) {
+        const MortarNormalState &st = it->second;
+        if (st.isTie || st.aGlobal <= 1e-300) continue;  // a tie node has no normal gap
+        double gbar = st.gtGlobal / st.aGlobal;          // < 0: penetration
+        // only nodes with a compressive augmented pressure count: a node held
+        // open by its multiplier carries no pressure whatever its raw gap
+        if (st.lambdaN + st.epsN * gbar < 0.0 && -gbar > pen)
+            pen = -gbar;
+    }
+    return pen;
+}
+
+void
+LadrunoContactDomain::accumulateMortarTie(int contactTag, int slaveNodeTag, int feTag,
+                                          const double rFacet[3], double aFacet, double epsTie)
+{
+    // r_I is linear in the displacements, so the sum over the facet pairs does
+    // not depend on the order in which they are evaluated
+    PairKey fk; fk.c = contactTag; fk.s = slaveNodeTag; fk.g = feTag;
+    FacetContrib &fc = theMortarFacetContribs[fk];
+    NodeKey nk; nk.c = contactTag; nk.n = slaveNodeTag;
+    MortarNormalState &st = theMortarNormalStates[nk];
+    for (int d = 0; d < 3; d++) {
+        st.rtGlobal[d] += rFacet[d] - fc.r[d];
+        fc.r[d] = rFacet[d];
+    }
+    st.aGlobal += aFacet - fc.a;
+    fc.a = aFacet;
+    st.isTie = true;
+    if (epsTie > st.epsN) st.epsN = epsTie;   // largest over the facet pairs, as for the gap
+}
+
+double
+LadrunoContactDomain::getMaxMortarTieResidual(void) const
+{
+    double res = 0.0;
+    for (std::map<NodeKey, MortarNormalState>::const_iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ++it) {
+        const MortarNormalState &st = it->second;
+        if (!st.isTie || st.aGlobal <= 1e-300) continue;
+        for (int d = 0; d < 3; d++) {
+            double rbar = std::fabs(st.rtGlobal[d] / st.aGlobal);
+            if (rbar > res) res = rbar;
+        }
+    }
+    return res;
+}
+
+void
+LadrunoContactDomain::mortarNormalGCBegin(void)
+{
+    liveNodeKeys.clear();
+    liveMortarPairKeys.clear();
+}
+
+void
+LadrunoContactDomain::mortarNormalGCMark(int contactTag, int slaveNodeTag)
+{
+    NodeKey k; k.c = contactTag; k.n = slaveNodeTag;
+    liveNodeKeys.insert(k);
+}
+
+void
+LadrunoContactDomain::mortarNormalGCEnd(void)
+{
+    for (std::map<NodeKey, MortarNormalState>::iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ) {
+        if (liveNodeKeys.find(it->first) == liveNodeKeys.end())
+            theMortarNormalStates.erase(it++);
+        else
+            ++it;
+    }
+    liveNodeKeys.clear();
+    for (std::map<MortarPairKey, MortarFrictionState>::iterator it = theMortarFrictionStates.begin();
+         it != theMortarFrictionStates.end(); ) {
+        if (liveMortarPairKeys.find(it->first) == liveMortarPairKeys.end())
+            theMortarFrictionStates.erase(it++);
+        else
+            ++it;
+    }
+    liveMortarPairKeys.clear();
+    // Adapter tags are reassigned at every handle(), so the contributions are
+    // dropped and the sums restart from zero; the adapters fill them again at
+    // the next residual evaluation. Only the multipliers carry over.
+    theMortarFacetContribs.clear();
+    for (std::map<NodeKey, MortarNormalState>::iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ++it) {
+        it->second.gtGlobal = 0.0;
+        it->second.aGlobal = 0.0;
+        it->second.epsN = 0.0;
+        for (int d = 0; d < 3; d++) it->second.rtGlobal[d] = 0.0;
+    }
 }
 
 int
@@ -267,7 +567,7 @@ LadrunoContactDomain::frictionGCEnd(void)
 }
 
 int
-LadrunoContactDomain::commit(bool)
+LadrunoContactDomain::commit(bool augmenting)
 {
     // promote the trial plastic slip and the engagement origin of every slot;
     // the counter lets a test check that the Domain::commit() hook fires
@@ -277,6 +577,52 @@ LadrunoContactDomain::commit(bool)
         FrictionState &st = it->second;
         for (int d = 0; d < 3; d++) {
             st.gpT[d] = st.gpTtrial[d];
+            st.gT0committed[d] = st.gT0[d];
+        }
+        st.engagedCommitted = st.engaged;
+    }
+
+    // One Uzawa update of the mortar normal multipliers per commit (Simo and
+    // Laursen 1992): lambda_I <- min(0, lambda_I + epsN gbar_I), gbar_I the
+    // converged weighted gap summed over the facet pairs of the node. Across
+    // load steps this augments with a stock Newton; a held-load loop
+    // (ladrunoBeginAugment, analyze at a zero load increment, ladrunoEndAugment)
+    // repeats it within a step until ladrunoMortarPenetration is small.
+    // The -augment mode of each contact gates the multiplier updates only; the
+    // promotion of the friction slip below is path state and always runs.
+    std::set<int> noAug;
+    for (size_t i = 0; i < theMortarContacts.size(); i++) {
+        const MortarContact &mc = theMortarContacts[i];
+        if (mc.augmentMode == AUG_NEVER || (mc.augmentMode == AUG_REQUEST && !augmenting))
+            noAug.insert(mc.tag);
+    }
+    for (std::map<NodeKey, MortarNormalState>::iterator it = theMortarNormalStates.begin();
+         it != theMortarNormalStates.end(); ++it) {
+        MortarNormalState &st = it->second;
+        if (st.aGlobal <= 1e-300) continue;          // not integrated this step
+        if (noAug.find(it->first.c) != noAug.end()) continue;
+        if (st.isTie) {
+            // mesh tie: an equality, so the update has no clamp and drives the
+            // weighted relative displacement to zero at a finite epsTie
+            for (int d = 0; d < 3; d++)
+                st.lambdaTie[d] += st.epsN * (st.rtGlobal[d] / st.aGlobal);
+            continue;
+        }
+        double gbar = st.gtGlobal / st.aGlobal;
+        st.lambdaN = std::min(0.0, st.lambdaN + st.epsN * gbar);
+    }
+
+    // mortar friction, per (slave node, facet pair): promote the trial slip,
+    // one tangential Uzawa step (lambdaT <- the returned cone-capped traction,
+    // which removes the elastic stick creep at a finite epsT), and the
+    // engagement copies
+    for (std::map<MortarPairKey, MortarFrictionState>::iterator it = theMortarFrictionStates.begin();
+         it != theMortarFrictionStates.end(); ++it) {
+        MortarFrictionState &st = it->second;
+        const bool aug = (noAug.find(it->first.c) == noAug.end());
+        for (int d = 0; d < 3; d++) {
+            st.gpT[d] = st.gpTtrial[d];
+            if (aug) st.lambdaT[d] = st.lambdaTtrial[d];
             st.gT0committed[d] = st.gT0[d];
         }
         st.engagedCommitted = st.engaged;
@@ -299,6 +645,18 @@ LadrunoContactDomain::revertToLastCommit(void)
         }
         st.engaged = st.engagedCommitted;
     }
+    // mortar friction: the multipliers lambdaN and lambdaTie are changed only
+    // by commit() and need nothing here
+    for (std::map<MortarPairKey, MortarFrictionState>::iterator it = theMortarFrictionStates.begin();
+         it != theMortarFrictionStates.end(); ++it) {
+        MortarFrictionState &st = it->second;
+        for (int d = 0; d < 3; d++) {
+            st.gpTtrial[d] = st.gpT[d];
+            st.lambdaTtrial[d] = st.lambdaT[d];
+            st.gT0[d] = st.gT0committed[d];
+        }
+        st.engaged = st.engagedCommitted;
+    }
     return 0;
 }
 
@@ -309,6 +667,9 @@ LadrunoContactDomain::revertToStart(void)
     // evaluation, i.e. in the state of a fresh run.
     theFrictionStates.clear();
     theNtsForce.clear();
+    theMortarNormalStates.clear();
+    theMortarFacetContribs.clear();
+    theMortarFrictionStates.clear();
     return 0;
 }
 
@@ -349,6 +710,21 @@ LadrunoContactDomain::pruneRemovedNodes(Domain *dom)
                    << " -- the analysis removed every node of its master or slave "
                       "surface, so the interaction no longer has a body to act on. "
                       "The run continues without it.\n";
+        }
+    }
+    for (size_t i = 0; i < theMortarContacts.size(); i++) {
+        MortarContact &m = theMortarContacts[i];
+        if (m.retired)
+            continue;
+        LadrunoContactSurface *ms = getSurface(m.masterSurfTag);
+        LadrunoContactSurface *ss = getSurface(m.slaveSurfTag);
+        if (ms == 0 || ss == 0 ||
+            ms->getNodeTags().Size() == 0 || ss->getNodeTags().Size() == 0) {
+            m.retired = true;
+            retiredNow++;
+            opserr << "LadrunoContactDomain: RETIRING mortar contact " << m.tag
+                   << " -- the analysis removed every node of its master or slave "
+                      "surface. The run continues without it.\n";
         }
     }
     for (size_t i = 0; i < theRigidPlanes.size(); i++) {

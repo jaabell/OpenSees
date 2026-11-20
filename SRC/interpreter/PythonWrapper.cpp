@@ -882,6 +882,46 @@ static PyObject* Py_ops_ladrunoContactForce(PyObject* self, PyObject* args)
     return wrapper->getResults();
 }
 
+static PyObject* Py_ops_ladrunoMortarPenetration(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoMortarPenetration() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoMortarTieResidual(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoMortarTieResidual() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoBeginAugment(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoBeginAugment() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoEndAugment(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoEndAugment() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
 static PyObject *Py_ops_nDMaterial(PyObject *self, PyObject *args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3304,6 +3344,10 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("contactPlane", &Py_ops_contactPlane);
     addCommand("ladrunoContactInfo", &Py_ops_ladrunoContactInfo);
     addCommand("ladrunoContactForce", &Py_ops_ladrunoContactForce);
+    addCommand("ladrunoMortarPenetration", &Py_ops_ladrunoMortarPenetration);
+    addCommand("ladrunoMortarTieResidual", &Py_ops_ladrunoMortarTieResidual);
+    addCommand("ladrunoBeginAugment", &Py_ops_ladrunoBeginAugment);
+    addCommand("ladrunoEndAugment", &Py_ops_ladrunoEndAugment);
     addCommand("nDMaterial", &Py_ops_nDMaterial);
     addCommand("block2D", &Py_ops_block2d);
     addCommand("block3D", &Py_ops_block3d);

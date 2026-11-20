@@ -29,6 +29,7 @@
 #include <LadrunoContactSurface.h>
 #include <LadrunoContactProjection.h>
 #include <LadrunoContactBucketSort.h>
+#include <LadrunoMortarKernel.h>
 #include <Matrix.h>
 #include <Domain.h>
 #include <AnalysisModel.h>
@@ -82,7 +83,7 @@ ladrunoSurfaceNodesOk(Domain *dom, int ctag, const LadrunoContactSurface *s)
         if (nd != 3) {
             opserr << "FATAL LadrunoContactHandler::handle() - contact " << ctag
                    << ": node " << tags(i) << " of contactSurface " << s->getTag()
-                   << " has " << nd << "D coordinates; node-to-segment contact needs 3D nodes\n";
+                   << " has " << nd << "D coordinates; surface contact needs 3D nodes\n";
             return false;
         }
     }
@@ -165,6 +166,21 @@ ladrunoResolveAutoKn(Domain *theDomain, Node **segNodes, int nps,
         return (kn > 0.0) ? kn : -1.0;
     }
     return -1.0;   // no owning solid element
+}
+
+// Newell unit normal of a planar tri/quad facet (zero for a degenerate facet)
+static void
+ladrunoFacetNormalNewell(int npts, const double X[4][3], double n[3])
+{
+    n[0] = n[1] = n[2] = 0.0;
+    for (int i = 0; i < npts; i++) {
+        const double *a = X[i]; const double *b = X[(i + 1) % npts];
+        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
+        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
+        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    double nn = std::sqrt(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]);
+    if (nn > 1e-300) { n[0] /= nn; n[1] /= nn; n[2] /= nn; }
 }
 
 int
@@ -523,6 +539,254 @@ LadrunoContactHandler::handle(const ID *nodesLast)
                 theModel->addFE_Element(fe);
             }
         }
+    }
+
+    // Mortar segment-to-segment contact: one adapter per (slave facet, master
+    // facet) pair. The pairing is exhaustive: the bucket sort of the
+    // node-to-segment lane is a superset for point slaves only, and a query at
+    // the centroid of an extended slave facet would miss overlaps when the slave
+    // facet is coarser than the master buckets. The clip of the adapter rejects
+    // a non-overlapping pair at each evaluation (zero force).
+    //
+    // A mesh tie (-tie) binds the pairs that overlap in the reference
+    // configuration, and only those whose mean |gap| over the overlap is at most
+    // 0.5 sqrt(A_s), A_s the area of the slave facet. The clip accepts an
+    // anti-parallel facet across a closed or folded surface (the far side of a
+    // tube projects onto the auxiliary plane of a near facet), and without the
+    // proximity condition every slave facet would also be tied to the antipodal
+    // master facets; their separation is of the order of the surface diameter,
+    // that of the facing pairs of the order of the facet sagitta. This is the
+    // exclusion of the mortar generator of LadrunoTie with a tolerance factor 1.
+    // An explicit -maxGap replaces it.
+    if (cd != 0) {
+        cd->mortarNormalGCBegin();   // multiplier slots of nodes not rebuilt below are collected
+        for (int c = 0; c < cd->getNumMortarContacts(); c++) {
+            const LadrunoContactDomain::MortarContact &mc = cd->getMortarContact(c);
+            if (mc.retired) continue;
+            LadrunoContactSurface *ms = cd->getSurface(mc.masterSurfTag);
+            LadrunoContactSurface *ss = cd->getSurface(mc.slaveSurfTag);
+            if (ms == 0 || ss == 0) {
+                opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                       << ": master/slave surface not defined\n";
+                return ladrunoContactFatal();
+            }
+            if (ms->getKind() != LadrunoContactSurface::MASTER_SEGMENTS ||
+                ss->getKind() != LadrunoContactSurface::SLAVE_SEGMENTS) {
+                opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                       << ": needs a -master facet surface and a -slave-segments facet surface\n";
+                return ladrunoContactFatal();
+            }
+            if (!ladrunoSurfaceNodesOk(theDomain, mc.tag, ms) ||
+                !ladrunoSurfaceNodesOk(theDomain, mc.tag, ss))
+                return ladrunoContactFatal();
+            int npsM = ms->getNodesPerSeg(), npsS = ss->getNodesPerSeg();
+            if (npsM < 3 || npsM > 4 || npsS < 3 || npsS > 4) {
+                opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                       << ": nodesPerSeg " << npsM << "/" << npsS << " unsupported (need 3 or 4)\n";
+                return ladrunoContactFatal();
+            }
+            // penalty: -epsN if given, else the positional kn; sized per pair when automatic
+            bool epsAuto = mc.epsNAuto || mc.knAuto;
+            double epsFixed = (mc.epsN > 0.0) ? mc.epsN : mc.kn;
+            if (!epsAuto && epsFixed <= 0.0) {
+                opserr << "FATAL LadrunoContactHandler::handle() - mortar contact " << mc.tag
+                       << ": needs a penalty (-epsN value, -epsN auto, or kn > 0)\n";
+                return ladrunoContactFatal();
+            }
+            const ID &mTags = ms->getNodeTags();
+            const ID &sTags = ss->getNodeTags();
+            int nSegM = mTags.Size() / npsM;
+            int nSegS = sTags.Size() / npsS;
+            int nTieExcluded = 0;
+
+            for (int sf = 0; sf < nSegS; sf++) {
+                Node *sNodes[4]; double scen[3] = {0.0, 0.0, 0.0};
+                double Sx[4][3];                              // reference coordinates
+                for (int k = 0; k < npsS; k++) {
+                    Node *sn = theDomain->getNode(sTags(sf * npsS + k));
+                    if (sn == 0 || sn->getNumberDOF() < 3) {
+                        opserr << "FATAL LadrunoContactHandler::handle() - mortar contact "
+                               << mc.tag << " slave node " << sTags(sf * npsS + k) << " ndf="
+                               << (sn != 0 ? sn->getNumberDOF() : -1)
+                               << " < 3 (mortar contact needs the first three DOFs to be the "
+                                  "translations)\n";
+                        return ladrunoContactFatal();
+                    }
+                    sNodes[k] = sn;
+                    const Vector &Xk = sn->getCrds();
+                    for (int d = 0; d < 3; d++) { Sx[k][d] = Xk(d); scen[d] += Xk(d); }
+                }
+                for (int d = 0; d < 3; d++) scen[d] /= npsS;     // slave facet centroid
+                // tie proximity tolerance 0.5 sqrt(A_s) (A_s from the facet clipped
+                // with itself); < 0: the facet is degenerate, no exclusion
+                double tieGapTol = -1.0;
+                if (mc.isTie) {
+                    double nS[3];
+                    ladrunoFacetNormalNewell(npsS, Sx, nS);
+                    LadrunoMortarKernel::PairResult prSelf;
+                    if (LadrunoMortarKernel::integratePair(npsS, Sx, npsS, Sx, nS, prSelf,
+                                                           mc.ngp) == 0 && prSelf.area > 1e-300)
+                        tieGapTol = 0.5 * std::sqrt(prSelf.area);
+                }
+
+                for (int seg = 0; seg < nSegM; seg++) {
+                    Node *mNodes[4]; double mcen[3] = {0.0, 0.0, 0.0};
+                    double Mx[4][3];                              // reference coordinates
+                    for (int k = 0; k < npsM; k++) {
+                        Node *mn = theDomain->getNode(mTags(seg * npsM + k));
+                        if (mn == 0 || mn->getNumberDOF() < 3) {
+                            opserr << "FATAL LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << " master facet " << seg << " node "
+                                   << mTags(seg * npsM + k) << ": ndf="
+                                   << (mn != 0 ? mn->getNumberDOF() : -1) << " < 3 (or node "
+                                      "absent); master facets need three translational DOFs "
+                                      "per node\n";
+                            return ladrunoContactFatal();
+                        }
+                        mNodes[k] = mn;
+                        const Vector &Xk = mn->getCrds();
+                        for (int d = 0; d < 3; d++) { Mx[k][d] = Xk(d); mcen[d] += Xk(d); }
+                    }
+                    for (int d = 0; d < 3; d++) mcen[d] /= npsM;
+                    // orientation toward the slave's allowed half-space: the explicit
+                    // -outward, else (slave centroid - master centroid) at the
+                    // reference configuration
+                    double orientDir[3];
+                    if (mc.hasOutward) {
+                        for (int d = 0; d < 3; d++) orientDir[d] = mc.outward[d];
+                    } else if (mc.isTie) {
+                        // The bond of a tie does not depend on the normal sign. The
+                        // projection refuses a point whose reference direction is within
+                        // 1e-12 of the facet plane, so a degenerate automatic direction
+                        // (zero on a coincident pair, tangential on a zero-gap non-matching
+                        // pair, where the normal component is round-off) takes the master
+                        // facet normal. The test is relative and 1e3 above that threshold.
+                        for (int d = 0; d < 3; d++) orientDir[d] = scen[d] - mcen[d];
+                        double nM[3];
+                        ladrunoFacetNormalNewell(npsM, Mx, nM);
+                        double odn = nM[0]*orientDir[0] + nM[1]*orientDir[1] + nM[2]*orientDir[2];
+                        double od = std::sqrt(orientDir[0]*orientDir[0] + orientDir[1]*orientDir[1]
+                                              + orientDir[2]*orientDir[2]);
+                        if (std::fabs(odn) <= 1e-9 * od)
+                            for (int d = 0; d < 3; d++) orientDir[d] = nM[d];
+                    } else {
+                        for (int d = 0; d < 3; d++) orientDir[d] = scen[d] - mcen[d];
+                        // The kernel flips the facet normal toward orientDir. On a
+                        // coincident pair, and on a zero-gap non-matching pair whose
+                        // centroid offset is tangential, the normal component of the
+                        // automatic direction vanishes and the sign is decided by
+                        // round-off: the contact may then be attractive. Reported once
+                        // per contact for a pair closer than two facet sizes.
+                        double d2 = orientDir[0]*orientDir[0] + orientDir[1]*orientDir[1]
+                                  + orientDir[2]*orientDir[2];
+                        double h2 = 0.0;
+                        for (int k = 0; k < npsM; k++) {
+                            const double *a = Mx[k]; const double *b = Mx[(k + 1) % npsM];
+                            double ex = b[0]-a[0], ey = b[1]-a[1], ez = b[2]-a[2];
+                            double e2 = ex*ex + ey*ey + ez*ez;
+                            if (e2 > h2) h2 = e2;
+                        }
+                        double nM[3];
+                        ladrunoFacetNormalNewell(npsM, Mx, nM);
+                        double odn = nM[0]*orientDir[0] + nM[1]*orientDir[1] + nM[2]*orientDir[2];
+                        if (odn*odn <= 1e-12 * h2 && d2 <= 4.0 * h2 &&
+                            cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_MORTAR_ORIENT)) {
+                            opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << ": the automatic orientation is degenerate (the "
+                                      "slave-to-master centroid direction has no component along "
+                                      "the master facet normal: a coincident or zero-gap "
+                                      "non-matching interface); the contact sign then depends on "
+                                      "the facet winding and may be attractive. Give -outward.\n";
+                        }
+                    }
+                    // -maxGap: no pair whose slave centroid lies farther than maxGap
+                    // from the plane of the master facet, in the configuration of
+                    // this handle(); a pairing decision, never switched within a step
+                    if (mc.maxGap > 0.0) {
+                        double xm[4][3], cs[3] = {0.0, 0.0, 0.0}, cm[3] = {0.0, 0.0, 0.0};
+                        for (int k = 0; k < npsS; k++) {
+                            const Vector &u = sNodes[k]->getTrialDisp();
+                            for (int d = 0; d < 3; d++) cs[d] += (Sx[k][d] + u(d)) / npsS;
+                        }
+                        for (int k = 0; k < npsM; k++) {
+                            const Vector &u = mNodes[k]->getTrialDisp();
+                            for (int d = 0; d < 3; d++) {
+                                xm[k][d] = Mx[k][d] + u(d);
+                                cm[d] += xm[k][d] / npsM;
+                            }
+                        }
+                        double nM[3];
+                        ladrunoFacetNormalNewell(npsM, xm, nM);
+                        double dist = std::fabs(nM[0] * (cs[0] - cm[0]) + nM[1] * (cs[1] - cm[1])
+                                                + nM[2] * (cs[2] - cm[2]));
+                        if (dist > mc.maxGap) continue;
+                    }
+                    if (mc.isTie) {
+                        LadrunoMortarKernel::PairResult pr0;
+                        if (LadrunoMortarKernel::integratePair(npsS, Sx, npsM, Mx, orientDir,
+                                                               pr0, mc.ngp) != 0)
+                            continue;                     // no overlap as built: not bonded
+                        if (mc.maxGap <= 0.0 && tieGapTol > 0.0 &&
+                            pr0.gapL1 > tieGapTol * pr0.area) {
+                            nTieExcluded++;               // a distant (antipodal) pair
+                            continue;
+                        }
+                    }
+                    double epsUse = epsFixed;
+                    if (epsAuto) {
+                        epsUse = ladrunoResolveAutoKn(theDomain, mNodes, npsM, orientDir);
+                        if (epsUse <= 0.0) {
+                            opserr << "FATAL LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << " slave facet " << sf << " master facet " << seg
+                                   << ": the automatic penalty could not be sized (no owning "
+                                      "solid element, an element without 3 DOFs per node, or an "
+                                      "ambiguous normal). Give an explicit -epsN.\n";
+                            return ladrunoContactFatal();
+                        }
+                    }
+                    // friction: epsT auto is the normal penalty of the pair; friction
+                    // without a tangential penalty would stick with zero force, so
+                    // the normal penalty is used then, with a message
+                    bool wantFric = mc.hasFriction();
+                    double epsTuse = mc.epsTAuto ? epsUse : mc.epsT;
+                    if (wantFric && epsTuse <= 0.0) {
+                        epsTuse = epsUse;
+                        if (cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_EPST))
+                            opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                                   << mc.tag << ": friction without -epsT; the tangential "
+                                      "penalty is the normal penalty (-epsT auto)\n";
+                    }
+                    if (wantFric && mc.consistentTan &&
+                        cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_CSL))
+                        opserr << "WARNING LadrunoContactHandler::handle() - mortar contact "
+                               << mc.tag << ": -consistanttan (non-symmetric friction tangent) "
+                                  "needs a non-symmetric solver (system FullGeneral/UmfPack/"
+                                  "BandGeneral); symmetric solvers will silently corrupt it.\n";
+                    LadrunoContactFE *fe =
+                        new LadrunoContactFE(numFe++, sNodes, npsS, mNodes, npsM, epsUse,
+                                             orientDir, mc.tag, sf, theDomain, mc.ngp,
+                                             mc.isTie, mc.mu, epsTuse, mc.cohesion, mc.tauMax,
+                                             mc.consistentTan, seg);
+                    if (fe == 0) return -5;
+                    if (mc.gapOffset != 0.0 || mc.adjust)
+                        fe->setMortarGapShift(mc.gapOffset, mc.adjust, mc.adjustTol);
+                    if (mc.smoothN > 0.0 || mc.smoothT > 0.0)
+                        fe->setMortarSmoothing(mc.smoothN, mc.smoothT);
+                    theModel->addFE_Element(fe);
+                    for (int k = 0; k < npsS; k++) {
+                        cd->mortarNormalGCMark(mc.tag, sTags(sf * npsS + k));
+                        if (wantFric)        // one friction slot per (node, facet pair)
+                            cd->mortarFrictionGCMark(mc.tag, sTags(sf * npsS + k), sf, seg);
+                    }
+                }
+            }
+            if (nTieExcluded > 0 && cd->warnOnce(mc.tag, LadrunoContactDomain::WARN_TIE_EXCLUDED))
+                opserr << "LadrunoContactHandler::handle() - mortar tie " << mc.tag << ": "
+                       << nTieExcluded << " overlapping facet pair(s) farther apart than half "
+                          "the slave facet size were not tied (the far side of a closed or "
+                          "folded surface)\n";
+        }
+        cd->mortarNormalGCEnd();     // erase the multiplier slots no live pair referenced
     }
 
     return count3;

@@ -34,18 +34,21 @@ class Domain;
 class LadrunoContactSurface
 {
   public:
-    enum Kind { SLAVE_NODES = 0, MASTER_SEGMENTS = 1 };
+    enum Kind { SLAVE_NODES = 0, MASTER_SEGMENTS = 1, SLAVE_SEGMENTS = 2 };
 
     // SLAVE_NODES: nodeTags are the slave nodes.
     // MASTER_SEGMENTS: nodeTags is the flat connectivity and nodesPerSeg the
     //   stride (3 = tri, 4 = quad); segment s spans nodeTags[s*nodesPerSeg .. +stride).
+    // SLAVE_SEGMENTS: a faceted slave surface with the MASTER_SEGMENTS layout. The
+    //   mortar formulation integrates the slave matrix D over these facets; a node
+    //   set carries no facet and cannot give D.
     LadrunoContactSurface(int tag, Kind kind, const ID &nodeTags, int nodesPerSeg = 0);
     ~LadrunoContactSurface();
 
     int getTag(void) const { return myTag; }
     Kind getKind(void) const { return myKind; }
     const ID &getNodeTags(void) const { return theNodeTags; }
-    int getNumSegments(void) const;       // MASTER: segment count; SLAVE: node count
+    int getNumSegments(void) const;       // faceted: segment count; SLAVE_NODES: node count
     int getNodesPerSeg(void) const { return nodesPerSeg; }
 
     // Drop the nodes the analysis has removed (`remove node`, element removal

@@ -2219,6 +2219,13 @@ Domain::commit(void)
     committedTime = currentTime;
     dT = 0.0;
 
+    // Inside a held-load contact augmentation sweep (ladrunoBeginAugment) the
+    // repeated commits at a zero load increment only update the contact
+    // multipliers: no recorder sample is taken and the commitTag is not
+    // advanced, so the recorded history is that of the physical steps.
+    if (contactAugmenting)
+      return 0;
+
     // invoke record on all recorders
     for (int i=0; i<numRecorders; i++)
       if (theRecorders[i] != 0)

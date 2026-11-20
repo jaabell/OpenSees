@@ -27,6 +27,12 @@
 //     Springer, Berlin. doi:10.1007/978-3-662-04864-1
 //   Hallquist, J.O. (2006). LS-DYNA Theory Manual, Livermore Software
 //     Technology Corporation, Section 26 (Contact-Impact Algorithm).
+//   Puso, M.A. and Laursen, T.A. (2004). A mortar segment-to-segment contact
+//     method for large deformation solid mechanics. Computer Methods in Applied
+//     Mechanics and Engineering, 193(6-8), 601-629. doi:10.1016/j.cma.2003.10.010
+//   Simo, J.C. and Laursen, T.A. (1992). An augmented Lagrangian treatment of
+//     contact problems involving friction. Computers & Structures, 42(1),
+//     97-116. doi:10.1016/0045-7949(92)90540-G
 //
 // Description: LadrunoContactFE, an FE_Element adapter that adds contact
 // contributions to the assembly without a Domain Element behind it
@@ -44,6 +50,13 @@
 //   SEGMENT  node-to-segment penalty contact of one slave node against one
 //            master segment (tri3 or quad4), connectivity {slave, segment
 //            nodes}, ndof = 3 (1 + nps).
+//   MORTAR   mortar segment-to-segment contact of one slave facet against one
+//            master facet (Puso and Laursen 2004): the overlap of the two
+//            facets on the auxiliary plane of the master facet is clipped and
+//            integrated with a triangle rule, giving the mortar matrices D
+//            (slave x slave), M (slave x master) and the weighted gap gt.
+//            Connectivity {slave facet nodes, master facet nodes},
+//            ndof = 3 (npsS + npsM).
 //
 // With myEle == 0 the FE_Element getResidual()/getTangent() and the force
 // helpers have no element to call, so this class owns its buffers and
@@ -93,7 +106,40 @@ class LadrunoContactFE : public FE_Element
                      Domain *theDomain = 0, int contactTag = 0, int segIndex = 0,
                      bool consistentTan = false, bool consistentNormal = false,
                      double cohesion = 0.0, double tauMax = 0.0, double muc = 0.0);
+    // Mortar contact of ONE slave facet against ONE master facet (tri3 or quad4
+    // each). Connectivity = {slave facet nodes} + {master facet nodes}.
+    //   epsN: normal penalty of the augmented Lagrangian.
+    //   orientDir: direction toward the slave's allowed half-space (orients the
+    //     master facet normal).
+    //   contactTag, slaveFacetIndex: the engine keys; theDomain is the engine
+    //     lookup (null: penalty only, no multiplier).
+    //   ngp: order of the triangle rule on the clipped overlap.
+    //   isTie: a mesh tie (permanent bond of the full relative displacement,
+    //     epsN is then the tie penalty).
+    //   mu, epsT, cohesion, tauMax: Coulomb/Tresca friction on the cone
+    //     min(mu N + cohesion, tauMax) with tangential penalty epsT; all of mu,
+    //     cohesion, tauMax <= 0: frictionless, no engine state is touched.
+    //   consistentTan: the non-symmetric consistent friction tangent.
+    //   masterFacetIndex: ordinal of the master facet (the friction state key).
+    LadrunoContactFE(int tag, Node **slaveNodes, int npsS, Node **masterNodes, int npsM,
+                     double epsN, const double orientDir[3], int contactTag,
+                     int slaveFacetIndex, Domain *theDomain, int ngp = 2,
+                     bool isTie = false, double mu = 0.0, double epsT = 0.0,
+                     double cohesion = 0.0, double tauMax = 0.0, bool consistentTan = false,
+                     int masterFacetIndex = 0);
     ~LadrunoContactFE();
+
+    // Mortar normal-gap shift: gbar_I -> gbar_I + gapOffset, and with adjust
+    // the weighted gap of this pair at the reference configuration is
+    // subtracted (only where |gbar_ref| <= adjustTol when adjustTol > 0). The
+    // reference gap is integrated at the first evaluation.
+    void setMortarGapShift(double gapOffset, bool adjust, double adjustTol);
+
+    // Smoothed mortar contact law: smoothN > 0 (a length g0) replaces the kink
+    // of p = min(0, epsN gbar) by a C1 quadratic onset over |gbar| < g0 and
+    // fades the friction traction in over the same band; 0 < smoothT < 1 rounds
+    // the stick/slip corner (LadrunoFrictionKernel::frictionReturnMapSmooth).
+    void setMortarSmoothing(double smoothN, double smoothT);
 
     // Fill myID with the first ndm equations of each node (the translations).
     // FE_Element::setID() copies each node's whole DOF_Group ID, which on a
@@ -159,10 +205,50 @@ class LadrunoContactFE : public FE_Element
     // (LadrunoContactProjection::normalGeomTangent), added to `tang`.
     void addNormalGeomTang(double fact);
 
+    // Integrate the mortar facet pair at the current trial configuration
+    // (LadrunoMortarKernel::integratePair). Returns false when the overlap is
+    // empty or degenerate; otherwise fills D, M, the weighted gap g (one per
+    // slave node) and the master facet normal n oriented by orientDir.
+    bool mortarActive(double D[4][4], double M[4][4], double g[4], double n[3]) const;
+
+    // Mortar tangent K = epsN Bt^T diag(act_I / a_I) Bt (x) (n (x) n),
+    // Bt = [D, -M] over [slave | master] nodes, on the active set of the
+    // residual. The variation of D, M and n with the displacements is not
+    // included (exact for flat facets that do not slide).
+    void addMortarTang(double fact, bool initialStiff = false);
+
+    // Mesh-tie force: for every slave node of the pair the weighted relative
+    // displacement r_I = sum_J D_IJ u_s,J - sum_K M_IK u_m,K (from the trial
+    // displacements: the bond holds the as-built configuration), the traction
+    // t_I = lambdaTie_I + epsTie r_I / a_I (all three components, no clamp),
+    // scattered as the normal force: f^s_K = -sum_I D_KI t_I,
+    // f^m_L = +sum_I M_IL t_I.
+    void addMortarTieForce(const double D[4][4], const double M[4][4],
+                           class LadrunoContactDomain *cd);
+
+    // Mortar friction force (the tangent is in addMortarTang). For every slave
+    // node in normal contact (p_normal[I] < 0): the weighted relative
+    // displacement r_I, its tangential part over a_I as the slip (positions
+    // carry no tangential information after the projection), measured from the
+    // engagement origin and offset by lambdaT / epsT (augmented trial traction
+    // lambdaT + epsT (gTeff - gpT)), the return map of LadrunoFrictionKernel
+    // with N = -p_normal[I], and the scatter +D tF on the slave facet and
+    // -M^T tF on the master facet.
+    // chi (null: 1): the onset weights of the smoothed law, scaling the traction.
+    void addMortarFriction(const double D[4][4], const double M[4][4], const double n[3],
+                           const double p_normal[4], class LadrunoContactDomain *cd,
+                           const double *chi = 0);
+
+    // Smoothed normal law at the augmented argument pr = lambda + epsN gbar,
+    // x = -pr, S = epsN g0: P = 0 (x <= -S), (x + S)^2 / (4 S) (|x| < S),
+    // x (x >= S); dP = dP/dx; chi = C1 smoothstep of the friction onset over
+    // the same band and dchi = dchi/dx.
+    void mortarSmoothLaw(double pr, double &P, double &dP, double &chi, double &dchi) const;
+
     Vector resid;
     Matrix tang;
 
-    enum Mode { RIGID_PLANE = 1, SEGMENT = 2 };
+    enum Mode { RIGID_PLANE = 1, SEGMENT = 2, MORTAR = 3 };
     Mode mode;
     Node *theSlave;
     int ndm;
@@ -192,6 +278,27 @@ class LadrunoContactFE : public FE_Element
     // viscous normal stabilization: force -muc gdot B, gdot = B v, while in
     // contact; damping tangent muc B^T B through addCtoTang
     double muc;
+
+    // MORTAR binding (kn holds epsN)
+    Node *mortarSlave[4];   // slave facet nodes
+    Node *mortarMaster[4];  // master facet nodes
+    int npsS, npsM;         // nodes per slave / master facet
+    int slaveFacetIndex;    // ordinal of the slave facet in its surface (stable across rebuilds)
+    int mortarOrder;        // order of the triangle rule on the clipped overlap
+    bool isTie;             // mesh tie
+    int masterFacetIndex;   // ordinal of the master facet in its surface (stable across rebuilds)
+
+    // mortar gap shift (setMortarGapShift); off unless an option was given
+    bool   hasGapShift;
+    double gapShiftOffset;
+    bool   gapShiftAdjust;
+    double gapShiftAdjTol;          // 0: adjust every node of the pair
+    mutable bool   gapShiftRefReady;
+    mutable double gapShiftRef[4];  // -gbar_I at the reference configuration
+
+    // smoothed law (setMortarSmoothing); 0: off
+    double smoothBand;              // g0
+    double smoothSlip;              // r
 };
 
 #endif

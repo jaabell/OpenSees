@@ -39,7 +39,7 @@ LadrunoContactSurface::~LadrunoContactSurface()
 int
 LadrunoContactSurface::getNumSegments(void) const
 {
-    if (myKind == MASTER_SEGMENTS && nodesPerSeg > 0)
+    if (myKind != SLAVE_NODES && nodesPerSeg > 0)
         return theNodeTags.Size() / nodesPerSeg;   // faceted: count facets
     return theNodeTags.Size();   // SLAVE_NODES: one entry per slave node
 }
@@ -54,7 +54,7 @@ LadrunoContactSurface::pruneMissingNodes(Domain *dom)
     if (n == 0)
         return 0;
 
-    const bool faceted = (myKind == MASTER_SEGMENTS) && nodesPerSeg > 0;
+    const bool faceted = (myKind != SLAVE_NODES) && nodesPerSeg > 0;
     const int stride = faceted ? nodesPerSeg : 1;
 
     // Whole strides only: for a faceted surface the stride is the facet, so one

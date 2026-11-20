@@ -274,6 +274,10 @@ extern int OPS_LadrunoContact(void);
 extern int OPS_LadrunoContactPlane(void);
 extern int OPS_LadrunoContactInfo(void);
 extern int OPS_LadrunoContactForce(void);
+extern int OPS_LadrunoMortarPenetration(void);
+extern int OPS_LadrunoMortarTieResidual(void);
+extern int OPS_LadrunoBeginAugment(void);
+extern int OPS_LadrunoEndAugment(void);
 
 extern void OPS_SetReliabilityDomain(ReliabilityDomain *);
 
@@ -1001,6 +1005,14 @@ int OpenSeesAppInit(Tcl_Interp *interp) {
     Tcl_CreateCommand(interp, "ladrunoContactInfo", &ladrunoContactInfo,
         (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
     Tcl_CreateCommand(interp, "ladrunoContactForce", &ladrunoContactForce,
+        (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
+    Tcl_CreateCommand(interp, "ladrunoMortarPenetration", &ladrunoMortarPenetration,
+        (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
+    Tcl_CreateCommand(interp, "ladrunoMortarTieResidual", &ladrunoMortarTieResidual,
+        (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
+    Tcl_CreateCommand(interp, "ladrunoBeginAugment", &ladrunoBeginAugment,
+        (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
+    Tcl_CreateCommand(interp, "ladrunoEndAugment", &ladrunoEndAugment,
         (ClientData)NULL, (Tcl_CmdDeleteProc*)NULL);
     Tcl_CreateCommand(interp, "video", &videoPlayer, 
 		      (ClientData)NULL, (Tcl_CmdDeleteProc *)NULL);       
@@ -6513,6 +6525,42 @@ ladrunoContactForce(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Cha
 {
     OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
     if (OPS_LadrunoContactForce() < 0)
+	    return TCL_ERROR;
+    return TCL_OK;
+}
+
+int
+ladrunoMortarPenetration(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv)
+{
+    OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+    if (OPS_LadrunoMortarPenetration() < 0)
+	    return TCL_ERROR;
+    return TCL_OK;
+}
+
+int
+ladrunoMortarTieResidual(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv)
+{
+    OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+    if (OPS_LadrunoMortarTieResidual() < 0)
+	    return TCL_ERROR;
+    return TCL_OK;
+}
+
+int
+ladrunoBeginAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv)
+{
+    OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+    if (OPS_LadrunoBeginAugment() < 0)
+	    return TCL_ERROR;
+    return TCL_OK;
+}
+
+int
+ladrunoEndAugment(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv)
+{
+    OPS_ResetInputNoBuilder(clientData, interp, 1, argc, argv, &theDomain);
+    if (OPS_LadrunoEndAugment() < 0)
 	    return TCL_ERROR;
     return TCL_OK;
 }
