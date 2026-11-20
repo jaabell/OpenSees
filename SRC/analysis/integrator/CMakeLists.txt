@@ -130,6 +130,7 @@ target_sources(OPS_Analysis
        HSConstraint.h
        KRAlphaExplicit.h
        KRAlphaExplicit_TP.h
+       LadrunoEnergyChannels.h
        NewmarkExplicit.h
        NewmarkHSFixedNumIter.h
        NewmarkHSIncrLimit.h

@@ -78,6 +78,7 @@
 #include <Graph.h>
 #include <Recorder.h>
 #include <MeshRegion.h>
+#include <LadrunoEnergyChannels.h>
 #include <Analysis.h>
 #include <FE_Datastore.h>
 #include <FEM_ObjectBroker.h>
@@ -1055,6 +1056,10 @@ Domain::clearAll(void) {
   theLoadPatterns->clearAll();
   theParameters->clearAll();
   numParameters = 0;
+
+  // reset the energy channels read by EnergyBalanceRecorder: wipe() destroys
+  // every producer and consumer, so the next model starts from zero
+  Ladruno::EnergyChannelRegistry::instance().resetOnWipe();
 
   // remove the recorders
   int i;
