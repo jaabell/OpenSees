@@ -194,6 +194,10 @@ class Domain
     virtual void  unsetLoadConstant(void);
     virtual  int  initialize(void);    
     virtual  int  setRayleighDampingFactors(double alphaM, double betaK, double betaK0, double betaKc);
+    // the factors of the last setRayleighDampingFactors call (all 0 when
+    // none); the call itself only cascades them to elements and nodes
+    virtual  void getRayleighDampingFactors(double &alphaM, double &betaK,
+					    double &betaK0, double &betaKc) const;
 
     virtual  int  commit(void);
     virtual  int  revertToLastCommit(void);
@@ -209,6 +213,9 @@ class Domain
     // methods for eigenvalue analysis
     virtual int setEigenvalues(const Vector &theEigenvalues);
     virtual const Vector &getEigenvalues(void);
+    // number of stored eigenvalues, 0 when none was set; unlike
+    // getEigenvalues() it never exits, so callers can fail gracefully
+    virtual int getNumEigenvalues(void) const;
     virtual double getTimeEigenvaluesSet(void);
     void setModalProperties(const DomainModalProperties& dmp);
     void unsetModalProperties(void);
@@ -311,6 +318,9 @@ class Domain
     DomainModalProperties* theModalProperties;
     Vector *theModalDampingFactors;
     bool inclModalMatrix;
+
+    // last factors passed to setRayleighDampingFactors
+    double dmpAlphaM = 0.0, dmpBetaK = 0.0, dmpBetaK0 = 0.0, dmpBetaKc = 0.0;
 
     int lastChannel;
 
