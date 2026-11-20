@@ -4185,6 +4185,17 @@ specifyConstraintHandler(ClientData clientData, Tcl_Interp *interp, int argc,
       theHandler = theAutoHandler;
   }
 
+  else if (strcmp(argv[1],"LadrunoProjection") == 0) {
+      extern void *OPS_LadrunoProjectionHandler(void);
+      OPS_ResetInputNoBuilder(clientData, interp, 2, argc, argv, &theDomain);
+      ConstraintHandler *theProjHandler = (ConstraintHandler*)OPS_LadrunoProjectionHandler();
+      if (theProjHandler == 0) {
+          opserr << "WARNING failed to create constraint handler - previous constraint handler left unchanged\n";
+          return TCL_ERROR;
+      }
+      theHandler = theProjHandler;
+  }
+
   else {
     opserr << "WARNING No ConstraintHandler type exists (Plain, Penalty,\n";
     opserr << " Lagrange, Transformation) only\n";

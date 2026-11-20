@@ -395,6 +395,11 @@ TransientDomainDecompositionAnalysis::domainChanged(void)
   }	    
 
   result = theConstraintHandler->doneNumberingDOF();
+  if (result < 0) {
+    opserr << "TransientDomainDecompositionAnalysis::handle() - ";
+    opserr << "ConstraintHandler::doneNumberingDOF() failed";
+    return -2;
+  }
   
   // we invoke setSize() on the LinearSOE which
   // causes that object to determine its size

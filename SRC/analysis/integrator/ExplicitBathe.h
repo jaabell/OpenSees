@@ -96,7 +96,11 @@ public:
     double getCriticalTimeStep(void) const override;
 
     // LadrunoProjectionConsumer: stores the (non-owning) acceleration
-    // projector of a projection constraint handler.
+    // projector of a projection constraint handler. With a projector,
+    // diag(M) is read on the first newStep() after a change, the committed
+    // a_t is projected there, and both sub-step accelerations (t + p dt and
+    // t + dt) are projected before they form velocities and displacements.
+    // Without a projector the scheme is unchanged.
     void setConstraintProjector(LadrunoConstraintProjector *theProjector) override;
     
     // Methods for parallel processing
@@ -169,6 +173,7 @@ private:
     // constraint projector (not owned; null unless a projection handler
     // provides one)
     LadrunoConstraintProjector *theProjector;
+    bool massBuilt;     // projector has read diag(M) since the last change
 };
 
 #endif

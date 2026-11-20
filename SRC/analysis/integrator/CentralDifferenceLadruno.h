@@ -150,7 +150,11 @@ public:
     // LadrunoProjectionConsumer: stores the (non-owning) acceleration
     // projector of a projection constraint handler and invalidates the mass
     // tangent cache, since a new projector comes with a new constraint set
-    // and DOF numbering.
+    // and DOF numbering. With a projector, diag(M) is read in the starting
+    // procedure between the mass-only formTangent() and the first solve, the
+    // starting acceleration a_0 and every solved a_{n+1} are projected
+    // before they form velocities, and domainChanged() checks (or, with
+    // -projectICs, sets) the initial displacement and velocity.
     void setConstraintProjector(LadrunoConstraintProjector *theProjector) override;
 
     virtual int sendSelf(int commitTag, Channel &theChannel);
@@ -211,6 +215,8 @@ private:
     // constraint projector (not owned; null unless a projection handler
     // provides one)
     LadrunoConstraintProjector *theProjector;
+    bool    massBuilt;         // projector has read diag(M) since the last change
+    Vector *Aproj;             // projected acceleration a_{n+1} (scratch)
 };
 
 #endif

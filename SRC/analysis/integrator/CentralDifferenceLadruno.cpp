@@ -37,6 +37,7 @@
 #include <FEM_ObjectBroker.h>
 #include <elementAPI.h>
 #include <classTags.h>
+#include <LadrunoConstraintProjector.h>
 #include <cmath>
 #include <limits>
 #include <string.h>
@@ -142,7 +143,7 @@ CentralDifferenceLadruno::CentralDifferenceLadruno()
       cflFirstComputation(true), lumping(CTSLumping::Diagonal), betaKWarned(false),
       useMassCache(true), massTangentValid(false), massCacheNoted(false),
       commitSolveState(false), commitSolveStateNoted(false),
-      theProjector(0)
+      theProjector(0), massBuilt(false), Aproj(0)
 {
 }
 
@@ -166,7 +167,7 @@ CentralDifferenceLadruno::CentralDifferenceLadruno(
       cflFirstComputation(true), lumping(lumping_), betaKWarned(false),
       useMassCache(true), massTangentValid(false), massCacheNoted(false),
       commitSolveState(false), commitSolveStateNoted(false),
-      theProjector(0)
+      theProjector(0), massBuilt(false), Aproj(0)
 {
 }
 
@@ -177,6 +178,7 @@ CentralDifferenceLadruno::~CentralDifferenceLadruno()
     if (Aprev != 0) delete Aprev;
     if (Vfull != 0) delete Vfull;
     if (Azero != 0) delete Azero;
+    if (Aproj != 0) delete Aproj;
     // theProjector is owned by the constraint handler
 }
 
@@ -184,6 +186,9 @@ void
 CentralDifferenceLadruno::setConstraintProjector(LadrunoConstraintProjector *p)
 {
     theProjector = p;
+    // the two flags are cleared together: a starting procedure with
+    // massBuilt false but a valid cache would read the factored 1/M diagonal
+    massBuilt = false;
     massTangentValid = false;
 }
 
@@ -264,18 +269,21 @@ int CentralDifferenceLadruno::domainChanged()
         if (Aprev != 0) delete Aprev;
         if (Vfull != 0) delete Vfull;
         if (Azero != 0) delete Azero;
+        if (Aproj != 0) delete Aproj;
 
         Ut    = new Vector(size);
         Vhalf = new Vector(size);
         Aprev = new Vector(size);
         Vfull = new Vector(size);
         Azero = new Vector(size);
+        Aproj = new Vector(size);
 
         if (Ut == 0 || Ut->Size() != size ||
             Vhalf == 0 || Vhalf->Size() != size ||
             Aprev == 0 || Aprev->Size() != size ||
             Vfull == 0 || Vfull->Size() != size ||
-            Azero == 0 || Azero->Size() != size) {
+            Azero == 0 || Azero->Size() != size ||
+            Aproj == 0 || Aproj->Size() != size) {
             opserr << "CentralDifferenceLadruno::domainChanged - out of memory\n";
             return -1;
         }
@@ -296,6 +304,20 @@ int CentralDifferenceLadruno::domainChanged()
 
     // any change of mesh, mass or system size passes through here
     massTangentValid = false;
+
+    // The projector re-reads diag(M) in the next starting procedure. The
+    // committed (u_0, v_0) now in Ut and Vhalf must satisfy the constraints;
+    // enforceIC() uses only L and the offsets, not the mass.
+    massBuilt = false;
+    if (theProjector != 0) {
+        int nViol = theProjector->enforceIC(*Ut, *Vhalf);
+        if (nViol > 0) {
+            opserr << "CentralDifferenceLadruno::domainChanged - " << nViol
+                   << " initial-condition constraint violation(s); aborting. Correct the "
+                      "initial conditions or add -projectICs to the constraints command.\n";
+            return -1;
+        }
+    }
 
     // dt_cr is computed here in every case: the element eigensolves need
     // neither dt nor the factored system, so criticalTimeStep is valid before
@@ -479,6 +501,17 @@ int CentralDifferenceLadruno::newStep(double _deltaT)
             opserr << "CentralDifferenceLadruno::newStep() - starter: formTangent failed\n";
             return -3;
         }
+        // diag(M) for the projector, read before solve() replaces the
+        // diagonal by its reciprocal; the mass is constant between domain
+        // changes
+        if (theProjector != 0 && !massBuilt) {
+            if (theProjector->buildMass(theLinSOE) < 0) {
+                opserr << "CentralDifferenceLadruno::newStep() - starter: projector "
+                          "buildMass failed\n";
+                return -3;
+            }
+            massBuilt = true;
+        }
         if (this->formUnbalance() < 0) {
             opserr << "CentralDifferenceLadruno::newStep() - starter: formUnbalance failed\n";
             return -3;
@@ -488,6 +521,8 @@ int CentralDifferenceLadruno::newStep(double _deltaT)
             return -3;
         }
         *Aprev = theLinSOE->getX();                     // a_0
+        if (theProjector != 0)
+            theProjector->project(*Aprev);              // a_0 on the constraint manifold
         Vhalf->addVector(1.0, *Aprev, -0.5 * deltaT);   // v_{-1/2} = v_0 - dt/2 a_0
     }
 
@@ -543,16 +578,27 @@ int CentralDifferenceLadruno::update(const Vector &U)
         return -5;
     }
 
+    // With a projector, a_{n+1} is projected onto the constraint manifold.
+    // The projected value forms v_{n+1}, goes to the nodes and is carried in
+    // Aprev to the next leap-frog advance, so u and v stay on the manifold.
+    // The non-finite check above runs on the raw U.
+    const Vector *Aused = &U;
+    if (theProjector != 0) {
+        *Aproj = U;
+        theProjector->project(*Aproj);
+        Aused = Aproj;
+    }
+
     // full-step velocity v_{n+1} = v_{n+1/2} + dt/2 a_{n+1} (the centred
     // difference (u_{n+2} - u_n)/(2 dt)); Vhalf holds v_{n+1/2}
     *Vfull = *Vhalf;
-    Vfull->addVector(1.0, U, 0.5 * deltaT);
+    Vfull->addVector(1.0, *Aused, 0.5 * deltaT);
 
     // Full-step state (u_{n+1}, v_{n+1}, a_{n+1}) to the nodes. This is
     // needed also under -commitSolveState: committed nodal velocities and
     // recorders read it. Only the element state determination below may be
     // skipped.
-    theModel->setResponse(*Ut, *Vfull, U);
+    theModel->setResponse(*Ut, *Vfull, *Aused);
     if (!commitSolveState) {
         // second element state determination at the same displacement (only
         // v and a changed); identical state for rate-independent materials
@@ -588,7 +634,7 @@ int CentralDifferenceLadruno::update(const Vector &U)
         opserr << "CentralDifferenceLadruno::update() max|a| = " << A_max << endln;
 
     // a_{n+1} drives the velocity advance of the next newStep()
-    *Aprev = U;
+    *Aprev = *Aused;
 
     return 0;
 }

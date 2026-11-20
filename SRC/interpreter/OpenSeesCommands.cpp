@@ -1654,6 +1654,10 @@ int OPS_ConstraintHandler()
     } else if (strcmp(type,"Auto") == 0) {
     	theHandler = (ConstraintHandler*)OPS_AutoConstraintHandler();
 
+    } else if (strcmp(type,"LadrunoProjection") == 0) {
+    	extern void *OPS_LadrunoProjectionHandler(void);
+    	theHandler = (ConstraintHandler*)OPS_LadrunoProjectionHandler();
+
     } else {
     	opserr<<"WARNING unknown ConstraintHandler type "<<type<<"\n";
     	return -1;

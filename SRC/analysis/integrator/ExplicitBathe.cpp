@@ -35,6 +35,7 @@
 #include <Domain.h>
 #include <Element.h>
 #include <ElementIter.h>
+#include <LadrunoConstraintProjector.h>
 
 #define OPS_Export
 
@@ -154,7 +155,7 @@ ExplicitBathe::ExplicitBathe()
       alpha_lnvd(0.0),
       lnvdStepEnergy(0.0),
       lumping(CTSLumping::RowSum),
-      theProjector(0)
+      theProjector(0), massBuilt(false)
 {}
 
 // Main constructor with parameters
@@ -180,7 +181,7 @@ ExplicitBathe::ExplicitBathe(double _p, int compute_critical_timestep_, double a
       alpha_lnvd(alpha_lnvd_),
       lnvdStepEnergy(0.0),
       lumping(lumping_),
-      theProjector(0)
+      theProjector(0), massBuilt(false)
 {
     // Calculate integration coefficients from p parameter
     q1 = (1.0 - 2.0*p) / (2.0*p*(1.0 - p));
@@ -305,6 +306,20 @@ int ExplicitBathe::domainChanged() {
         }
     }
 
+    // With a projector: diag(M) is re-read on the next newStep(), and the
+    // committed (u, v) in U_t and V_t must satisfy the constraints
+    // (enforceIC() uses only L and the offsets, not the mass).
+    massBuilt = false;
+    if (theProjector != 0) {
+        int nViol = theProjector->enforceIC(*U_t, *V_t);
+        if (nViol > 0) {
+            opserr << "ExplicitBathe::domainChanged - " << nViol
+                   << " initial-condition constraint violation(s); aborting. Correct the "
+                      "initial conditions or add -projectICs to the constraints command.\n";
+            return -1;
+        }
+    }
+
     // Initialize critical timestep values
     damped_minimum_critical_timestep = std::numeric_limits<double>::infinity();
     undamped_minimum_critical_timestep = std::numeric_limits<double>::infinity();
@@ -336,6 +351,24 @@ int ExplicitBathe::newStep(double _deltaT) {
     }
 
     AnalysisModel *theModel = this->getAnalysisModel();
+
+    // With a projector, on the first step after a change: assemble the mass
+    // tangent here so that diag(M) is read before the algorithm's solve()
+    // replaces it by its reciprocal (the algorithm forms it again before its
+    // solve), and project the committed a_t onto the constraint manifold.
+    if (theProjector != 0 && !massBuilt) {
+        LinearSOE *theLinSOE = this->getLinearSOE();
+        if (this->formTangent(CURRENT_TANGENT) < 0) {
+            opserr << "ExplicitBathe::newStep() - formTangent failed (projector)\n";
+            return -3;
+        }
+        if (theProjector->buildMass(theLinSOE) < 0) {
+            opserr << "ExplicitBathe::newStep() - projector buildMass failed\n";
+            return -3;
+        }
+        massBuilt = true;
+        theProjector->project(*A_t);
+    }
 
     // Compute critical timestep if requested (only once)
     if (compute_critical_timestep == 1) {
@@ -439,6 +472,8 @@ int ExplicitBathe::update(const Vector &U) {
     // Store acceleration at t + p*dt
     *A_tpdt = U;
     this->applyLocalDamping(*A_tpdt, *V_fake, p * deltaT);   // V_fake: predicted velocity of sub-step 1
+    if (theProjector != 0)
+        theProjector->project(*A_tpdt);          // onto the constraint manifold
 
     // Update velocity at t + p*dt (corrected)
     // v_{t+p*dt} = v_t + (a_t + a_{t+p*dt}) * p*dt/2
@@ -475,6 +510,10 @@ int ExplicitBathe::update(const Vector &U) {
     theLinSOE->solve();
     *A_tdt = theLinSOE->getX();
     this->applyLocalDamping(*A_tdt, *V_fake, (1.0 - p) * deltaT);    // V_fake: predicted velocity of sub-step 2
+    // a_{t+dt} becomes a_t at commit and enters the next predictor, so the
+    // projected value keeps u and v on the constraint manifold
+    if (theProjector != 0)
+        theProjector->project(*A_tdt);
 
     // Report maximum acceleration for monitoring
     double A_max = A_tdt->pNorm(0);
@@ -587,6 +626,7 @@ const Vector &ExplicitBathe::getVel() {
 // Projector of a projection constraint handler (owned by the handler)
 void ExplicitBathe::setConstraintProjector(LadrunoConstraintProjector *theProjector_) {
     theProjector = theProjector_;
+    massBuilt = false;
 }
 
 // Critical time step of the central-difference limit (see ExplicitBathe.h)
