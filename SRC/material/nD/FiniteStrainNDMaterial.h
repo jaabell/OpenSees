@@ -2,99 +2,71 @@
 **    OpenSees - Open System for Earthquake Engineering Simulation    **
 **          Pacific Earthquake Engineering Research Center            **
 **                                                                    **
+**                                                                    **
+** (C) Copyright 1999, The Regents of the University of California    **
+** All Rights Reserved.                                               **
+**                                                                    **
+** Commercial use of this program without express permission of the   **
+** University of California, Berkeley, is strictly prohibited.  See   **
+** file 'COPYRIGHT'  in main directory for information on usage and   **
+** redistribution,  and for a DISCLAIMER OF ALL WARRANTIES.           **
+**                                                                    **
+** Developed by:                                                      **
+**   Frank McKenna (fmckenna@ce.berkeley.edu)                         **
+**   Gregory L. Fenves (fenves@ce.berkeley.edu)                       **
+**   Filip C. Filippou (filippou@ce.berkeley.edu)                     **
+**                                                                    **
 ** ****************************************************************** */
 
-// LADRUNO-HEADER-START
-// ==========================================================================
+// Developed by: N. Mora Bowen, P. Palacios, J.A. Abell (Ladruño project)
 //
-//   ▄█          ▄████████ ████████▄     ▄████████ ███    █▄  ███▄▄▄▄    ▄██████▄
-//  ███         ███    ███ ███   ▀███   ███    ███ ███    ███ ███▀▀▀██▄ ███    ███
-//  ███         ███    ███ ███    ███   ███    ███ ███    ███ ███   ███ ███    ███
-//  ███         ███    ███ ███    ███  ▄███▄▄▄▄██▀ ███    ███ ███   ███ ███    ███
-//  ███       ▀███████████ ███    ███ ▀▀███▀▀▀▀▀   ███    ███ ███   ███ ███    ███
-//  ███         ███    ███ ███    ███ ▀███████████ ███    ███ ███   ███ ███    ███
-//  ███▌    ▄   ███    ███ ███   ▄███   ███    ███ ███    ███ ███   ███ ███    ███
-//  █████▄▄██   ███    █▀  ████████▀    ███    ███ ████████▀   ▀█   █▀   ▀██████▀
-//  ▀                                   ███    ███
+// References:
+//   E.A. de Souza Neto, D. Peric, D.R.J. Owen (2008). Computational Methods
+//     for Plasticity: Theory and Applications. Wiley, Chichester.
+//     DOI 10.1002/9780470694626. Chapter 14 (Box 14.3, Section 14.5).
+//   J.C. Simo (1992). Algorithms for static and dynamic multiplicative
+//     plasticity that preserve the classical return mapping schemes of the
+//     infinitesimal theory. Computer Methods in Applied Mechanics and
+//     Engineering 99(1), 61-112. DOI 10.1016/0045-7825(92)90123-2.
+//   C. Miehe (1998). Comparison of two algorithms for the computation of
+//     fourth-order isotropic tensor functions. Computers & Structures 66(1),
+//     37-43. DOI 10.1016/S0045-7949(97)00073-4.
 //
-//  Ladruno — a research fork of OpenSees
-//  Created by:  Nicolas Mora Bowen  ·  Patricio Palacios  ·  José Abell  ·  Guppi
+// Description: abstract base class for three-dimensional finite-strain
+// NDMaterials driven by the deformation gradient F instead of a small-strain
+// vector. It adds one entry point to the NDMaterial interface, setTrialF(F),
+// and fixes the stress and tangent measures exchanged with a finite-strain
+// element:
 //
-// Header auto-stamped by Ladruno_scripts/stamp_headers.py (art: banner_ASCII.txt).
-// Do not hand-edit between the markers; edit the script/art and re-run instead.
-// ==========================================================================
-// LADRUNO-HEADER-END
-
-// Authors: Nicolas Mora Bowen, Guppi (Ladruño)
-// Created: 06/2026
+//   * The element calls setTrialF(F) with the TOTAL deformation gradient F
+//     (3x3) at the integration point. A material that needs the increment
+//     F_inc = F F_n^-1 computes it from its own committed F_n. The element
+//     never calls setTrialStrain() on a finite-strain material; both
+//     setTrialStrain() overloads return -1 with a message.
 //
-// Description: Abstract base class for FINITE-STRAIN material adaptors — the
-// "seam 3" contract between an F-delivering finite-strain element and an
-// UNCHANGED small-strain NDMaterial.
+//   * getStress() returns the Cauchy stress sigma as a 6-vector in the 3D
+//     Voigt order {11, 22, 33, 12, 23, 31}. The element assembles the
+//     spatial internal force, the integral of B^T sigma over the current
+//     volume.
 //
-// This class adds ONE thing to the NDMaterial interface: a deformation-gradient
-// entry point, setTrialF(F). A concrete subclass (e.g. LogStrainNDMaterial) wraps
-// an inner small-strain NDMaterial and lifts it to finite strain by the spatial
-// multiplicative / logarithmic-strain technique of de Souza Neto, Perić & Owen,
-// *Computational Methods for Plasticity* (2008), Box 14.3 (MATISU):
+//   * The spatial constitutive modulus is c_ijkl = (1/2J) [D : L : B]_ijkl,
+//     the material part of the spatial tangent of Eq. (14.99) of de Souza
+//     Neto et al. (2008). c is not minor-symmetric in (k,l), so a 6x6 Voigt
+//     matrix cannot hold it. getTangent() returns the minor-symmetric 6x6
+//     projection, which is suitable for output only. An element building a
+//     consistent tangent calls getSpatialTangentTensor(c), forms
+//         a_ijkl = c_ijkl - sigma_il delta_jk
+//     (the geometric term is element-owned) and assembles
+//         K_(a,i)(b,k) = integral of dN_a/dx_j a_ijkl dN_b/dx_l dv.
+//     The full non-symmetric c and the full geometric term must both be kept
+//     for the assembled K to be symmetric.
 //
-//     bᵉ_trial = F_Δ · bᵉ_n · F_Δᵀ                       (14.94)
-//     εᵉ_trial = ½ ln[bᵉ_trial]   (Eulerian Hencky strain, 14.30/14.104)
-//     → drive the UNCHANGED small-strain return map with εᵉ_trial as "strain"
-//       (14.89–90 share the format of the infinitesimal scheme 7.25)
-//     → inner material returns Kirchhoff stress τ and the small-strain tangent D
-//     → Cauchy stress  σ = J⁻¹ τ        (J = det F)        (Box 14.3, iv)
-//     → spatial consistent tangent  a   (§14.5, eq. 14.99)
+//   * getJ() returns J = det F.
 //
-// CONTRACT (locked jointly with the solid-transformation-wrapper team — the
-// element side, LadrunoBrick + SolidTransformation::finite, classTag 33002):
+//   * getType() reports "ThreeDimensional" and getOrder() returns 6.
 //
-//   * The ELEMENT calls setTrialF(F) with the TOTAL deformation gradient F (3×3)
-//     at the Gauss point. The adaptor computes F_Δ = F·F_n⁻¹ internally — the
-//     element does NOT pass increments (use setTrialFincr only if explicitly
-//     supported). The element NEVER calls setTrialStrain(...) on this material.
-//
-//   * getStress()  returns the CAUCHY stress σ as a 6-vector in the canonical
-//     3D Voigt order {00, 11, 22, 01, 12, 20} with ENGINEERING shear
-//     (γ_ij = 2 ε_ij). The element assembles the SPATIAL internal force
-//     ∫ bᵀ σ dv on the current configuration.
-//
-//   * The spatial CONSTITUTIVE modulus is c_ijkl = (1/2J)[D:L:B] — the MATERIAL
-//     part only of the eq.(14.99) spatial tangent (NOT a PK2/reference tangent;
-//     the formulation is spatial multiplicative, NOT total-Lagrangian).
-//
-//     SEAM-3 TANGENT CONTRACT (revised 2026-06-01 after the element FD-tangent
-//     gate; supersedes the earlier "∫BᵀcB + ∫GᵀΣG" wording):
-//       - c is NOT minor-symmetric in (k,l) (the factor B, eq.14.102, is not
-//         k↔l symmetric), so it does NOT fit a 6×6 Voigt matrix. getTangent()
-//         (6×6) is therefore the LOSSY minor-symmetric projection — usable for
-//         output, NOT for a consistent element tangent.
-//       - The element gets the FULL tensor via getSpatialTangentTensor(c), forms
-//         the consistent spatial tangent  a_ijkl = c_ijkl − σ_il δ_jk  (the
-//         −σ_il δ_jk geometric/initial-stress term is element-owned, built from
-//         the Cauchy stress σ), and assembles
-//             K_{(a,i)(b,k)} = ∫ (∂Nₐ/∂x_j) a_ijkl (∂N_b/∂x_l) dv  (full gradients).
-//         a_ijkl yields a SYMMETRIC K only when the FULL non-symmetric c and the
-//         FULL −σδ are both kept (they cancel) — collapsing c to 6×6 breaks it.
-//       - The element still owns the geometric term; the material owns the
-//         constitutive tensor. The arbiter is the element's FD-tangent test.
-//
-//   * getType() must report "ThreeDimensional"; getOrder() must return 6.
-//
-//   * STATE OWNERSHIP: the adaptor owns the committed elastic left Cauchy–Green
-//     tensor bᵉ_n (equivalently εᵉ_n) per material instance (one per Gauss
-//     point), and WRAPS the inner material's commitState / revertToLastCommit /
-//     revertToStart / sendSelf / recvSelf. bᵉ_n is NOT a plastic multiplier and
-//     NOT a total strain; commitState sets bᵉ_n ← exp[2 εᵉ_{n+1}].
-//
-//   * DEGENERACY GUARANTEE: update() must return finite, non-NaN σ and tangent
-//     under repeated principal stretches (uniaxial → 2-fold, hydrostatic /
-//     equibiaxial → 3-fold, any axisymmetric strain). The 0/0 term
-//     (ln bᵢ − ln bⱼ)/(bᵢ − bⱼ) in the log-map tangent must use the analytic
-//     limit (Miehe 1998; dSNPO App. A.5), not ε-perturbation.
-//
-// See Ladruno_implementation/09_finite_strain_material_wrapper.md for the full
-// plan, the GREEN/YELLOW/RED inner-material matrix, and the theory.
+// State ownership, commit and revert of any wrapped material, and
+// sendSelf/recvSelf are the responsibility of the concrete subclass.
 
 #ifndef FiniteStrainNDMaterial_h
 #define FiniteStrainNDMaterial_h
@@ -112,76 +84,46 @@ class FiniteStrainNDMaterial : public NDMaterial
   FiniteStrainNDMaterial() : NDMaterial() {}
   virtual ~FiniteStrainNDMaterial() {}
 
-  // ===================================================================== //
-  //  THE FINITE-STRAIN SEAM (seam 3)                                      //
-  // ===================================================================== //
-
-  // Set the trial state from the TOTAL deformation gradient F (3×3) at the GP.
-  // Returns 0 on success, < 0 on failure (e.g. det F ≤ 0, non-convergence).
-  // This is THE entry point a finite-strain element must call.
+  // Set the trial state from the total deformation gradient F (3x3).
+  // Returns 0 on success, < 0 on failure (det F <= 0, local non-convergence),
+  // so the element can reject the step.
   virtual int setTrialF(const Matrix &F) = 0;
 
-  // Optional increment form: F_Δ maps config n onto config n+1 (F_{n+1}=F_Δ F_n).
-  // Default: unsupported — a finite-strain element should pass total F.
+  // Optional increment form: F_inc maps configuration n onto n+1
+  // (F_{n+1} = F_inc F_n). Not supported unless a subclass overrides it.
   virtual int setTrialFincr(const Matrix &Fincr) {
     opserr << "FiniteStrainNDMaterial::setTrialFincr() not supported by this "
               "material; pass the total F via setTrialF().\n";
     return -1;
   }
 
-  // ===================================================================== //
-  //  SPATIAL RESPONSE — what the element consumes                         //
-  // ===================================================================== //
-
-  // CAUCHY stress σ (6-vector, Voigt {00,11,22,01,12,20}, engineering shear).
+  // Cauchy stress (6-vector, Voigt {11,22,33,12,23,31}).
   virtual const Vector &getStress(void) = 0;
-  // SPATIAL CONSTITUTIVE modulus c = (1/2J)[D:L:B] as a 6×6. WARNING: c is NOT
-  // minor-symmetric in its second index pair (k,l), so this 6×6 is the LOSSY
-  // minor-symmetric projection — it CANNOT carry the full modulus. Kept for
-  // small-strain-style consumers/output only. A finite-strain ELEMENT building a
-  // consistent tangent MUST use getSpatialTangentTensor() below.  // Ladruno
+
+  // Minor-symmetric 6x6 projection of the spatial constitutive modulus c.
+  // Lossy in the (k,l) pair; for output only.
   virtual const Matrix &getTangent(void) = 0;
 
-  // FULL 4th-order spatial constitutive modulus c_ijkl = (1/2J)[D:L:B], all 81
-  // components (NOT minor-symmetric in (k,l) — see above). This is the element's
-  // tangent channel: the element forms the consistent spatial tangent
-  //     a_ijkl = c_ijkl − σ_il δ_jk
-  // (the −σ_il δ_jk is the element-owned geometric/initial-stress term) and
-  // assembles K_{(a,i)(b,k)} = ∫ (∂Nₐ/∂x_j) a_ijkl (∂N_b/∂x_l) dv. Returns 0 on
-  // success; the default −1 means "unsupported" so element misuse fails loudly.
-  // (The 6×6 getTangent() above is insufficient because it loses the (k,l)
-  // antisymmetric content on which the K-symmetric cancellation with −σδ relies.)
+  // Full fourth-order spatial constitutive modulus c_ijkl (81 components).
+  // Returns 0 on success; the default -1 means "not supported".
   virtual int getSpatialTangentTensor(double c[3][3][3][3]) { return -1; }
 
-  // Current Jacobian J = det F (> 0). τ = J·σ recovers Kirchhoff if needed.
+  // J = det F (> 0). Kirchhoff stress is tau = J sigma.
   virtual double getJ(void) const = 0;
 
-  // ===================================================================== //
-  //  The small-strain entry point is DISABLED for finite-strain materials //
-  // ===================================================================== //
-
-  // A finite-strain material is driven by F, not by a strain vector. These
-  // default to an error so element misuse is caught loudly rather than silently
-  // feeding a linear strain into the multiplicative machinery.
+  // The small-strain entry points are disabled: a finite-strain material is
+  // driven by F, and a strain vector fed by a small-strain element would be
+  // interpreted silently with the wrong kinematics.
   virtual int setTrialStrain(const Vector & /*v*/) override {
-    opserr << "FiniteStrainNDMaterial: setTrialStrain() is invalid — this is a "
+    opserr << "FiniteStrainNDMaterial: setTrialStrain() is invalid for a "
               "finite-strain material; the element must call setTrialF(F).\n";
     return -1;
   }
   virtual int setTrialStrain(const Vector & /*v*/, const Vector & /*r*/) override {
-    opserr << "FiniteStrainNDMaterial: setTrialStrain() is invalid — this is a "
+    opserr << "FiniteStrainNDMaterial: setTrialStrain() is invalid for a "
               "finite-strain material; the element must call setTrialF(F).\n";
     return -1;
   }
-
-  // NOTE: getType() / getOrder() / commitState() / revertToLastCommit() /
-  // revertToStart() / getCopy() / sendSelf() / recvSelf() remain pure-virtual
-  // (from NDMaterial) — the concrete adaptor implements them, owning bᵉ_n and
-  // wrapping the inner material's state. getStrain() may return the Hencky strain.
-
- protected:
-
- private:
 };
 
 #endif
