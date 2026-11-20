@@ -66,6 +66,10 @@ class TransientIntegrator : public IncrementalIntegrator
     
     virtual int initialize(void) {return 0;};
 
+    // Critical time step of an explicit integrator (<= 0 if not applicable
+    // or not computed). Queried with the criticalTimeStep command.
+    virtual double getCriticalTimeStep(void) const {return -1.0;}
+
   protected:
     
   private:

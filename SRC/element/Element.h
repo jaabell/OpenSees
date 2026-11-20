@@ -61,6 +61,15 @@ class Element : public DomainComponent
     virtual int getNumDOF(void) =0;
     virtual double getCharacteristicLength(void);
 
+    // Explicit critical time step reported by the element itself (seconds).
+    // A positive value replaces the per-element eigensolve of
+    // K v = lambda M v in the critical-time-step estimate (it is not combined
+    // with it). The default -1 leaves the eigensolve in charge. Override only
+    // when the stability bound of the element is invisible to its own
+    // pencil, e.g. a penalty coupling whose DOFs are massless in the element
+    // problem (lambda_max = 0).
+    virtual double getExplicitCriticalTimeStep(void);
+
     // methods dealing with committed state and update
     virtual int commitState(void);    
     virtual int revertToLastCommit(void) = 0;        

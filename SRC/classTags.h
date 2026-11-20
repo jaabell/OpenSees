@@ -1133,6 +1133,8 @@
 #define INTEGRATOR_TAGS_LadrunoArcLength                33004
 #define INTEGRATOR_TAGS_LadrunoDynamicRelaxation        33005
 #define INTEGRATOR_TAGS_LadrunoIndirectControl          33006
+// explicit leap-frog central difference
+#define INTEGRATOR_TAGS_CentralDifferenceLadruno        33003
 
 
 #define LinSOE_TAGS_FullGenLinSOE		1
