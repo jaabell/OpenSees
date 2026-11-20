@@ -64,6 +64,25 @@ if(HDF5_FOUND)
          MPCORecorder.h
          VTKHDF_Recorder.h
       )
+      # recorder ladruno (HDF5 .ladruno files)
+      target_sources(OPS_Recorder
+        PRIVATE
+          LadrunoRecorder.cpp
+          Ladruno_NodeResults.cpp
+          Ladruno_ElementResults.cpp
+          Ladruno_DomainResults.cpp
+          Ladruno_Sinks.cpp
+        PUBLIC
+          LadrunoRecorder.h
+          Ladruno_Types.h
+          Ladruno_Hdf5.h
+          Ladruno_ResultIO.h
+          Ladruno_LaunchEnv.h
+          Ladruno_NodeResults.h
+          Ladruno_ElementResults.h
+          Ladruno_DomainResults.h
+          Ladruno_Sinks.h
+      )
    endif()
 endif()
 
