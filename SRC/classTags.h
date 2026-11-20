@@ -1235,6 +1235,8 @@
 #define RECORDER_TAGS_EnergyBalanceRecorder         26
 // HDF5 .ladruno recorder (recorder ladruno)
 #define RECORDER_TAGS_LadrunoRecorder               33001
+// live analysis monitor, SWMR HDF5 sink (recorder Monitor)
+#define RECORDER_TAGS_LadrunoMonitorRecorder        33002
 
 #define OPS_STREAM_TAGS_FileStream		1
 #define OPS_STREAM_TAGS_StandardStream		2

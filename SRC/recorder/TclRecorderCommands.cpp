@@ -68,6 +68,7 @@ extern void* OPS_GmshRecorder();
 extern void* OPS_MPCORecorder();
 extern void* OPS_VTKHDF_Recorder();
 extern void* OPS_LadrunoRecorder();
+extern void* OPS_LadrunoMonitorRecorder();
 #endif // _HDF5
 extern void* OPS_VTK_Recorder();
 extern void* OPS_ElementRecorderRMS();
@@ -1944,6 +1945,10 @@ enum outputMode  {STANDARD_STREAM, DATA_STREAM, XML_STREAM, DATABASE_STREAM, BIN
      else if (strcmp(argv[1], "ladruno") == 0) {
        OPS_ResetInputNoBuilder(clientData, interp, 2, argc, argv, &theDomain);
        (*theRecorder) = (Recorder*)OPS_LadrunoRecorder();
+     }
+     else if (strcmp(argv[1], "Monitor") == 0) {
+       OPS_ResetInputNoBuilder(clientData, interp, 2, argc, argv, &theDomain);
+       (*theRecorder) = (Recorder*)OPS_LadrunoMonitorRecorder();
      }
 #endif // _HDF5
      else if (strcmp(argv[1],"gmsh") == 0 || strcmp(argv[1],"GMSH") == 0) {

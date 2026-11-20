@@ -88,6 +88,7 @@ void* OPS_RemoveRecorder();
 void* OPS_MPCORecorder();
 void* OPS_VTKHDF_Recorder();
 void* OPS_LadrunoRecorder();
+void* OPS_LadrunoMonitorRecorder();
 #endif
 void* OPS_GmshRecorder();
 BackgroundMesh& OPS_getBgMesh();
@@ -132,6 +133,7 @@ namespace {
 	recordersMap.insert(std::make_pair("mpco", &OPS_MPCORecorder));
     recordersMap.insert(std::make_pair("VTKHDF", &OPS_VTKHDF_Recorder));
 	recordersMap.insert(std::make_pair("ladruno", &OPS_LadrunoRecorder));
+	recordersMap.insert(std::make_pair("Monitor", &OPS_LadrunoMonitorRecorder));
 #endif
     recordersMap.insert(std::make_pair("EnergyBalance", &OPS_EnergyBalanceRecorder));
         //recordersMap.insert(std::make_pair("Drift", &OPS_DriftRecorder));

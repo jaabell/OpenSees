@@ -72,6 +72,8 @@ if(HDF5_FOUND)
           Ladruno_ElementResults.cpp
           Ladruno_DomainResults.cpp
           Ladruno_Sinks.cpp
+          LadrunoMonitorRecorder.cpp
+          LadrunoMonitorSink.cpp
         PUBLIC
           LadrunoRecorder.h
           Ladruno_Types.h
@@ -82,6 +84,8 @@ if(HDF5_FOUND)
           Ladruno_ElementResults.h
           Ladruno_DomainResults.h
           Ladruno_Sinks.h
+          LadrunoMonitorRecorder.h
+          LadrunoMonitorSink.h
       )
    endif()
 endif()
