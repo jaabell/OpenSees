@@ -79,8 +79,12 @@
 // reduce exactly across ranks. E_inject is the incident-wave injection of
 // absorbing boundaries, derived from the published resisting-sign leak L
 // (IE shown = IE_raw - L - E_hg, E_inject = -L). E_lnvd is the local
-// non-viscous damping dissipation. E_modal is the modal-damping dissipation
-// published by the integrator. E_hg is the hourglass-stabilization energy,
+// non-viscous damping dissipation. E_inject is published by LysmerTriangle
+// and ASDAbsorbingBoundary2D/3D (bottom and lateral boundaries). E_modal is
+// the modal-damping dissipation published by IncrementalIntegrator::commit()
+// (integrators that override commit() without calling it do not publish, and
+// their modal dissipation stays in RES). E_hg is the
+// hourglass-stabilization energy,
 // the sum of the element "hourglassEnergy" responses; the column is present
 // when the model contains an element answering that response at the first
 // record. Channel columns appear only when a producer declared them
