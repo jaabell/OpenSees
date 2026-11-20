@@ -13,6 +13,7 @@ target_sources(OPS_Domain
     SP_Constraint.cpp 
     Pressure_Constraint.cpp
     EQ_Constraint.cpp 
+    LadrunoTie.cpp
   PUBLIC
     MP_Constraint.h 
     RigidBeam.h 
@@ -21,6 +22,7 @@ target_sources(OPS_Domain
     SP_Constraint.h 
     Pressure_Constraint.h
     EQ_Constraint.h 
+    LadrunoTie.h
 )
 target_sources(OPS_Domain
   PRIVATE
