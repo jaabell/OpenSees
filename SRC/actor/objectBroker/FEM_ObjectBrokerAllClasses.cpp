@@ -633,6 +633,7 @@
 #include "TransformationConstraintHandler.h"
 #include "AutoConstraintHandler.h"
 #include "LadrunoProjectionHandler.h"
+#include "LadrunoContactHandler.h"
 
 // dof numberer header files
 #include "DOF_Numberer.h"   
@@ -2902,6 +2903,9 @@ FEM_ObjectBrokerAllClasses::getNewConstraintHandler(int classTag)
 
 	case HANDLER_TAG_LadrunoProjectionHandler:
 	     return new LadrunoProjectionHandler();
+	case HANDLER_TAG_LadrunoContactHandler:
+	     return new LadrunoContactHandler();
+
 
 	default:
 	     opserr << "FEM_ObjectBrokerAllClasses::getNewConstraintHandler - ";

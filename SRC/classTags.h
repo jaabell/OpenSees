@@ -1024,6 +1024,7 @@
 #define HANDLER_TAG_AutoConstraintHandler    6
 // explicit constraint projection
 #define HANDLER_TAG_LadrunoProjectionHandler 33001
+#define HANDLER_TAG_LadrunoContactHandler 33002   // contact FE_Element adapters (LadrunoContactHandler)
 
 #define NUMBERER_TAG_DOF_Numberer      	1
 #define NUMBERER_TAG_PlainNumberer 	2

@@ -135,6 +135,17 @@ playbackAlgorithmRecorders(ClientData clientData, Tcl_Interp *interp, int argc, 
 int 
 groundExcitation(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 
+int
+ladrunoContactSurface(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContact(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactPlane(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactInfo(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+int
+ladrunoContactForce(ClientData clientData, Tcl_Interp* interp, int argc, TCL_Char** argv);
+
 int 
 eigenAnalysis(ClientData clientData, Tcl_Interp *interp, int argc, TCL_Char **argv);
 

@@ -832,6 +832,56 @@ static PyObject* Py_ops_responseSpectrumPerMode(PyObject* self, PyObject* args)
     return wrapper->getResults();
 }
 
+static PyObject* Py_ops_contactSurface(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactSurface() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_contact(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContact() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_contactPlane(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactPlane() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoContactInfo(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactInfo() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
+static PyObject* Py_ops_ladrunoContactForce(PyObject* self, PyObject* args)
+{
+    wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
+    if (OPS_LadrunoContactForce() < 0) {
+        opserr<<(void*)0;
+        return NULL;
+    }
+    return wrapper->getResults();
+}
+
 static PyObject *Py_ops_nDMaterial(PyObject *self, PyObject *args)
 {
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
@@ -3249,6 +3299,11 @@ PythonWrapper::addOpenSeesCommands()
     addCommand("steadyStateDynamics", &Py_ops_steadyStateDynamics);
     addCommand("randomResponse", &Py_ops_randomResponse);
     addCommand("responseSpectrumPerMode", &Py_ops_responseSpectrumPerMode);
+    addCommand("contactSurface", &Py_ops_contactSurface);
+    addCommand("contact", &Py_ops_contact);
+    addCommand("contactPlane", &Py_ops_contactPlane);
+    addCommand("ladrunoContactInfo", &Py_ops_ladrunoContactInfo);
+    addCommand("ladrunoContactForce", &Py_ops_ladrunoContactForce);
     addCommand("nDMaterial", &Py_ops_nDMaterial);
     addCommand("block2D", &Py_ops_block2d);
     addCommand("block3D", &Py_ops_block3d);

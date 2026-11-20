@@ -990,6 +990,9 @@ OpenSeesCommands::wipeAnalysis()
     thePFEMAnalysis = 0;
     theTest = 0;
 
+    // the contact augmentation flag belongs to the analysis being wiped
+    if (theDomain != 0)
+        theDomain->setContactAugmenting(false);
 }
 
 void
@@ -1657,6 +1660,8 @@ int OPS_ConstraintHandler()
     } else if (strcmp(type,"LadrunoProjection") == 0) {
     	extern void *OPS_LadrunoProjectionHandler(void);
     	theHandler = (ConstraintHandler*)OPS_LadrunoProjectionHandler();
+    } else if (strcmp(type,"LadrunoContact") == 0) {
+    	theHandler = (ConstraintHandler*)OPS_LadrunoContactHandler();
 
     } else {
     	opserr<<"WARNING unknown ConstraintHandler type "<<type<<"\n";

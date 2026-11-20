@@ -14,6 +14,8 @@ target_sources(OPS_Analysis
       AutoConstraintHandler.cpp
       LadrunoProjectionHandler.cpp
       LadrunoConstraintProjector.cpp
+      LadrunoContactHandler.cpp
+      LadrunoContactFE.cpp
     PUBLIC
       ConstraintHandler.h 
       PlainHandler.h
@@ -24,6 +26,8 @@ target_sources(OPS_Analysis
       LadrunoProjectionConsumer.h
       LadrunoProjectionHandler.h
       LadrunoConstraintProjector.h
+      LadrunoContactHandler.h
+      LadrunoContactFE.h
 )
 
 target_include_directories(OPS_Analysis PUBLIC ${CMAKE_CURRENT_LIST_DIR})
