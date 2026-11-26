@@ -59,6 +59,7 @@ OBJS       = NDMaterial.o \
 	OrthotropicMaterial.o \
 	Series3DMaterial.o \
 	Parallel3DMaterial.o \
+	TimeVaryingECMaterial.o \
 	PlaneStrainMaterial.o \
 	PlaneStressMaterial.o \
 	PlaneStressUserMaterial.o \
