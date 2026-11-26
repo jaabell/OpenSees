@@ -689,9 +689,13 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
     // changes this input starts from the old stress and can pass its
     // convergence test at iteration 1 with the domain out of equilibrium. The
     // Transformation handler updates the elements in applyLoad and is not
-    // affected. Re-evaluating here was tried and rejected: the extra trials
-    // change the path of trial-history-dependent wrapped materials
-    // (ASDConcrete3D) and so the results of existing analyses. TimeVaryingEC
+    // affected. Re-evaluating here was tried and rejected because it changed
+    // the results of an existing analysis (preserved C01 tet10 deck,
+    // ASDConcrete3D inside TimeVarying, Transformation) by up to 1.3e-3 in
+    // stress. The cause is NOT isolated: ASDConcrete3D alone, and TimeVarying
+    // around it, are idempotent and trial-history independent in
+    // material-level probes, and deferring the first re-evaluation to the
+    // element's first trial does not remove the shift. TimeVaryingEC
     // re-evaluates (its scope is elasticity and perfect J2).
     return 0;
 }
