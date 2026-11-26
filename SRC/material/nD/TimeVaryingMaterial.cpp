@@ -655,10 +655,6 @@ int TimeVaryingMaterial::setParameter(const char** argv, int argc, Parameter& pa
 
 int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
 {
-    // total strain of the current trial, before the input changes
-    Vector total(epsilon_real);
-    total.addVector(1.0, epsilon_internal, 1.0);
-
     switch (parameterID) {
 
     case 4001:
@@ -688,15 +684,15 @@ int TimeVaryingMaterial::updateParameter(int parameterID, Information& info)
         return -1;
     }
 
-    // Re-evaluate the trial at the current total strain with the new input.
-    // An analysis forms the first unbalance of a step from the current stress
-    // before it updates the elements; with the Plain or Penalty handlers a step
-    // that only changes this input otherwise starts from the old stress, solves
-    // a zero increment and passes its convergence test at iteration 1 with the
-    // domain out of equilibrium. (The Transformation handler updates the
-    // elements in applyLoad, so its results do not change.)
-    if (theProjectedMaterial != 0)
-        return this->setTrialStrain(total) == 0 ? 0 : -1;
+    // KNOWN LIMITATION: the input is only stored; the stress changes at the
+    // next setTrialStrain. With the Plain or Penalty handlers a step that only
+    // changes this input starts from the old stress and can pass its
+    // convergence test at iteration 1 with the domain out of equilibrium. The
+    // Transformation handler updates the elements in applyLoad and is not
+    // affected. Re-evaluating here was tried and rejected: the extra trials
+    // change the path of trial-history-dependent wrapped materials
+    // (ASDConcrete3D) and so the results of existing analyses. TimeVaryingEC
+    // re-evaluates (its scope is elasticity and perfect J2).
     return 0;
 }
 
