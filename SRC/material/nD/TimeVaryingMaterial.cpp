@@ -620,14 +620,14 @@ int TimeVaryingMaterial::recvSelf(int commitTag, Channel & theChannel, FEM_Objec
         opserr << "TimeVaryingMaterial::recvSelf - the projected material failed to receive itself\n";
         return -1;
     }
-    // the projected material arrives in its committed state; a pending trial
-    // is answered from the committed copies until it is redone
-    if (trialSinceCommit) {
-        trialSinceCommit = false;
-        reverted = mapReady;
-        sigma_real = sigma_real_n;
-        epsilon_real = epsilon_real_n;
-    }
+    // the projected material arrives in its committed state only (e.g.
+    // J2Plasticity restores its committed internal variables, not its current
+    // stress), so queries are answered from the committed copies until the
+    // next trial; a pending trial is dropped
+    trialSinceCommit = false;
+    reverted = mapReady;
+    sigma_real = sigma_real_n;
+    epsilon_real = epsilon_real_n;
     return 0;
 }
 
