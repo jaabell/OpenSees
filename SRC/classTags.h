@@ -494,6 +494,7 @@
 #define ND_TAG_Series3DMaterial		2007
 #define ND_TAG_Parallel3DMaterial		2008
 #define ND_TAG_TimeVaryingMaterial      2009
+#define ND_TAG_TimeVaryingECMaterial		2010
 #define ND_TAG_CompressibleFluid		3001
 #define ND_TAG_GeneralizedPlasticity 3002
 #define ND_TAG_J2Plasticity02  3003

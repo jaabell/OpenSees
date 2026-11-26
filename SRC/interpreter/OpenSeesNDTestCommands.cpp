@@ -56,6 +56,31 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include "Response.h"
 #include "MaterialResponse.h"
 
+// Materials created by NDTest Copy / SendRecv live in this table (they keep
+// the tag of their source, which cannot be changed from here); every NDTest
+// command looks a tag up here first, then in the global material list.
+static std::map<int, NDMaterial *> &ndTestCopies()
+{
+    static std::map<int, NDMaterial *> copies;
+    return copies;
+}
+
+static NDMaterial *ndTestLookup(int tag)
+{
+    std::map<int, NDMaterial *>::iterator it = ndTestCopies().find(tag);
+    if (it != ndTestCopies().end())
+        return it->second;
+    return OPS_getNDMaterial(tag);
+}
+
+static void ndTestStore(int tag, NDMaterial *m)
+{
+    std::map<int, NDMaterial *>::iterator it = ndTestCopies().find(tag);
+    if (it != ndTestCopies().end())
+        delete it->second;
+    ndTestCopies()[tag] = m;
+}
+
 //Forward declaration for indexing purposes
 void * OPS_NDSetStrain();               // To set a trial strain on the material
 void * OPS_NDPrintStrain();             // Printing strains to the screen
@@ -87,7 +112,7 @@ void* OPS_NDSetStrain()
         return 0;
     }
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -117,7 +142,7 @@ void* OPS_NDPrintStrain()
     int numdata = 1;
     if (OPS_GetIntInput(&numdata, &tag) < 0) return 0;
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -137,7 +162,7 @@ void* OPS_NDPrintStress()
     int numdata = 1;
     if (OPS_GetIntInput(&numdata, &tag) < 0) return 0;
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -159,7 +184,7 @@ void* OPS_NDGetStrain()
     int numdata = 1;
     if (OPS_GetIntInput(&numdata, &tag) < 0) return 0;
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -196,7 +221,7 @@ void* OPS_NDGetStress()
     }
 
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
     if (mat == NULL)
     {
         opserr << "OPS_NDGetStress() - Material tag " << tag << " not declared" << endln;
@@ -228,7 +253,7 @@ void* OPS_NDGetResponse()
     }
 
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
     if (mat == NULL)
     {
         opserr << "OPS_NDGetStress() - Material tag " << tag << " not declared" << endln;
@@ -267,7 +292,7 @@ void* OPS_NDGetTangentStiffness()
     int numdata = 1;
     if (OPS_GetIntInput(&numdata, &tag) < 0) return 0;
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -307,7 +332,7 @@ void* OPS_NDCommitState()
     if (OPS_GetIntInput(&numdata, &tag) < 0) return 0;
 
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -340,7 +365,7 @@ void* OPS_NDUpdateIntegerParameter()
     opserr << "theNewIntegerParameterValue = " << theNewIntegerParameterValue  << endln;
 
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -370,7 +395,7 @@ void* OPS_NDUpdateDoubleParameter()
     if (OPS_GetDoubleInput(&numdata, &theNewDoubleParameterValue) < 0) return 0;
 
 
-    NDMaterial* mat = OPS_getNDMaterial(tag);
+    NDMaterial* mat = ndTestLookup(tag);
 
     if (mat == NULL)
     {
@@ -387,6 +412,131 @@ void* OPS_NDUpdateDoubleParameter()
     return 0;
 }
 
+
+// State-operation commands (added for TimeVaryingEC verification). Each
+// returns an integer code (0 = success) so tests can check failures.
+#include <FileDatastore.h>
+#include <FEM_ObjectBrokerAllClasses.h>
+
+static NDMaterial *ndTestMaterial(const char *who)
+{
+    int tag = 0;
+    int numdata = 1;
+    if (OPS_GetIntInput(&numdata, &tag) < 0) {
+        opserr << who << " - expects a material tag\n";
+        return 0;
+    }
+    NDMaterial *mat = ndTestLookup(tag);
+    if (mat == 0)
+        opserr << who << " - material with tag " << tag << " does not exist\n";
+    return mat;
+}
+
+static void ndTestReturn(int code)
+{
+    int one = 1;
+    OPS_SetIntOutput(&one, &code, true);
+}
+
+// NDTest TrySetStrain tag e1..e6 -> setTrialStrain return code
+void *OPS_NDTrySetStrain()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest TrySetStrain");
+    if (mat == 0) { ndTestReturn(-99); return 0; }
+    double e[6];
+    int numdata = 6;
+    if (OPS_GetDoubleInput(&numdata, e) < 0) { ndTestReturn(-98); return 0; }
+    Vector v(e, 6);
+    ndTestReturn(mat->setTrialStrain(v));
+    return 0;
+}
+
+// NDTest TryCommit tag -> commitState return code
+void *OPS_NDTryCommit()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest TryCommit");
+    ndTestReturn(mat ? mat->commitState() : -99);
+    return 0;
+}
+
+// NDTest RevertToLastCommit tag
+void *OPS_NDRevertToLastCommit()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest RevertToLastCommit");
+    ndTestReturn(mat ? mat->revertToLastCommit() : -99);
+    return 0;
+}
+
+// NDTest RevertToStart tag
+void *OPS_NDRevertToStart()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest RevertToStart");
+    ndTestReturn(mat ? mat->revertToStart() : -99);
+    return 0;
+}
+
+// NDTest Copy srcTag newTag ?type?: getCopy() (or getCopy(type)) of srcTag,
+// reachable by NDTest as newTag
+void *OPS_NDCopy()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest Copy");
+    int newTag = 0, numdata = 1;
+    if (mat == 0 || OPS_GetIntInput(&numdata, &newTag) < 0) { ndTestReturn(-99); return 0; }
+    // optional type: getCopy(type), e.g. ThreeDimensional for a base-class material
+    NDMaterial *c = 0;
+    if (OPS_GetNumRemainingInputArgs() > 0)
+        c = mat->getCopy(OPS_GetString());
+    else
+        c = mat->getCopy();
+    if (c == 0) { ndTestReturn(-1); return 0; }
+    ndTestStore(newTag, c);
+    ndTestReturn(0);
+    return 0;
+}
+
+// NDTest SendRecv srcTag newTag fileBase: sendSelf of srcTag into a
+// FileDatastore, then a new object from the broker by class tag and
+// recvSelf; reachable by NDTest as newTag
+void *OPS_NDSendRecv()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest SendRecv");
+    int newTag = 0, numdata = 1;
+    if (mat == 0 || OPS_GetIntInput(&numdata, &newTag) < 0 || OPS_GetNumRemainingInputArgs() < 1) {
+        ndTestReturn(-99);
+        return 0;
+    }
+    const char *base = OPS_GetString();
+    static FEM_ObjectBrokerAllClasses theBroker;
+    Domain *dom = OPS_GetDomain();
+    FileDatastore *ds = new FileDatastore(base, *dom, theBroker);
+    int dbTag = ds->getDbTag();
+    int commitTag = 1;
+    mat->setDbTag(dbTag);
+    if (mat->sendSelf(commitTag, *ds) < 0) { delete ds; ndTestReturn(-3); return 0; }
+    NDMaterial *r = theBroker.getNewNDMaterial(mat->getClassTag());
+    if (r == 0) { delete ds; ndTestReturn(-4); return 0; }
+    r->setDbTag(dbTag);
+    if (r->recvSelf(commitTag, *ds, theBroker) < 0) { delete r; delete ds; ndTestReturn(-5); return 0; }
+    delete ds;
+    ndTestStore(newTag, r);
+    ndTestReturn(0);
+    return 0;
+}
+
+// NDTest GetInitialTangent tag -> 36 values, row major
+void *OPS_NDGetInitialTangent()
+{
+    NDMaterial *mat = ndTestMaterial("NDTest GetInitialTangent");
+    if (mat == 0) return 0;
+    const Matrix &C = mat->getInitialTangent();
+    int size = C.noRows() * C.noCols();
+    std::vector<double> values(size);
+    for (int i = 0; i < C.noRows(); i++)
+        for (int j = 0; j < C.noCols(); j++)
+            values[i * C.noCols() + j] = C(i, j);
+    OPS_SetDoubleOutput(&size, &values[0], false);
+    return 0;
+}
 
 namespace {
 
@@ -414,6 +564,13 @@ static int setUpFunctions(void)
     functionMap.insert(std::make_pair("UpdateIntegerParameter", &OPS_NDUpdateIntegerParameter));
     functionMap.insert(std::make_pair("UpdateDoubleParameter", &OPS_NDUpdateDoubleParameter));
     functionMap.insert(std::make_pair("GetResponse", &OPS_NDGetResponse));
+    functionMap.insert(std::make_pair("TrySetStrain", &OPS_NDTrySetStrain));
+    functionMap.insert(std::make_pair("TryCommit", &OPS_NDTryCommit));
+    functionMap.insert(std::make_pair("RevertToLastCommit", &OPS_NDRevertToLastCommit));
+    functionMap.insert(std::make_pair("RevertToStart", &OPS_NDRevertToStart));
+    functionMap.insert(std::make_pair("Copy", &OPS_NDCopy));
+    functionMap.insert(std::make_pair("SendRecv", &OPS_NDSendRecv));
+    functionMap.insert(std::make_pair("GetInitialTangent", &OPS_NDGetInitialTangent));
 
     return 0;
 }
