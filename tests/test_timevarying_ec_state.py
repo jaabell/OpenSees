@@ -338,7 +338,9 @@ def test_revert_to_start_and_initial_tangent():
     expect = [v for row in C_iso(K, G) for v in row]
     got = init_tangent(tag)
     assert max(abs(a - b) for a, b in zip(got, expect)) <= 1e-12 * K
-    assert tangent(tag) == got             # untouched point: same stiffness
+    # the driver update already evaluated a (zero-strain) trial, so the
+    # tangent is Cref S / A = C up to roundoff
+    assert max(abs(a - b) for a, b in zip(tangent(tag), got)) <= 1e-14 * K
     run_path(tag, PATH)
     assert ops.NDTest("RevertToStart", tag) == 0
     assert stress(tag) == [0.0] * 6 and strain(tag) == [0.0] * 6

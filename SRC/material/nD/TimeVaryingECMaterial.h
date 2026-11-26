@@ -70,6 +70,11 @@
 //    integrates from its committed state, commitState advances it, getCopy
 //    is deep. Its revertToLastCommit is called but not relied upon: every
 //    query after a revert is answered from the copies kept by this wrapper.
+//  - updateParameter (driver, eigenstrain) re-evaluates the trial at the
+//    current strain, so the first unbalance of the next step already sees the
+//    new input (otherwise a displacement-increment test can pass a step that
+//    only changes the input, with the domain out of equilibrium). With the
+//    domain-time driver the change arrives through setTrialStrain as usual.
 //  - Domain-time driver: the time of the domain being updated
 //    (ops_TheActiveDomain, else OPS_GetDomain()), so OpenSeesSP partitions
 //    use their subdomain's time.

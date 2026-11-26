@@ -685,16 +685,25 @@ int TimeVaryingECMaterial::updateParameter(int parameterID, Information &info)
         inputEpsStar(0) = info.theDouble;
         inputEpsStar(1) = info.theDouble;
         inputEpsStar(2) = info.theDouble;
-        return 0;
+        break;
     case 4002:
         if (!std::isfinite(info.theDouble))
             return -1;
         inputDriver = info.theDouble;
         useLocalDriver = true;
-        return 0;
+        break;
     default:
         return -1;
     }
+    // Re-evaluate the trial at the current strain with the new input. An
+    // analysis forms its first unbalance from the stress before it updates
+    // the elements, so without this a step that only changes the driver or
+    // the eigenstrain starts from the old stress, solves a zero increment
+    // and passes a displacement-increment test with the domain out of
+    // equilibrium.
+    if (theReference != 0)
+        return this->setTrialStrain(trial.eps) == 0 ? 0 : -1;
+    return 0;
 }
 
 Response *TimeVaryingECMaterial::setResponse(const char **argv, int argc, OPS_Stream &s)
