@@ -34,6 +34,7 @@
 
 #include <map>
 #include <limits>
+#include <memory>
 
 class TimeVaryingMaterial : public NDMaterial 
 {
@@ -91,6 +92,13 @@ public:
 private:
 
     void getParameters(double);// Determines the current properties for E, G, nu and A for this material
+    // driver of this material point: the local evolution variable once set,
+    // else the time of the domain being updated (ops_TheActiveDomain, so that
+    // OpenSeesSP partitions use their subdomain's time), else OPS_GetDomain()
+    double currentDriver(void) const;
+    // evaluate the properties at the driver and build Aepsilon; same
+    // arithmetic as before, shared by setTrialStrain and getInitialTangent
+    int computeMap(double driver);
 
     // the projected material pointer
     NDMaterial *theProjectedMaterial = nullptr;
@@ -98,11 +106,12 @@ private:
     //Strain transformation map
     Matrix Aepsilon = Matrix(6, 6);
 
-    //History of evolution
-    static std::map<int, Vector> time_histories;
-    static std::map<int, Vector> E_histories;
-    static std::map<int, Vector> K_histories;
-    static std::map<int, Vector> A_histories;
+    //History of evolution: immutable, owned per instance and shared by copies
+    // (previously static maps keyed by tag)
+    struct History {
+        Vector t, E, K, A;
+    };
+    std::shared_ptr<const History> hist;
 
     //Strain offset due to thermal action
     Vector epsilon_internal = Vector(6);
@@ -138,5 +147,19 @@ private:
     // driver until parameter 4002 (evolutionVariable) is updated.
     double local_evolution_variable = 0.0;
     bool use_local_evolution_variable = false;
+
+    // committed copies, so that revertToLastCommit restores the mapped
+    // response immediately (the wrapped material's own revert may be a no-op,
+    // e.g. J2Plasticity, and its stress/tangent stay at the last trial)
+    double committed_E = 0.0;
+    double committed_G = 0.0;
+    double committed_nu = 0.0;
+    double committed_A = 0.0;
+    Matrix committed_Aepsilon = Matrix(6, 6);
+    Matrix committed_tangent = Matrix(6, 6);
+    bool trialSinceCommit = false;  // a successful trial since the last commit
+    bool reverted = false;          // queries answered from the committed copies
+    bool mapReady = false;          // Aepsilon has been built at least once
+    int projectedDbTag = 0;
 };
 #endif

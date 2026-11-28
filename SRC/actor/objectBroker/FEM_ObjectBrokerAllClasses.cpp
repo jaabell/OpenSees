@@ -265,6 +265,7 @@
 #include "Series3DMaterial.h"
 #include "Parallel3DMaterial.h"
 #include "TimeVaryingECMaterial.h"
+#include "TimeVaryingMaterial.h"
 #include "PlaneStressRebarMaterial.h"
 #include "PlaneStressLayeredMaterial.h"
 //start Yuli Huang & Xinzheng L
@@ -2367,6 +2368,8 @@ FEM_ObjectBrokerAllClasses::getNewNDMaterial(int classTag)
 
   case ND_TAG_TimeVaryingECMaterial:
     return new TimeVaryingECMaterial();
+  case ND_TAG_TimeVaryingMaterial:
+    return new TimeVaryingMaterial();
 
   case ND_TAG_PlaneStressRebarMaterial:
     return new PlaneStressRebarMaterial();
